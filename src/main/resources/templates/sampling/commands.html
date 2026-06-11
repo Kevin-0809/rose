@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>采样指令</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Sampling Commands</div>
+      <h1>采样指令</h1>
+      <p class="muted">按业务日期发起异步采样批次，批次状态由后台任务更新。</p>
+    </div>
+  </div>
+
+  <div class="tag green" th:if="${message}" th:text="${message}"></div>
+  <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
+
+  <form class="panel form-grid" method="post" action="/sampling/commands">
+    <div>
+      <label>业务日期</label>
+      <input name="origCdate" placeholder="20260608" maxlength="8" pattern="[0-9]{8}" required>
+    </div>
+    <div class="span-2"><label>备注</label><input name="remark"></div>
+    <div class="actions"><button class="btn primary" type="submit">执行采样</button></div>
+  </form>
+
+  <form class="panel filters" method="get">
+    <input type="hidden" name="page" value="1">
+    <div class="filter-grid">
+      <div><label>批次号</label><input name="batchId" th:value="${criteria.batchId()}"></div>
+      <div><label>业务日期</label><input name="origCdate" placeholder="20260608" maxlength="8" th:value="${criteria.origCdate()}"></div>
+      <div><label>状态</label><select name="status"><option value="">全部</option><option value="CREATED" th:selected="${criteria.status() == 'CREATED'}">CREATED</option><option value="RUNNING" th:selected="${criteria.status() == 'RUNNING'}">RUNNING</option><option value="COMPLETED" th:selected="${criteria.status() == 'COMPLETED'}">COMPLETED</option><option value="FAILED" th:selected="${criteria.status() == 'FAILED'}">FAILED</option><option value="STOPPED" th:selected="${criteria.status() == 'STOPPED'}">STOPPED</option></select></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/sampling/commands">重置</a></div>
+    </div>
+    <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+  </form>
+
+  <section class="panel table-wrap">
+    <table>
+      <thead>
+      <tr>
+        <th>批次号</th><th>业务日期</th><th>状态</th>
+        <th>耗时</th><th>开始时间</th><th>结束时间</th><th>失败原因</th><th>操作</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr th:each="row : ${result.rows()}">
+        <td th:text="${row.batchId()}"></td>
+        <td th:text="${row.origCdate()}"></td>
+        <td><span class="tag" th:classappend="${row.status() == 'COMPLETED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
+        <td th:text="${row.durationText()}"></td>
+        <td th:text="${row.startedTime()}"></td>
+        <td th:text="${row.endedTime()}"></td>
+        <td th:text="${row.errorMessage()}"></td>
+        <td class="actions">
+          <a class="btn" th:href="@{/samples/groups(batchId=${row.batchId()})}">分组</a>
+          <a class="btn" th:href="@{/samples/details(batchId=${row.batchId()})}">明细</a>
+        </td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

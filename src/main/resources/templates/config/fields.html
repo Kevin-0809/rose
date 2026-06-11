@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>字段映射配置</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head"><div><div class="eyebrow">Field Mapping</div><h1>字段映射配置</h1></div></div>
+  <form class="panel form-grid" method="post" action="/config/fields" th:object="${fieldForm}">
+    <input type="hidden" th:field="*{mappingId}">
+    <div><label>交易码</label><input th:field="*{tranCode}" required></div>
+    <div><label>服务码</label><input th:field="*{serviceCode}" required></div>
+    <div><label>标准字段</label><input th:field="*{stdFieldName}" required></div>
+    <div><label>中文名</label><input th:field="*{fieldCnName}"></div>
+    <div><label>SOP字段</label><input th:field="*{sopFieldName}"></div>
+    <div><label>SOAP字段</label><input th:field="*{soapFieldName}"></div>
+    <div><label>BizJSON字段</label><input th:field="*{bizjsonFieldName}"></div>
+    <div><label>备注</label><input th:field="*{remark}"></div>
+    <div class="actions"><button class="btn primary" type="submit">保存</button><a class="btn" href="/config/fields">新增</a></div>
+  </form>
+  <form class="panel filters" method="get">
+    <input type="hidden" name="page" value="1">
+    <div class="filter-grid">
+      <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div>
+      <div><label>服务码</label><input name="serviceCode" th:value="${criteria.serviceCode()}"></div>
+      <div><label>标准字段</label><input name="stdFieldName" th:value="${criteria.stdFieldName()}"></div>
+      <div><label>SOP字段</label><input name="sopFieldName" th:value="${criteria.sopFieldName()}"></div>
+      <div><label>BizJSON字段</label><input name="bizjsonFieldName" th:value="${criteria.bizjsonFieldName()}"></div>
+      <div><label>中文名</label><input name="fieldCnName" th:value="${criteria.fieldCnName()}"></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/config/fields">重置</a></div>
+    </div>
+    <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+  </form>
+  <section class="panel table-wrap">
+    <table>
+      <thead><tr><th>交易码</th><th>服务码</th><th>标准字段</th><th>中文名</th><th>SOP</th><th>SOAP</th><th>BizJSON</th><th>备注</th><th>操作</th></tr></thead>
+      <tbody>
+      <tr th:each="row : ${result.rows()}">
+        <td th:text="${row.tranCode}"></td>
+        <td th:text="${row.serviceCode}"></td>
+        <td th:text="${row.stdFieldName}"></td>
+        <td th:text="${row.fieldCnName}"></td>
+        <td th:text="${row.sopFieldName}"></td>
+        <td th:text="${row.soapFieldName}"></td>
+        <td th:text="${row.bizjsonFieldName}"></td>
+        <td th:text="${row.remark}"></td>
+        <td class="actions"><a class="btn" th:href="@{/config/fields/{id}(id=${row.mappingId})}">编辑</a><form th:action="@{/config/fields/{id}/delete(id=${row.mappingId})}" method="post"><button class="btn" type="submit">删除</button></form></td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

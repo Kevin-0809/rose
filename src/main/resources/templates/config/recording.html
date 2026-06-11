@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>录制配置</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Recording Config</div>
+      <h1>录制配置</h1>
+      <p class="muted">维护 system_config 全局录制开关，以及 recording_config 交易级录制比例。</p>
+    </div>
+  </div>
+
+  <form class="panel form-grid" method="post" action="/config/recording/global">
+    <div>
+      <label>全局录制开关</label>
+      <select name="configValue">
+        <option value="1" th:selected="${globalSwitch == '1'}">启用</option>
+        <option value="0" th:selected="${globalSwitch != '1'}">关闭</option>
+      </select>
+    </div>
+    <div class="span-2">
+      <label>配置表</label>
+      <input value="system_config / config_key=global_recording_switch" readonly>
+    </div>
+    <div class="actions">
+      <button class="btn primary" type="submit">保存全局开关</button>
+    </div>
+  </form>
+
+  <form class="panel form-grid" method="post" action="/config/recording" th:object="${recordingForm}">
+    <input type="hidden" th:field="*{id}">
+    <div>
+      <label>交易代码</label>
+      <input th:field="*{txnCode}" required maxlength="100" placeholder="如 S010020110LtSzTnyLtrApl111">
+    </div>
+    <div>
+      <label>交易级开关</label>
+      <select th:field="*{txnSwitch}">
+        <option value="1">启用</option>
+        <option value="0">关闭</option>
+      </select>
+    </div>
+    <div>
+      <label>录制比例</label>
+      <input th:field="*{recordRatio}" type="number" min="0" max="100" required>
+    </div>
+    <div>
+      <label>配置表</label>
+      <input value="recording_config" readonly>
+    </div>
+    <div class="span-2">
+      <label>描述</label>
+      <input th:field="*{description}" maxlength="500">
+    </div>
+    <div class="actions">
+      <button class="btn primary" type="submit">保存交易配置</button>
+      <a class="btn" href="/config/recording">新增</a>
+    </div>
+  </form>
+
+  <form class="panel filters" method="get">
+    <input type="hidden" name="page" value="1">
+    <div class="filter-grid">
+      <div>
+        <label>交易代码</label>
+        <input name="txnCode" th:value="${criteria.txnCode()}">
+      </div>
+      <div>
+        <label>交易级开关</label>
+        <select name="txnSwitch">
+          <option value="">全部</option>
+          <option value="1" th:selected="${criteria.txnSwitch() != null && criteria.txnSwitch() == 1}">启用</option>
+          <option value="0" th:selected="${criteria.txnSwitch() != null && criteria.txnSwitch() == 0}">关闭</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">查询</button>
+        <a class="btn" href="/config/recording">重置</a>
+      </div>
+    </div>
+    <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+  </form>
+
+  <section class="panel table-wrap">
+    <table>
+      <thead>
+      <tr>
+        <th>交易代码</th>
+        <th>交易级开关</th>
+        <th>录制比例</th>
+        <th>描述</th>
+        <th>更新时间</th>
+        <th>操作</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr th:each="row : ${result.rows()}">
+        <td th:text="${row.txnCode()}"></td>
+        <td><span class="tag" th:classappend="${row.enabled()} ? 'green'" th:text="${row.enabled()} ? '启用' : '关闭'"></span></td>
+        <td th:text="${row.recordRatio()} + '%'"></td>
+        <td th:text="${row.description()}"></td>
+        <td th:text="${row.updatedTime()}"></td>
+        <td class="actions">
+          <a class="btn" th:href="@{/config/recording/{id}(id=${row.id()})}">编辑</a>
+          <form th:action="@{/config/recording/{id}/delete(id=${row.id()})}" method="post">
+            <button class="btn" type="submit">删除</button>
+          </form>
+        </td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rose Diff Studio</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <section class="page-head">
+    <div>
+      <div class="eyebrow">Replay Sampling Console</div>
+      <h1>交易回放差异采样管理</h1>
+      <p class="muted">面向采样分组、字段明细、交易配置和字段映射的统一工作台。</p>
+      <p class="muted" th:if="${stats.batchId()}" th:text="'最新批次：' + ${stats.batchId()} + ' / 业务日期：' + ${stats.origCdate()}"></p>
+    </div>
+  </section>
+  <section class="replay-hero">
+    <div class="section-title">
+      <div>
+        <div class="eyebrow">Replay Data Flow</div>
+        <h2>交易录制与回放链路</h2>
+      </div>
+      <span class="tag">生产旁路录制 / 回放双路校验</span>
+    </div>
+    <div id="replay-flow-chart" class="replay-flow-canvas">
+      <div class="flow-zone production-zone">
+        <span>生产网络</span>
+      </div>
+      <div class="flow-zone replay-zone">
+        <span>回放网络</span>
+      </div>
+      <div class="recording-branch" aria-hidden="true">
+        <span class="recording-branch-segment branch-down"></span>
+        <span class="recording-branch-segment branch-across"></span>
+        <span class="recording-branch-pulse"></span>
+      </div>
+
+      <div class="flow-track production-track">
+        <div class="flow-icon channel-icon">渠道</div>
+        <span class="track-line"></span>
+        <span class="track-pulse"></span>
+        <div class="flow-icon esb-icon">ESB</div>
+        <span class="track-line prod-528-line"></span>
+        <span class="track-pulse second"></span>
+        <div class="flow-target prod-528-target">
+          <strong>528</strong>
+          <small>生产网络</small>
+        </div>
+        <span class="track-caption">生产流量发往 528</span>
+      </div>
+
+      <div class="flow-track record-track">
+        <span class="track-line cross-line"></span>
+        <span class="track-pulse"></span>
+        <div class="flow-icon record-icon">录制程序</div>
+        <span class="track-line db-line"></span>
+        <span class="track-pulse second"></span>
+        <div class="flow-icon db-icon">DB</div>
+        <span class="track-caption">生产 ESB 旁路流量发往回放网络录制程序并落库</span>
+      </div>
+
+      <div class="replay-panel">
+        <span>调度中心</span>
+        <strong>回放工具</strong>
+        <small>读取录制报文 / 双路发送 / 差异采样</small>
+      </div>
+
+      <div class="flow-track ccbs-track">
+        <span class="track-line from-tool"></span>
+        <span class="track-pulse"></span>
+        <div class="flow-icon esf-icon">ESF</div>
+        <span class="track-line short-line"></span>
+        <span class="track-pulse second"></span>
+        <div class="flow-target ccbs-target">
+          <strong>CCBS</strong>
+          <small>新核心 / BizJSON</small>
+        </div>
+      </div>
+
+      <div class="flow-track legacy-track">
+        <span class="track-line from-tool"></span>
+        <span class="track-pulse"></span>
+        <div class="flow-icon replay-esb-icon">ESB</div>
+        <span class="track-line short-line"></span>
+        <span class="track-pulse second"></span>
+        <div class="flow-target legacy-target">
+          <strong>528</strong>
+          <small>回放网络 528 系统</small>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="cards">
+    <div class="card"><div class="label">发起交易</div><div class="value" th:text="${stats.totalTranCount()}">0</div></div>
+    <div class="card"><div class="label">原失败新成功</div><div class="value" th:text="${stats.compResult1Count()}">0</div></div>
+    <div class="card"><div class="label">原成功新失败</div><div class="value" th:text="${stats.compResult2Count()}">0</div></div>
+    <div class="card"><div class="label">都失败</div><div class="value" th:text="${stats.compResult3Count()}">0</div></div>
+    <div class="card"><div class="label">都成功</div><div class="value" th:text="${stats.compResult4Count()}">0</div></div>
+    <div class="card"><div class="label">响应码不一致</div><div class="value" th:text="${stats.compResult8Count()}">0</div></div>
+    <div class="card"><div class="label">通过交易</div><div class="value" th:text="${stats.passTranCount()}">0</div></div>
+    <div class="card"><div class="label">问题字段</div><div class="value" th:text="${stats.issueFieldCount()}">0</div></div>
+    <div class="card"><div class="label">完全匹配</div><div class="value" th:text="${stats.fullyMatchedCount()}">0</div></div>
+    <div class="card"><div class="label">分组数</div><div class="value" th:text="${stats.sampleGroupCount()}">0</div></div>
+    <div class="card"><div class="label">明细数</div><div class="value" th:text="${stats.sampleDetailCount()}">0</div></div>
+  </section>
+  <section class="chart-band">
+    <div class="section-title">
+      <div>
+        <div class="eyebrow">Summary Trend</div>
+        <h2>最近批次统计趋势</h2>
+      </div>
+      <a class="btn" href="/sampling/summaries">查看历史</a>
+    </div>
+    <div id="summary-history-chart" class="chart chart-home"></div>
+  </section>
+  <section class="entry-grid">
+    <a class="card entry" href="/sampling/commands"><strong>采样指令</strong><span>按业务日期发起异步采样批次，并查看后台执行记录。</span></a>
+    <a class="card entry" href="/samples/groups"><strong>采样分组管理</strong><span>按交易、服务码、字段、责任人查看影响数量和样本数。</span></a>
+    <a class="card entry" href="/samples/details"><strong>采样明细查询</strong><span>查看流水号、528 的值、CCBS 的值和字段映射。</span></a>
+    <a class="card entry" href="/config/recording"><strong>录制配置</strong><span>维护全局录制开关，以及每个交易代码的录制比例。</span></a>
+    <a class="card entry" href="/config/trans"><strong>交易配置</strong><span>维护交易码、服务码、模块、责任人和关键交易标记。</span></a>
+    <a class="card entry" href="/config/fields"><strong>字段映射配置</strong><span>维护 SOP、SOAP、BizJSON 字段映射和中文名。</span></a>
+  </section>
+</main>
+<script src="/vendor/echarts.min.js"></script>
+<script th:inline="javascript">
+  const summaryChartData = /*[[${summaryChart}]]*/ [];
+  const summaryChartEl = document.getElementById('summary-history-chart');
+  if (summaryChartEl && window.echarts) {
+    const chart = echarts.init(summaryChartEl);
+    const labels = summaryChartData.map(item => item.origCdate + '\n' + item.batchId.slice(-4));
+    chart.setOption({
+      backgroundColor: 'transparent',
+      color: ['#38bdf8', '#4ade80', '#facc15', '#fb7185'],
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { top: 0, right: 0, textStyle: { color: '#8fa3ba' } },
+      grid: { top: 44, left: 56, right: 24, bottom: 40 },
+      xAxis: { type: 'category', data: labels, axisLabel: { color: '#8fa3ba' }, axisLine: { lineStyle: { color: 'rgba(97,128,165,.38)' } } },
+      yAxis: { type: 'value', axisLabel: { color: '#8fa3ba' }, splitLine: { lineStyle: { color: 'rgba(97,128,165,.18)' } } },
+      series: [
+        { name: '问题字段', type: 'bar', data: summaryChartData.map(item => item.issueFieldCount), barMaxWidth: 18 },
+        { name: '完全匹配', type: 'bar', data: summaryChartData.map(item => item.fullyMatchedCount), barMaxWidth: 18 },
+        { name: '分组数', type: 'bar', data: summaryChartData.map(item => item.sampleGroupCount), barMaxWidth: 18 },
+        { name: '明细数', type: 'bar', data: summaryChartData.map(item => item.sampleDetailCount), barMaxWidth: 18 }
+      ]
+    });
+    window.addEventListener('resize', () => chart.resize());
+  }
+</script>
+</body>
+</html>

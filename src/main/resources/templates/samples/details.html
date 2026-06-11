@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>采样明细</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head"><div><div class="eyebrow">Sample Details</div><h1>采样明细查询</h1></div></div>
+  <form class="panel filters" method="get">
+    <input type="hidden" name="page" value="1">
+    <div class="filter-grid">
+      <div><label>批次</label><input name="batchId" th:value="${criteria.batchId()}"></div>
+      <div><label>类型</label><select name="sampleType"><option value="">全部</option><option value="RETURN_CODE" th:selected="${criteria.sampleType() == 'RETURN_CODE'}">RETURN_CODE</option><option value="FIELD_DIFF" th:selected="${criteria.sampleType() == 'FIELD_DIFF'}">FIELD_DIFF</option></select></div>
+      <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div>
+      <div><label>服务码</label><input name="serviceCode" th:value="${criteria.serviceCode()}"></div>
+      <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
+      <div><label>SOP字段</label><input name="sopFieldName" th:value="${criteria.sopFieldName()}"></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/details/export">导出Excel</button><a class="btn" href="/samples/details">重置</a></div>
+    </div>
+    <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+  </form>
+  <section class="panel table-wrap">
+    <table>
+      <thead><tr><th>批次</th><th>类型</th><th>交易码</th><th>服务码</th><th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th><th>中文名</th><th>528的值</th><th>CCBS的值</th><th>流水号</th><th>责任人</th><th>数量</th></tr></thead>
+      <tbody>
+      <tr th:each="row : ${result.rows()}">
+        <td th:text="${row.batchId()}"></td>
+        <td><span class="tag" th:text="${row.sampleType()}"></span></td>
+        <td th:text="${row.tranCode()}"></td>
+        <td th:text="${row.serviceCode()}"></td>
+        <td th:text="${row.sopFieldName()}"></td>
+        <td th:text="${row.soapFieldName()}"></td>
+        <td th:text="${row.bizjsonFieldName()}"></td>
+        <td th:text="${row.fieldCnName()}"></td>
+        <td th:text="${row.origFieldValue()}"></td>
+        <td th:text="${row.destFieldValue()}"></td>
+        <td th:text="${row.tranSeqNo()}"></td>
+        <td th:text="${row.owner()}"></td>
+        <td th:text="${row.affectedCount()}"></td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<body>
+<header th:fragment="topbar(active)" class="topbar">
+  <a class="brand" href="/">
+    <span class="brand-mark">R</span>
+    <span>Rose Diff Studio</span>
+  </a>
+  <nav class="nav">
+    <a th:classappend="${active == 'home'} ? 'active'" href="/">首页</a>
+    <a th:classappend="${active == 'sampling-commands'} ? 'active'" href="/sampling/commands">采样指令</a>
+    <a th:classappend="${active == 'sampling-summaries'} ? 'active'" href="/sampling/summaries">统计历史</a>
+    <a th:classappend="${active == 'sample-groups'} ? 'active'" href="/samples/groups">采样分组</a>
+    <a th:classappend="${active == 'sample-details'} ? 'active'" href="/samples/details">采样明细</a>
+    <a th:classappend="${active == 'recording'} ? 'active'" href="/config/recording">录制配置</a>
+    <a th:classappend="${active == 'configImport'} ? 'active'" href="/config/import">交易导入</a>
+    <a th:classappend="${active == 'trans'} ? 'active'" href="/config/trans">交易配置</a>
+    <a th:classappend="${active == 'fields'} ? 'active'" href="/config/fields">字段映射</a>
+  </nav>
+</header>
+
+<div th:fragment="pager(result)" class="pager">
+  <span class="muted" th:text="'共 ' + ${result.total()} + ' 条，第 ' + ${result.page()} + ' / ' + ${result.totalPages()} + ' 页'">共 0 条</span>
+  <button class="btn" type="submit" name="page" th:value="${result.page() > 1 ? result.page() - 1 : 1}">上一页</button>
+  <button class="btn" type="submit" name="page" th:value="${result.page() < result.totalPages() ? result.page() + 1 : result.totalPages()}">下一页</button>
+  <select name="size" onchange="this.form.submit()">
+    <option th:each="s : ${result.allowedSizes()}" th:value="${s}" th:text="${s}" th:selected="${s == result.size()}"></option>
+  </select>
+</div>
+</body>
+</html>

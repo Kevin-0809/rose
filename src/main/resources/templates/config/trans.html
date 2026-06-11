@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>交易配置</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head"><div><div class="eyebrow">Transaction Catalog</div><h1>交易配置</h1></div></div>
+  <form class="panel form-grid" method="post" action="/config/trans" th:object="${tranForm}">
+    <input type="hidden" th:field="*{catalogId}">
+    <div><label>交易码</label><input th:field="*{tranCode}" required maxlength="32"></div>
+    <div><label>服务码</label><input th:field="*{serviceCode}" required></div>
+    <div><label>交易名称</label><input th:field="*{tranName}"></div>
+    <div><label>模块</label><select th:field="*{moduleName}"><option value=""></option><option value="loan">loan</option><option value="sett">sett</option><option value="dept">dept</option><option value="comm">comm</option></select></div>
+    <div><label>责任人</label><input th:field="*{owner}"></div>
+    <div><label>重要级别</label><input th:field="*{importanceLevel}"></div>
+    <div><label>关键交易</label><select th:field="*{isKeyTran}"><option value="false">false</option><option value="true">true</option></select></div>
+    <div><label>备注</label><input th:field="*{remark}"></div>
+    <div class="actions"><button class="btn primary" type="submit">保存</button><a class="btn" href="/config/trans">新增</a></div>
+  </form>
+  <form class="panel filters" method="get">
+    <input type="hidden" name="page" value="1">
+    <div class="filter-grid">
+      <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div>
+      <div><label>服务码</label><input name="serviceCode" th:value="${criteria.serviceCode()}"></div>
+      <div><label>交易名称</label><input name="tranName" th:value="${criteria.tranName()}"></div>
+      <div><label>模块</label><select name="moduleName"><option value="">全部</option><option value="loan" th:selected="${criteria.moduleName() == 'loan'}">loan</option><option value="sett" th:selected="${criteria.moduleName() == 'sett'}">sett</option><option value="dept" th:selected="${criteria.moduleName() == 'dept'}">dept</option><option value="comm" th:selected="${criteria.moduleName() == 'comm'}">comm</option></select></div>
+      <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
+      <div><label>关键交易</label><select name="isKeyTran"><option value="">全部</option><option value="true" th:selected="${criteria.isKeyTran() == 'true'}">true</option><option value="false" th:selected="${criteria.isKeyTran() == 'false'}">false</option></select></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/config/trans">重置</a></div>
+    </div>
+    <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+  </form>
+  <section class="panel table-wrap">
+    <table>
+      <thead><tr><th>交易码</th><th>服务码</th><th>交易名称</th><th>模块</th><th>责任人</th><th>重要级别</th><th>关键</th><th>备注</th><th>操作</th></tr></thead>
+      <tbody>
+      <tr th:each="row : ${result.rows()}">
+        <td th:text="${row.tranCode}"></td>
+        <td th:text="${row.serviceCode}"></td>
+        <td th:text="${row.tranName}"></td>
+        <td th:text="${row.moduleName}"></td>
+        <td th:text="${row.owner}"></td>
+        <td th:text="${row.importanceLevel}"></td>
+        <td><span class="tag" th:text="${row.isKeyTran}"></span></td>
+        <td th:text="${row.remark}"></td>
+        <td class="actions"><a class="btn" th:href="@{/config/fields(tranCode=${row.tranCode},serviceCode=${row.serviceCode})}">字段映射</a><a class="btn" th:href="@{/config/trans/{id}(id=${row.catalogId})}">编辑</a><form th:action="@{/config/trans/{id}/delete(id=${row.catalogId})}" method="post"><button class="btn" type="submit">删除</button></form></td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
