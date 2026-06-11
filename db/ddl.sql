@@ -1,13 +1,8 @@
--- Analysis platform tables for replay comparison sampling.
+-- Rose replay management database DDL.
+-- Contains current application schema only. Seed/test data lives in db/seed.sql.
 \set ON_ERROR_STOP on
 
-drop table if exists ana_issue_action_log;
-drop table if exists ana_issue_sample;
-drop table if exists ana_issue_group;
-drop table if exists ana_reason_dict;
-drop table if exists ana_replay_batch;
-drop table if exists ana_summary_snapshot;
-
+-- Analysis platform tables for replay comparison sampling.
 create table if not exists ana_tran_catalog (
     catalog_id bigserial primary key,
     tran_code varchar(32) not null,
@@ -36,13 +31,6 @@ comment on column ana_tran_catalog.remark is '备注';
 comment on column ana_tran_catalog.created_at is '创建时间';
 comment on column ana_tran_catalog.updated_at is '更新时间';
 
-alter table ana_tran_catalog alter column is_key_tran drop default;
-alter table ana_tran_catalog alter column is_key_tran type varchar(5)
-using case
-    when is_key_tran::text in ('true', 't', '1') then 'true'
-    else 'false'
-end;
-alter table ana_tran_catalog alter column is_key_tran set default 'false';
 alter table ana_tran_catalog drop constraint if exists ck_ana_tran_catalog_is_key_tran;
 alter table ana_tran_catalog add constraint ck_ana_tran_catalog_is_key_tran
 check (is_key_tran in ('true', 'false'));
@@ -74,9 +62,6 @@ comment on column ana_field_mapping.bizjson_field_name is 'BizJSON报文字段�
 comment on column ana_field_mapping.remark is '备注';
 comment on column ana_field_mapping.created_at is '创建时间';
 comment on column ana_field_mapping.updated_at is '更新时间';
-
-alter table ana_field_mapping drop column if exists compare_rule;
-alter table ana_field_mapping drop column if exists ignore_flag;
 
 create table if not exists ana_sample_group (
     group_id bigserial primary key,
@@ -207,8 +192,6 @@ create table if not exists ana_sampling_command (
     constraint uk_ana_sampling_command_batch unique (batch_id),
     constraint ck_ana_sampling_command_status check (status in ('CREATED','RUNNING','COMPLETED','FAILED','STOPPING','STOPPED'))
 );
-
-alter table ana_sampling_command drop column if exists partition_count;
 
 create table if not exists ana_sampling_candidate (
     candidate_id bigserial primary key,
@@ -408,3 +391,70 @@ on ana_sample_group(batch_id, group_key, affected_count);
 
 create index if not exists idx_ana_sample_group_batch_grouphash
 on ana_sample_group(batch_id, group_hash, group_key);
+
+-- Recording configuration tables.
+CREATE SEQUENCE IF NOT EXISTS seq_recording_config_id;
+
+CREATE TABLE IF NOT EXISTS system_config (
+    config_key character varying(100) PRIMARY KEY,
+    config_value character varying(200) NOT NULL,
+    description character varying(500),
+    updated_time timestamp(6) without time zone DEFAULT pg_systimestamp() NOT NULL
+)
+WITH (
+    orientation = row,
+    compression = no,
+    storage_type = USTORE,
+    segment = off
+);
+
+COMMENT ON TABLE system_config IS '系统配置表';
+COMMENT ON COLUMN system_config.config_key IS '配置键';
+COMMENT ON COLUMN system_config.config_value IS '配置值';
+COMMENT ON COLUMN system_config.description IS '描述';
+COMMENT ON COLUMN system_config.updated_time IS '更新时间';
+
+
+
+CREATE TABLE IF NOT EXISTS recording_config (
+    id bigint DEFAULT nextval('seq_recording_config_id'::regclass) PRIMARY KEY,
+    txn_code character varying(100) NOT NULL,
+    txn_switch tinyint DEFAULT 1 NOT NULL,
+    record_ratio integer DEFAULT 100 NOT NULL,
+    description character varying(500),
+    created_time timestamp(6) without time zone DEFAULT pg_systimestamp() NOT NULL,
+    updated_time timestamp(6) without time zone DEFAULT pg_systimestamp() NOT NULL
+)
+WITH (
+    orientation = row,
+    compression = no,
+    storage_type = USTORE,
+    segment = off
+);
+
+COMMENT ON TABLE recording_config IS '录制配置表';
+COMMENT ON COLUMN recording_config.id IS '主键ID';
+COMMENT ON COLUMN recording_config.txn_code IS '交易代码，如 S010020110LtSzTnyLtrApl111';
+COMMENT ON COLUMN recording_config.txn_switch IS '交易级开关： 0=关闭， 1=启用';
+COMMENT ON COLUMN recording_config.record_ratio IS '录制比例： 0-100， 100表示100%录制';
+COMMENT ON COLUMN recording_config.description IS '描述';
+COMMENT ON COLUMN recording_config.created_time IS '创建时间';
+COMMENT ON COLUMN recording_config.updated_time IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_txn_code
+    ON recording_config USING ubtree (txn_code)
+    WITH (storage_type = USTORE)
+    TABLESPACE pg_default;
+
+-- Indexes for set-based sampling execution.
+create index if not exists idx_tss_field_comp_sampling_diff
+on tss_field_comp(orig_cdate, comp_result, orig_field_name, mesg_seq, conv_index, conv_cindex, dest_field_name);
+
+create index if not exists idx_tss_tran_comp_sampling_join
+on tss_tran_comp(orig_cdate, mesg_seq, conv_index, conv_cindex, comp_result, dest_trcd);
+
+create index if not exists idx_ana_tran_catalog_service
+on ana_tran_catalog(service_code);
+
+create index if not exists idx_ana_field_mapping_sampling
+on ana_field_mapping(service_code, sop_field_name, bizjson_field_name, tran_code);
