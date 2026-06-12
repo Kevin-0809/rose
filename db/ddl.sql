@@ -116,6 +116,8 @@ update ana_sample_group set affected_tran_count = affected_count where affected_
 alter table ana_sample_group add column if not exists affected_field_count bigint;
 alter table ana_sample_group alter column affected_field_count set default 0;
 update ana_sample_group set affected_field_count = 0 where affected_field_count is null;
+alter table ana_sample_group drop constraint if exists ck_ana_sample_group_type;
+alter table ana_sample_group add constraint ck_ana_sample_group_type check (sample_type in ('TRAN_RESULT', 'RETURN_CODE', 'FIELD_DIFF'));
 
 comment on table ana_sample_group is '差异采样分组表';
 comment on column ana_sample_group.group_id is '采样分组ID';
@@ -214,6 +216,8 @@ alter table ana_sample_detail add column if not exists orig_error_code varchar(6
 alter table ana_sample_detail add column if not exists orig_error_desc varchar(500);
 alter table ana_sample_detail add column if not exists dest_error_code varchar(64);
 alter table ana_sample_detail add column if not exists dest_error_desc varchar(500);
+alter table ana_sample_detail drop constraint if exists ck_ana_sample_detail_type;
+alter table ana_sample_detail add constraint ck_ana_sample_detail_type check (sample_type in ('TRAN_RESULT', 'RETURN_CODE', 'FIELD_DIFF'));
 
 comment on table ana_sample_detail is '差异采样明细表';
 comment on column ana_sample_detail.sample_id is '样本ID';

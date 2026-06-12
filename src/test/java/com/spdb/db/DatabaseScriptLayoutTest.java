@@ -142,7 +142,11 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("alter table ana_sample_group add column if not exists message_types varchar(200)");
         assertThat(ddl).contains("alter table ana_sample_group add column if not exists affected_tran_count bigint");
         assertThat(ddl).contains("alter table ana_sample_group add column if not exists affected_field_count bigint");
+        assertThat(ddl).contains("alter table ana_sample_group drop constraint if exists ck_ana_sample_group_type");
+        assertThat(ddl).contains("alter table ana_sample_group add constraint ck_ana_sample_group_type check (sample_type in ('tran_result', 'return_code', 'field_diff'))");
         assertThat(ddl).contains("alter table ana_sample_detail add column if not exists field_count integer");
+        assertThat(ddl).contains("alter table ana_sample_detail drop constraint if exists ck_ana_sample_detail_type");
+        assertThat(ddl).contains("alter table ana_sample_detail add constraint ck_ana_sample_detail_type check (sample_type in ('tran_result', 'return_code', 'field_diff'))");
         assertThat(ddl).contains("alter table ana_sampling_summary add column if not exists tran_issue_count bigint");
     }
 

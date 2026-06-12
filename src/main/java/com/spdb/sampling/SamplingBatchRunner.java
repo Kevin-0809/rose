@@ -324,7 +324,7 @@ public class SamplingBatchRunner {
                 .addValue("affectedTranCount", group.affectedTranCount())
                 .addValue("affectedFieldCount", group.affectedFieldCount())
                 .addValue("sampleCount", group.details().size()), keyHolder);
-        return keyHolder.getKey().longValue();
+        return generatedLongKey(keyHolder, "group_id");
     }
 
     private Long insertDetail(String batchId, Long groupId, SampleGroupDraft group, SampleDetailDraft detail, int sequence) {
@@ -364,7 +364,19 @@ public class SamplingBatchRunner {
                 .addValue("destErrorDesc", detail.destErrorDesc())
                 .addValue("sourceTable", sourceTable(group.sampleType()))
                 .addValue("sourcePk", detail.tranSeqNo()), keyHolder);
-        return keyHolder.getKey().longValue();
+        return generatedLongKey(keyHolder, "sample_id");
+    }
+
+    static Long generatedLongKey(KeyHolder keyHolder, String columnName) {
+        Object value = keyHolder.getKeys() == null ? null : keyHolder.getKeys().get(columnName);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        Number singleKey = keyHolder.getKey();
+        if (singleKey == null) {
+            throw new IllegalStateException("未返回自增键：" + columnName);
+        }
+        return singleKey.longValue();
     }
 
     private void insertDetailFields(String batchId, Long groupId, Long sampleId, SampleDetailDraft detail) {
