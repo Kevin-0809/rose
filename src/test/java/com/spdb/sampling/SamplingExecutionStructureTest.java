@@ -32,90 +32,104 @@ class SamplingExecutionStructureTest {
     }
 
     @Test
-    void samplingServiceUsesSqlCandidateAggregationForSampling() throws IOException {
+    void samplingServiceUsesJavaSemanticComponentsForSampling() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("ana_sampling_candidate");
-        assertThat(source).contains("groupedCandidateCte");
-        assertThat(source).contains("row_number() over");
-        assertThat(source).contains(" group by ");
+        assertThat(source).contains("JdbcSamplingSourceReader");
+        assertThat(source).contains("SamplingConfigSnapshot");
+        assertThat(source).contains("SemanticSignatureBuilder");
+        assertThat(source).contains("IssueGrouper");
+        assertThat(source).contains("ana_sample_detail_field");
+        assertThat(source).doesNotContain("ana_sampling_candidate");
+        assertThat(source).doesNotContain("groupedCandidateCte");
+        assertThat(source).doesNotContain("row_number() over");
         assertThat(source).doesNotContain("findFieldRows");
     }
 
     @Test
-    void samplingServiceMaterializesFilteredDiffRowsBeforeCandidateJoin() throws IOException {
+    void samplingServiceDoesNotMaterializeTemporaryCandidateTables() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("create temporary table tmp_sampling_diff");
-        assertThat(source).contains("sample_type varchar(32) not null");
-        assertThat(source).contains("analyze tmp_sampling_diff");
-        assertThat(source).contains("from tmp_sampling_diff d");
+        assertThat(source).doesNotContain("create temporary table");
+        assertThat(source).doesNotContain("tmp_sampling_diff");
+        assertThat(source).doesNotContain("tmp_sampling_detail_candidate");
+        assertThat(source).doesNotContain("analyze tmp");
     }
 
     @Test
-    void samplingServiceReadsTransactionLevelDifferencesFromRetcodeTable() throws IOException {
+    void samplingServiceCreatesThreeIssueTypesFromStreamedSources() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("from tss_retcode_comp r");
-        assertThat(source).contains("'RETURN_CODE' as sample_type");
-        assertThat(source).contains("'FIELD_DIFF' as sample_type");
-        assertThat(source).contains("'returnCode' as orig_field_name");
-        assertThat(source).contains("'returnCode' as dest_field_name");
-        assertThat(source).contains("d.service_code || '|' || d.comp_result");
-        assertThat(source).contains("service_code || '|' ||\n                            comp_result");
-        assertThat(source).contains("group by sample_type, tran_code, service_code, comp_result, sop_field_name");
-        assertThat(source).contains("t.comp_result = '4'");
+        assertThat(source).contains("readTranFacts");
+        assertThat(source).contains("readReturnCodes");
+        assertThat(source).contains("readFieldDiffs");
+        assertThat(source).contains("\"TRAN_RESULT\"");
+        assertThat(source).contains("\"RETURN_CODE\"");
+        assertThat(source).contains("IssueCandidate.fieldDiff");
+        assertThat(source).contains("\"4\".equals(fact.compResult())");
         assertThat(source).doesNotContain("f.orig_field_name = 'returnCode'");
         assertThat(source).doesNotContain("f.orig_field_name <> 'returnCode'");
     }
 
     @Test
-    void samplingServiceJoinsTranAndFieldComparisonOnlyByMessageSequence() throws IOException {
+    void samplingServiceKeysFieldDiffsBySourceKeyInJava() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("join tss_tran_comp t\n                      on t.mesg_seq = f.mesg_seq");
-        assertThat(source).contains("where f.mesg_seq = t.mesg_seq");
-        assertThat(source).doesNotContain("t.conv_index = f.conv_index");
-        assertThat(source).doesNotContain("t.conv_cindex = f.conv_cindex");
-        assertThat(source).doesNotContain("f.conv_index = t.conv_index");
-        assertThat(source).doesNotContain("f.conv_cindex = t.conv_cindex");
+        assertThat(source).contains("Map<SourceKey, TranFact> tranFacts");
+        assertThat(source).contains("tranFacts.get(buffer.key)");
+        assertThat(source).contains("Objects.equals(buffer.key, diff.sourceKey())");
+        assertThat(source).doesNotContain("join tss_tran_comp t");
+        assertThat(source).doesNotContain("from tss_field_comp f");
     }
 
     @Test
-    void samplingServiceResolvesConfiguredFieldNamesByTransactionAndSopField() throws IOException {
+    void samplingServiceResolvesConfiguredFieldNamesByMessageTypeAndSemanticMapping() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
+        String snapshot = engineSource("SamplingConfigSnapshot.java");
 
-        assertThat(source).contains("and m.sop_field_name = d.orig_field_name");
-        assertThat(source).doesNotContain("and m.bizjson_field_name = d.dest_field_name");
-        assertThat(source).contains("coalesce(m.soap_field_name, d.dest_field_name) as soap_field_name");
-        assertThat(source).contains("coalesce(m.bizjson_field_name, d.dest_field_name) as bizjson_field_name");
+        assertThat(source).contains("config.resolveField(fact.tranCode(), fact.serviceCode(), diff.messageType(), diff.rawFieldName())");
+        assertThat(snapshot).contains("sopFieldName");
+        assertThat(snapshot).contains("soapFieldName");
+        assertThat(snapshot).contains("bizjsonFieldName");
+        assertThat(snapshot).contains("UNMAPPED");
+        assertThat(source).doesNotContain("and m.sop_field_name = d.orig_field_name");
     }
 
     @Test
-    void samplingServiceSplitsDetailInsertByGroupSize() throws IOException {
+    void samplingServiceWritesTransactionSamplesAndFieldDetails() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("case when sample_type = 'RETURN_CODE' then 1 else 10 end");
-        assertThat(source).contains("case when c.sample_type = 'RETURN_CODE' then 1 else 10 end");
-        assertThat(source).contains("partition by c.group_id");
-        assertThat(source).doesNotContain("partition by c.group_key");
-        assertThat(source).contains("create temporary table tmp_sampling_detail_candidate");
-        assertThat(source).contains("from tmp_sampling_detail_candidate c");
+        assertThat(source).contains("private Long insertDetail");
+        assertThat(source).contains("private void insertDetailFields");
+        assertThat(source).contains("field_count");
+        assertThat(source).contains("raw_field_name");
+        assertThat(source).contains("std_field_name");
+        assertThat(source).contains("mapping_status");
+        assertThat(source).contains("MAX_SAMPLES_PER_GROUP = 20");
+        assertThat(source).doesNotContain("case when sample_type = 'RETURN_CODE' then 1 else 10 end");
         assertThat(source).doesNotContain("set group_id = g.group_id");
         assertThat(source).doesNotContain("least(affected_count, 100)");
         assertThat(source).doesNotContain("sample_seq_no <= 100");
     }
 
     @Test
-    void samplingServiceRefreshesStatsBeforeDetailCandidateJoin() throws IOException {
+    void samplingSourceReaderUsesCursorStyleStreamingInsteadOfPagination() throws IOException {
+        String source = engineSource("JdbcSamplingSourceReader.java").toLowerCase();
+
+        assertThat(source).contains("setfetchsize");
+        assertThat(source).contains("setautocommit(false)");
+        assertThat(source).contains("resultset.type_forward_only");
+        assertThat(source).doesNotContain(" offset ");
+        assertThat(source).doesNotContain(" limit ");
+    }
+
+    @Test
+    void samplingServiceDoesNotRefreshDatabaseStatsForTemporaryJoins() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("analyze ana_sampling_candidate");
-        assertThat(source).contains("analyze ana_sample_group");
-        assertThat(source.indexOf("analyze ana_sampling_candidate"))
-                .isLessThan(source.indexOf("insert into tmp_sampling_detail_candidate"));
-        assertThat(source.indexOf("analyze ana_sample_group"))
-                .isLessThan(source.indexOf("insert into tmp_sampling_detail_candidate"));
+        assertThat(source).doesNotContain("analyze ana_sampling_candidate");
+        assertThat(source).doesNotContain("analyze ana_sample_group");
+        assertThat(source).doesNotContain("insert into tmp_sampling_detail_candidate");
     }
 
     @Test
@@ -144,6 +158,12 @@ class SamplingExecutionStructureTest {
     private String javaSource(String fileName) throws IOException {
         return new String(java.nio.file.Files.readAllBytes(
                 java.nio.file.Path.of("src/main/java/com/spdb/sampling/" + fileName)
+        ), StandardCharsets.UTF_8);
+    }
+
+    private String engineSource(String fileName) throws IOException {
+        return new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Path.of("src/main/java/com/spdb/sampling/engine/" + fileName)
         ), StandardCharsets.UTF_8);
     }
 
