@@ -77,6 +77,24 @@ class SampleQueryServiceTest {
         );
     }
 
+    @Test
+    void detailQueryLoadsFieldMappingColumnsFromMappingTableAndReturnCodeDescriptions() {
+        String source = javaSource("SampleQueryService.java");
+
+        assertThat(source).contains("left join ana_field_mapping m");
+        assertThat(source).contains("m.tran_code = d.tran_code");
+        assertThat(source).contains("m.service_code = d.service_code");
+        assertThat(source).contains("m.sop_field_name = d.sop_field_name");
+        assertThat(source).contains("case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.sop_field_name, d.sop_field_name) end as sop_field_name");
+        assertThat(source).contains("case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.soap_field_name, d.soap_field_name) end as soap_field_name");
+        assertThat(source).contains("case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.bizjson_field_name, d.bizjson_field_name) end as bizjson_field_name");
+        assertThat(source).contains("case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.field_cn_name, d.field_cn_name) end as field_cn_name");
+        assertThat(source).contains("left join tss_retcode_comp r");
+        assertThat(source).contains("r.mesg_seq = d.tran_seq_no");
+        assertThat(source).contains("case when d.sample_type = 'RETURN_CODE' then r.orig_error_desc else null end as orig_field_desc");
+        assertThat(source).contains("case when d.sample_type = 'RETURN_CODE' then r.dest_error_desc else null end as dest_field_desc");
+    }
+
     private int exportLimit(SqlParameterSource params) {
         assertThat(params.hasValue("exportLimit")).isTrue();
         return ((Number) params.getValue("exportLimit")).intValue();
@@ -84,5 +102,13 @@ class SampleQueryServiceTest {
 
     private SampleSearchCriteria emptyCriteria() {
         return new SampleSearchCriteria(null, null, null, null, null, null, null, null);
+    }
+
+    private String javaSource(String fileName) {
+        try {
+            return java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/com/spdb/sample/" + fileName));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

@@ -45,4 +45,65 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl.toLowerCase()).doesNotContain("insert into");
         assertThat(ddl.toLowerCase()).doesNotContain("delete from");
     }
+
+    @Test
+    void databaseScriptsDoNotUseTriggersOrFunctions() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+        String seed = Files.readString(Path.of("db/seed.sql"), StandardCharsets.UTF_8).toLowerCase();
+        String scripts = ddl + "\n" + seed;
+
+        assertThat(scripts).doesNotContain("create trigger");
+        assertThat(scripts).doesNotContain("drop trigger");
+        assertThat(scripts).doesNotContain("returns trigger");
+        assertThat(scripts).doesNotContain("execute function");
+        assertThat(scripts).doesNotContain("execute procedure");
+        assertThat(scripts).doesNotContain("create or replace function");
+        assertThat(scripts).doesNotContain("create function");
+        assertThat(scripts).doesNotContain("create or replace procedure");
+        assertThat(scripts).doesNotContain("create procedure");
+        assertThat(scripts).doesNotContain("language plpgsql");
+    }
+
+    @Test
+    void retcodeComparisonTableHasChineseCommentsAndSeedData() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
+        String ddlLower = ddl.toLowerCase();
+        String seedLower = Files.readString(Path.of("db/seed.sql"), StandardCharsets.UTF_8).toLowerCase();
+        String retcodeSeed = seedLower.substring(
+                seedLower.indexOf("insert into tss_retcode_comp"),
+                seedLower.indexOf("-- 005_seed_ana_samples_from_tss.sql")
+        );
+
+        assertThat(ddlLower).contains("create table if not exists tss_retcode_comp");
+        assertThat(ddlLower).doesNotContain("retcode_id");
+        assertThat(ddlLower).contains("mesg_seq varchar(64) primary key");
+        assertThat(ddlLower).contains("service_code varchar(200) not null");
+        assertThat(ddlLower).doesNotContain("tss_retcode_comp.comp_date");
+        assertThat(ddlLower).doesNotContain("tss_retcode_comp.conv_index");
+        assertThat(ddlLower).doesNotContain("tss_retcode_comp.conv_cindex");
+        assertThat(ddlLower).doesNotContain("tss_retcode_comp.source_table");
+        assertThat(ddlLower).contains("orig_error_code varchar(64)");
+        assertThat(ddlLower).contains("orig_error_desc varchar(500)");
+        assertThat(ddlLower).contains("dest_error_code varchar(64)");
+        assertThat(ddlLower).contains("dest_error_desc varchar(500)");
+
+        assertThat(ddl).contains("comment on table tss_retcode_comp is '响应码差异登记表'");
+        assertThat(ddl).doesNotContain("comment on column tss_retcode_comp.retcode_id");
+        assertThat(ddl).contains("comment on column tss_retcode_comp.mesg_seq is '流水号'");
+        assertThat(ddl).contains("comment on column tss_retcode_comp.service_code is '服务码，带报文类型'");
+        assertThat(ddl).contains("comment on column tss_retcode_comp.orig_error_code is '528错误码'");
+        assertThat(ddl).contains("comment on column tss_retcode_comp.orig_error_desc is '528错误描述'");
+        assertThat(ddl).contains("comment on column tss_retcode_comp.dest_error_code is 'CCBS错误码'");
+        assertThat(ddl).contains("comment on column tss_retcode_comp.dest_error_desc is 'CCBS错误描述'");
+
+        assertThat(seedLower).contains("delete from tss_retcode_comp");
+        assertThat(seedLower).contains("insert into tss_retcode_comp");
+        assertThat(retcodeSeed).doesNotContain("comp_date");
+        assertThat(seedLower).doesNotContain("'tss_tran_comp' as source_table");
+        assertThat(retcodeSeed).contains("from tss_tran_comp t");
+        assertThat(retcodeSeed).contains("t.comp_result <> '4'");
+        assertThat(retcodeSeed).doesNotContain("then '00000000000'");
+        assertThat(retcodeSeed).doesNotContain("528处理成功");
+        assertThat(retcodeSeed).doesNotContain("ccbs处理成功");
+    }
 }

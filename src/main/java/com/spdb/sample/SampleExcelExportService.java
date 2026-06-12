@@ -29,9 +29,9 @@ public class SampleExcelExportService {
 
     private static final String[] DETAIL_HEADERS = {
             "类型", "交易码", "服务码", "报文类型", "SOP字段名", "SOAP字段名", "BizJSON字段名",
-            "中文名", "528的值", "CCBS的值", "流水号", "责任人", "数量", "原因"
+            "中文名", "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述", "流水号", "责任人", "数量", "原因"
     };
-    private static final int[] DETAIL_WIDTHS = {16, 12, 18, 12, 22, 22, 26, 18, 24, 24, 24, 14, 12, 28};
+    private static final int[] DETAIL_WIDTHS = {16, 12, 18, 12, 22, 22, 26, 18, 24, 28, 24, 28, 24, 14, 12, 28};
 
     public byte[] exportGroups(List<SampleGroupRow> rows) {
         return workbookToBytes("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, (sheet, styles) -> {
@@ -175,7 +175,9 @@ public class SampleExcelExportService {
         write(excelRow, col++, row.bizjsonFieldName(), styles.body());
         write(excelRow, col++, row.fieldCnName(), styles.body());
         write(excelRow, col++, row.origFieldValue(), styles.body());
+        write(excelRow, col++, row.origFieldDesc(), styles.body());
         write(excelRow, col++, row.destFieldValue(), styles.body());
+        write(excelRow, col++, row.destFieldDesc(), styles.body());
         write(excelRow, col++, row.tranSeqNo(), styles.body());
         write(excelRow, col++, row.owner(), styles.body());
         write(excelRow, col++, row.affectedCount(), styles.number());

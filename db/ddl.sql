@@ -303,43 +303,30 @@ comment on column ana_sampling_summary.sample_detail_count is '采样明细数';
 comment on column ana_sampling_summary.created_at is '创建时间';
 comment on column ana_sampling_summary.updated_at is '更新时间';
 
-create or replace function ana_set_updated_at()
-returns trigger as $$
-begin
-    new.updated_at = current_timestamp;
-    return new;
-end;
-$$ language plpgsql;
+create table if not exists tss_retcode_comp (
+    mesg_seq varchar(64) primary key,
+    service_code varchar(200) not null,
+    orig_cdate varchar(8),
+    orig_error_code varchar(64),
+    orig_error_desc varchar(500),
+    dest_error_code varchar(64),
+    dest_error_desc varchar(500),
+    remark varchar(1000),
+    created_at timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp
+);
 
-drop trigger if exists trg_ana_tran_catalog_updated_at on ana_tran_catalog;
-create trigger trg_ana_tran_catalog_updated_at
-before update on ana_tran_catalog
-for each row execute function ana_set_updated_at();
-
-drop trigger if exists trg_ana_field_mapping_updated_at on ana_field_mapping;
-create trigger trg_ana_field_mapping_updated_at
-before update on ana_field_mapping
-for each row execute function ana_set_updated_at();
-
-drop trigger if exists trg_ana_sample_group_updated_at on ana_sample_group;
-create trigger trg_ana_sample_group_updated_at
-before update on ana_sample_group
-for each row execute function ana_set_updated_at();
-
-drop trigger if exists trg_ana_sample_detail_updated_at on ana_sample_detail;
-create trigger trg_ana_sample_detail_updated_at
-before update on ana_sample_detail
-for each row execute function ana_set_updated_at();
-
-drop trigger if exists trg_ana_sampling_command_updated_at on ana_sampling_command;
-create trigger trg_ana_sampling_command_updated_at
-before update on ana_sampling_command
-for each row execute function ana_set_updated_at();
-
-drop trigger if exists trg_ana_sampling_summary_updated_at on ana_sampling_summary;
-create trigger trg_ana_sampling_summary_updated_at
-before update on ana_sampling_summary
-for each row execute function ana_set_updated_at();
+comment on table tss_retcode_comp is '响应码差异登记表';
+comment on column tss_retcode_comp.mesg_seq is '流水号';
+comment on column tss_retcode_comp.service_code is '服务码，带报文类型';
+comment on column tss_retcode_comp.orig_cdate is '业务日期';
+comment on column tss_retcode_comp.orig_error_code is '528错误码';
+comment on column tss_retcode_comp.orig_error_desc is '528错误描述';
+comment on column tss_retcode_comp.dest_error_code is 'CCBS错误码';
+comment on column tss_retcode_comp.dest_error_desc is 'CCBS错误描述';
+comment on column tss_retcode_comp.remark is '备注';
+comment on column tss_retcode_comp.created_at is '创建时间';
+comment on column tss_retcode_comp.updated_at is '更新时间';
 
 create index if not exists idx_ana_sample_group_batch_type
 on ana_sample_group(batch_id, sample_type, tran_code, service_code);
@@ -391,6 +378,12 @@ on ana_sample_group(batch_id, group_key, affected_count);
 
 create index if not exists idx_ana_sample_group_batch_grouphash
 on ana_sample_group(batch_id, group_hash, group_key);
+
+create index if not exists idx_tss_retcode_comp_date_service
+on tss_retcode_comp(orig_cdate, service_code);
+
+create index if not exists idx_tss_retcode_comp_code
+on tss_retcode_comp(orig_error_code, dest_error_code);
 
 -- Recording configuration tables.
 CREATE SEQUENCE IF NOT EXISTS seq_recording_config_id;

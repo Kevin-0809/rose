@@ -25,19 +25,22 @@
   </form>
   <section class="panel table-wrap">
     <table>
-      <thead><tr><th>批次</th><th>类型</th><th>交易码</th><th>服务码</th><th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th><th>中文名</th><th>528的值</th><th>CCBS的值</th><th>流水号</th><th>责任人</th><th>数量</th></tr></thead>
+      <thead><tr><th>批次</th><th>类型</th><th>交易码</th><th>服务码</th><th>报文类型</th><th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th><th>中文名</th><th>528响应码</th><th>528响应描述</th><th>CCBS响应码</th><th>CCBS响应描述</th><th>流水号</th><th>责任人</th><th>数量</th></tr></thead>
       <tbody>
       <tr th:each="row : ${result.rows()}">
         <td th:text="${row.batchId()}"></td>
         <td><span class="tag" th:text="${row.sampleType()}"></span></td>
         <td th:text="${row.tranCode()}"></td>
         <td th:text="${row.serviceCode()}"></td>
+        <td th:text="${row.messageType()}"></td>
         <td th:text="${row.sopFieldName()}"></td>
         <td th:text="${row.soapFieldName()}"></td>
         <td th:text="${row.bizjsonFieldName()}"></td>
         <td th:text="${row.fieldCnName()}"></td>
         <td th:text="${row.origFieldValue()}"></td>
+        <td th:text="${row.origFieldDesc()}"></td>
         <td th:text="${row.destFieldValue()}"></td>
+        <td th:text="${row.destFieldDesc()}"></td>
         <td th:text="${row.tranSeqNo()}"></td>
         <td th:text="${row.owner()}"></td>
         <td th:text="${row.affectedCount()}"></td>

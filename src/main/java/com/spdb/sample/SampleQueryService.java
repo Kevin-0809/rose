@@ -48,7 +48,7 @@ public class SampleQueryService {
     public PagedResult<SampleDetailRow> details(SampleSearchCriteria criteria, PageRequestParams page) {
         QueryParts query = detailWhere(criteria);
         List<SampleDetailRow> rows = detailRows(query, " order by sample_id desc limit :limit offset :offset", page);
-        long total = count("ana_sample_detail", query);
+        long total = count("ana_sample_detail d", query);
         return PagedResult.of(rows, total, page);
     }
 
@@ -91,10 +91,38 @@ public class SampleQueryService {
 
     private String detailSelect() {
         return """
-                select sample_id, group_id, batch_id, sample_type, sample_seq_no, dest_trcd, service_code,
-                       message_type, tran_code, comp_result, sop_field_name, soap_field_name, bizjson_field_name,
-                       field_cn_name, orig_field_value, dest_field_value, tran_seq_no, owner, affected_count, reason
-                from ana_sample_detail
+                select
+                       d.sample_id,
+                       d.group_id,
+                       d.batch_id,
+                       d.sample_type,
+                       d.sample_seq_no,
+                       d.dest_trcd,
+                       d.service_code,
+                       d.message_type,
+                       d.tran_code,
+                       d.comp_result,
+                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.sop_field_name, d.sop_field_name) end as sop_field_name,
+                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.soap_field_name, d.soap_field_name) end as soap_field_name,
+                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.bizjson_field_name, d.bizjson_field_name) end as bizjson_field_name,
+                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.field_cn_name, d.field_cn_name) end as field_cn_name,
+                       d.orig_field_value,
+                       case when d.sample_type = 'RETURN_CODE' then r.orig_error_desc else null end as orig_field_desc,
+                       d.dest_field_value,
+                       case when d.sample_type = 'RETURN_CODE' then r.dest_error_desc else null end as dest_field_desc,
+                       d.tran_seq_no,
+                       d.owner,
+                       d.affected_count,
+                       d.reason
+                from ana_sample_detail d
+                left join ana_field_mapping m
+                  on m.tran_code = d.tran_code
+                 and m.service_code = d.service_code
+                 and m.sop_field_name = d.sop_field_name
+                 and d.sample_type = 'FIELD_DIFF'
+                left join tss_retcode_comp r
+                  on r.mesg_seq = d.tran_seq_no
+                 and d.sample_type = 'RETURN_CODE'
                 """;
     }
 
@@ -136,7 +164,9 @@ public class SampleQueryService {
                 rs.getString("bizjson_field_name"),
                 rs.getString("field_cn_name"),
                 rs.getString("orig_field_value"),
+                rs.getString("orig_field_desc"),
                 rs.getString("dest_field_value"),
+                rs.getString("dest_field_desc"),
                 rs.getString("tran_seq_no"),
                 rs.getString("owner"),
                 rs.getLong("affected_count"),
@@ -250,15 +280,16 @@ public class SampleQueryService {
     private QueryParts where(SampleSearchCriteria c, boolean includeTranSeq) {
         List<String> clauses = new ArrayList<>();
         MapSqlParameterSource params = new MapSqlParameterSource();
-        addEquals(clauses, params, "batch_id", "batchId", c.batchId());
-        addEquals(clauses, params, "sample_type", "sampleType", c.sampleType());
-        addLike(clauses, params, "tran_code", "tranCode", c.tranCode());
-        addLike(clauses, params, "service_code", "serviceCode", c.serviceCode());
-        addLike(clauses, params, "sop_field_name", "sopFieldName", c.sopFieldName());
-        addLike(clauses, params, "field_cn_name", "fieldCnName", c.fieldCnName());
-        addLike(clauses, params, "owner", "owner", c.owner());
+        String prefix = includeTranSeq ? "d." : "";
+        addEquals(clauses, params, prefix + "batch_id", "batchId", c.batchId());
+        addEquals(clauses, params, prefix + "sample_type", "sampleType", c.sampleType());
+        addLike(clauses, params, prefix + "tran_code", "tranCode", c.tranCode());
+        addLike(clauses, params, prefix + "service_code", "serviceCode", c.serviceCode());
+        addLike(clauses, params, prefix + "sop_field_name", "sopFieldName", c.sopFieldName());
+        addLike(clauses, params, prefix + "field_cn_name", "fieldCnName", c.fieldCnName());
+        addLike(clauses, params, prefix + "owner", "owner", c.owner());
         if (includeTranSeq) {
-            addLike(clauses, params, "tran_seq_no", "tranSeqNo", c.tranSeqNo());
+            addLike(clauses, params, "d.tran_seq_no", "tranSeqNo", c.tranSeqNo());
         }
         String where = clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses);
         return new QueryParts(where, params);

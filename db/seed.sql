@@ -122,6 +122,9 @@ join field_seq f on f.field_no < t.field_count;
 delete from tss_field_comp
 where mesg_seq like 'ST%';
 
+delete from tss_retcode_comp
+where remark = 'TEST_SEED_RETCODE_COMP';
+
 delete from tss_tran_comp
 where mesg_seq like 'ST%';
 
@@ -303,28 +306,6 @@ seed_rows as (
     from tran_count_seed t
     join seq s on s.n <= t.tran_count
 ),
-return_code_rows as (
-    select
-        r.mesg_seq,
-        r.orig_cdate,
-        r.dest_trcd,
-        r.conv_index,
-        r.conv_cindex,
-        r.tran_code,
-        1 as field_index,
-        'returnCode' as orig_field_name,
-        'returnCode' as dest_field_name,
-        case
-            when r.orig_tran_res = '0' then '00000000000'
-            else 'E' || lpad(((r.tran_seq % 9000000000) + 1)::text, 10, '0')
-        end as orig_field_value,
-        case
-            when r.dest_tran_res = '0' then '00000000000'
-            else 'E' || lpad((((r.tran_seq + 7000000) % 9000000000) + 1)::text, 10, '0')
-        end as dest_field_value,
-        case when r.comp_result = '4' then '1' else '0' end as field_comp_result
-    from seed_rows r
-),
 success_normal_field_rows as (
     select
         r.mesg_seq,
@@ -342,29 +323,16 @@ success_normal_field_rows as (
       on r.comp_result = '4'
      and r.normal_field_count > 0
      and p.pos <= r.success_field_row_count
-),
-all_field_rows as (
-    select
-        mesg_seq,
-        orig_cdate,
-        dest_trcd,
-        conv_index,
-        conv_cindex,
-        field_index,
-        orig_field_name,
-        orig_field_value,
-        dest_field_name,
-        dest_field_value,
-        field_comp_result
-    from return_code_rows
-    union all
+)
     select
         f.mesg_seq,
         f.orig_cdate,
         f.dest_trcd,
         f.conv_index,
         f.conv_cindex,
+        0 as redo_index,
         f.field_index,
+        'BODY' as field_file_flag,
         m.sop_field_name as orig_field_name,
         case
             when f.field_comp_result = '1'
@@ -384,24 +352,46 @@ all_field_rows as (
      and m.service_code = split_part(f.dest_trcd, '&', 1)
      and m.remark = 'TEST_SEED_RANDOM_FIELD_MAPPING'
      and m.std_field_name = 'f' || lpad(f.mapping_pos::text, 3, '0')
+    where f.field_comp_result = '0';
+
+-- 004_seed_tss_retcode_comp.sql
+delete from tss_retcode_comp
+where remark = 'TEST_SEED_RETCODE_COMP';
+
+insert into tss_retcode_comp (
+    mesg_seq,
+    service_code,
+    orig_cdate,
+    orig_error_code,
+    orig_error_desc,
+    dest_error_code,
+    dest_error_desc,
+    remark
 )
 select
-    f.mesg_seq,
-    f.orig_cdate,
-    f.dest_trcd,
-    f.conv_index,
-    f.conv_cindex,
-    0 as redo_index,
-    f.field_index,
-    'BODY' as field_file_flag,
-    f.orig_field_name,
-    f.orig_field_value,
-    f.dest_field_name,
-    f.dest_field_value,
-    f.field_comp_result as comp_result
-from all_field_rows f;
+    t.mesg_seq,
+    t.dest_trcd as service_code,
+    t.orig_cdate,
+    'E528' || lpad(((row_number() over (order by t.mesg_seq) % 1000000) + 1)::text, 6, '0') as orig_error_code,
+    case
+        when (row_number() over (order by t.mesg_seq) % 4) = 0 then '528账户状态异常'
+        when (row_number() over (order by t.mesg_seq) % 4) = 1 then '528客户信息不存在'
+        when (row_number() over (order by t.mesg_seq) % 4) = 2 then '528交易金额超限'
+        else '528业务规则校验失败'
+    end as orig_error_desc,
+    'ECCBS' || lpad((((row_number() over (order by t.mesg_seq) + 7000) % 1000000) + 1)::text, 5, '0') as dest_error_code,
+    case
+        when (row_number() over (order by t.mesg_seq) % 4) = 0 then 'CCBS账户状态异常'
+        when (row_number() over (order by t.mesg_seq) % 4) = 1 then 'CCBS客户资料缺失'
+        when (row_number() over (order by t.mesg_seq) % 4) = 2 then 'CCBS额度校验失败'
+        else 'CCBS核心交易拒绝'
+    end as dest_error_desc,
+    'TEST_SEED_RETCODE_COMP' as remark
+from tss_tran_comp t
+where t.mesg_seq like 'ST%'
+  and t.comp_result <> '4';
 
--- 004_seed_ana_samples_from_tss.sql
+-- 005_seed_ana_samples_from_tss.sql
 delete from ana_sample_detail
 where batch_id = 'BATCH_20260608_SEED';
 
@@ -427,46 +417,54 @@ insert into ana_sample_group (
 )
 with candidates as (
     select
-        case
-            when f.orig_field_name = 'returnCode' and f.comp_result = '0' then 'RETURN_CODE'
-            else 'FIELD_DIFF'
-        end as sample_type,
+        'RETURN_CODE' as sample_type,
+        r.service_code as dest_trcd,
+        split_part(r.service_code, '&', 1) as service_code,
+        split_part(r.service_code, '&', 2) as message_type,
+        c.tran_code,
+        t.comp_result,
+        'returnCode' as sop_field_name,
+        'returnCode' as soap_field_name,
+        'returnCode' as bizjson_field_name,
+        '响应码' as field_cn_name,
+        c.owner
+    from tss_retcode_comp r
+    join tss_tran_comp t
+      on t.mesg_seq = r.mesg_seq
+    join ana_tran_catalog c
+      on c.service_code = split_part(r.service_code, '&', 1)
+    where r.remark = 'TEST_SEED_RETCODE_COMP'
+      and t.comp_result <> '4'
+    union all
+    select
+        'FIELD_DIFF' as sample_type,
         f.dest_trcd,
         split_part(f.dest_trcd, '&', 1) as service_code,
         split_part(f.dest_trcd, '&', 2) as message_type,
         c.tran_code,
         t.comp_result,
-        m.sop_field_name,
-        m.soap_field_name,
-        m.bizjson_field_name,
+        coalesce(m.sop_field_name, f.orig_field_name),
+        coalesce(m.soap_field_name, f.dest_field_name),
+        coalesce(m.bizjson_field_name, f.dest_field_name),
         m.field_cn_name,
         c.owner
     from tss_tran_comp t
     join tss_field_comp f
       on f.mesg_seq = t.mesg_seq
-     and f.conv_index = t.conv_index
-     and f.conv_cindex = t.conv_cindex
     join ana_tran_catalog c
       on c.service_code = split_part(f.dest_trcd, '&', 1)
-    join ana_field_mapping m
+    left join ana_field_mapping m
       on m.tran_code = c.tran_code
      and m.service_code = c.service_code
      and m.sop_field_name = f.orig_field_name
-     and m.bizjson_field_name = f.dest_field_name
-    where (
-            f.orig_field_name = 'returnCode'
-            and f.comp_result = '0'
-          )
-       or (
-            t.comp_result = '4'
-            and f.comp_result = '0'
-            and f.orig_field_name <> 'returnCode'
-          )
+    where t.comp_result = '4'
+      and f.comp_result = '0'
 )
 select
     'BATCH_20260608_SEED',
     sample_type,
-    'BATCH_20260608_SEED|' || sample_type || '|' || tran_code || '|' || service_code || '|' || sop_field_name,
+    'BATCH_20260608_SEED|' || sample_type || '|' || tran_code || '|' || service_code || '|' ||
+        comp_result || '|' || sop_field_name,
     min(dest_trcd),
     service_code,
     min(message_type),
@@ -478,7 +476,7 @@ select
     min(field_cn_name),
     min(owner),
     count(*),
-    least(count(*), 100)
+    least(count(*), case when sample_type = 'RETURN_CODE' then 1 else 10 end)
 from candidates
 group by sample_type, tran_code, service_code, sop_field_name;
 
@@ -506,18 +504,41 @@ insert into ana_sample_detail (
 )
 with candidates as (
     select
-        case
-            when f.orig_field_name = 'returnCode' and f.comp_result = '0' then 'RETURN_CODE'
-            else 'FIELD_DIFF'
-        end as sample_type,
+        'RETURN_CODE' as sample_type,
+        r.service_code as dest_trcd,
+        split_part(r.service_code, '&', 1) as service_code,
+        split_part(r.service_code, '&', 2) as message_type,
+        c.tran_code,
+        t.comp_result,
+        'returnCode' as sop_field_name,
+        'returnCode' as soap_field_name,
+        'returnCode' as bizjson_field_name,
+        '响应码' as field_cn_name,
+        r.orig_error_code as orig_field_value,
+        r.dest_error_code as dest_field_value,
+        r.mesg_seq,
+        t.conv_index,
+        t.conv_cindex,
+        1 as field_index,
+        c.owner
+    from tss_retcode_comp r
+    join tss_tran_comp t
+      on t.mesg_seq = r.mesg_seq
+    join ana_tran_catalog c
+      on c.service_code = split_part(r.service_code, '&', 1)
+    where r.remark = 'TEST_SEED_RETCODE_COMP'
+      and t.comp_result <> '4'
+    union all
+    select
+        'FIELD_DIFF' as sample_type,
         f.dest_trcd,
         split_part(f.dest_trcd, '&', 1) as service_code,
         split_part(f.dest_trcd, '&', 2) as message_type,
         c.tran_code,
         t.comp_result,
-        m.sop_field_name,
-        m.soap_field_name,
-        m.bizjson_field_name,
+        coalesce(m.sop_field_name, f.orig_field_name),
+        coalesce(m.soap_field_name, f.dest_field_name),
+        coalesce(m.bizjson_field_name, f.dest_field_name),
         m.field_cn_name,
         f.orig_field_value,
         f.dest_field_value,
@@ -529,24 +550,14 @@ with candidates as (
     from tss_tran_comp t
     join tss_field_comp f
       on f.mesg_seq = t.mesg_seq
-     and f.conv_index = t.conv_index
-     and f.conv_cindex = t.conv_cindex
     join ana_tran_catalog c
       on c.service_code = split_part(f.dest_trcd, '&', 1)
-    join ana_field_mapping m
+    left join ana_field_mapping m
       on m.tran_code = c.tran_code
      and m.service_code = c.service_code
      and m.sop_field_name = f.orig_field_name
-     and m.bizjson_field_name = f.dest_field_name
-    where (
-            f.orig_field_name = 'returnCode'
-            and f.comp_result = '0'
-          )
-       or (
-            t.comp_result = '4'
-            and f.comp_result = '0'
-            and f.orig_field_name <> 'returnCode'
-          )
+    where t.comp_result = '4'
+      and f.comp_result = '0'
 ),
 ranked as (
     select
@@ -563,6 +574,7 @@ ranked as (
      and g.sample_type = c.sample_type
      and g.tran_code = c.tran_code
      and g.service_code = c.service_code
+     and g.comp_result = c.comp_result
      and g.sop_field_name = c.sop_field_name
 )
 select
@@ -584,7 +596,10 @@ select
     mesg_seq,
     owner,
     affected_count,
-    'tss_field_comp',
-    mesg_seq || ':' || conv_index::text || ':' || conv_cindex::text || ':' || field_index::text || ':' || sop_field_name
+    case when sample_type = 'RETURN_CODE' then 'tss_retcode_comp' else 'tss_field_comp' end,
+    case
+        when sample_type = 'RETURN_CODE' then mesg_seq
+        else mesg_seq || ':' || conv_index::text || ':' || conv_cindex::text || ':' || field_index::text || ':' || sop_field_name
+    end
 from ranked
-where rn <= 100;
+where rn <= case when sample_type = 'RETURN_CODE' then 1 else 10 end;
