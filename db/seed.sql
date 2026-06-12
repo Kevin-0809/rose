@@ -63,9 +63,35 @@ select
     'TEST_SEED_1000_TRAN_CATALOG' as remark
 from seq;
 
+delete from ana_tran_catalog
+where remark = 'TEST_SEED_A825_SEMANTIC_MAPPING';
+
+insert into ana_tran_catalog (
+    tran_code,
+    service_code,
+    tran_name,
+    module_name,
+    owner,
+    importance_level,
+    is_key_tran,
+    remark
+) values (
+    'A825',
+    'S030030014FcyCollCrspBnkLkgQry',
+    '外币托收代理行联动查询',
+    'loan',
+    '张伟',
+    'P1',
+    'true',
+    'TEST_SEED_A825_SEMANTIC_MAPPING'
+);
+
 -- 002_seed_ana_field_mapping.sql
 delete from ana_field_mapping
 where remark = 'TEST_SEED_RANDOM_FIELD_MAPPING';
+
+delete from ana_field_mapping
+where remark = 'TEST_SEED_A825_SEMANTIC_MAPPING';
 
 insert into ana_field_mapping (
     tran_code,
@@ -114,6 +140,37 @@ select
     'TEST_SEED_RANDOM_FIELD_MAPPING' as remark
 from tran_seed t
 join field_seq f on f.field_no < t.field_count;
+
+insert into ana_field_mapping (
+    tran_code,
+    service_code,
+    std_field_name,
+    field_cn_name,
+    sop_field_name,
+    soap_field_name,
+    bizjson_field_name,
+    remark
+) values
+(
+    'A825',
+    'S030030014FcyCollCrspBnkLkgQry',
+    'currency_id',
+    '币种',
+    'HUOBDH',
+    'CurrencyId',
+    'CurrencyId',
+    'TEST_SEED_A825_SEMANTIC_MAPPING'
+),
+(
+    'A825',
+    'S030030014FcyCollCrspBnkLkgQry',
+    'link_info',
+    '联动信息',
+    'FAB251',
+    'FcyCollCrspBnkLkg',
+    'FcyCollCrspBnkLkg',
+    'TEST_SEED_A825_SEMANTIC_MAPPING'
+);
 
 -- 003_seed_tss_comp_test_data.sql
 -- Re-runnable raw comparison data seed.

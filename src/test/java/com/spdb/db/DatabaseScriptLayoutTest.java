@@ -106,4 +106,32 @@ class DatabaseScriptLayoutTest {
         assertThat(retcodeSeed).doesNotContain("528处理成功");
         assertThat(retcodeSeed).doesNotContain("ccbs处理成功");
     }
+
+    @Test
+    void sampleGroupStoresSemanticGroupingFields() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(ddl).contains("orig_cdate varchar(8)");
+        assertThat(ddl).contains("config_status varchar(32)");
+        assertThat(ddl).contains("mapping_status varchar(32)");
+        assertThat(ddl).contains("semantic_signature varchar(2000)");
+        assertThat(ddl).contains("semantic_signature_hash varchar(32)");
+        assertThat(ddl).contains("semantic_field_names varchar(1000)");
+        assertThat(ddl).contains("message_types varchar(200)");
+        assertThat(ddl).contains("affected_tran_count bigint");
+        assertThat(ddl).contains("affected_field_count bigint");
+    }
+
+    @Test
+    void sampleDetailFieldTableExists() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(ddl).contains("create table if not exists ana_sample_detail_field");
+        assertThat(ddl).contains("field_detail_id bigserial primary key");
+        assertThat(ddl).contains("sample_id bigint not null");
+        assertThat(ddl).contains("raw_field_name varchar(200)");
+        assertThat(ddl).contains("std_field_name varchar(200)");
+        assertThat(ddl).contains("mapping_status varchar(32)");
+        assertThat(ddl).contains("idx_ana_sample_detail_field_sample");
+    }
 }
