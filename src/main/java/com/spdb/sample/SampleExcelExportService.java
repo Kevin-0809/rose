@@ -22,16 +22,17 @@ import java.util.List;
 @Service
 public class SampleExcelExportService {
     private static final String[] GROUP_HEADERS = {
-            "类型", "交易码", "服务码", "报文类型", "SOP字段名", "SOAP字段名", "BizJSON字段名",
-            "中文名", "责任人", "数量", "样本数", "原因"
+            "业务日期", "类型", "配置状态", "映射状态", "交易码", "服务码", "报文类型",
+            "语义字段", "涉及报文", "责任人", "交易数", "字段数", "样本数", "原因"
     };
-    private static final int[] GROUP_WIDTHS = {16, 12, 18, 12, 22, 22, 26, 18, 14, 12, 12, 28};
+    private static final int[] GROUP_WIDTHS = {12, 16, 16, 16, 12, 28, 12, 28, 18, 14, 12, 12, 12, 28};
 
     private static final String[] DETAIL_HEADERS = {
-            "类型", "交易码", "服务码", "报文类型", "SOP字段名", "SOAP字段名", "BizJSON字段名",
-            "中文名", "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述", "流水号", "责任人", "数量", "原因"
+            "业务日期", "类型", "配置状态", "交易码", "服务码", "报文类型",
+            "流水号", "字段数", "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述",
+            "责任人", "数量", "来源表", "原因"
     };
-    private static final int[] DETAIL_WIDTHS = {16, 12, 18, 12, 22, 22, 26, 18, 24, 28, 24, 28, 24, 14, 12, 28};
+    private static final int[] DETAIL_WIDTHS = {12, 16, 16, 12, 28, 12, 24, 10, 24, 28, 24, 28, 14, 12, 18, 28};
 
     public byte[] exportGroups(List<SampleGroupRow> rows) {
         return workbookToBytes("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, (sheet, styles) -> {
@@ -149,16 +150,18 @@ public class SampleExcelExportService {
     private void writeGroupRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleGroupRow row) {
         Row excelRow = sheet.createRow(rowIndex);
         int col = 0;
+        write(excelRow, col++, row.origCdate(), styles.body());
         write(excelRow, col++, row.sampleType(), styles.body());
+        write(excelRow, col++, row.configStatus(), styles.body());
+        write(excelRow, col++, row.mappingStatus(), styles.body());
         write(excelRow, col++, row.tranCode(), styles.body());
         write(excelRow, col++, row.serviceCode(), styles.body());
         write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.sopFieldName(), styles.body());
-        write(excelRow, col++, row.soapFieldName(), styles.body());
-        write(excelRow, col++, row.bizjsonFieldName(), styles.body());
-        write(excelRow, col++, row.fieldCnName(), styles.body());
+        write(excelRow, col++, row.semanticFieldNames(), styles.body());
+        write(excelRow, col++, row.messageTypes(), styles.body());
         write(excelRow, col++, row.owner(), styles.body());
-        write(excelRow, col++, row.affectedCount(), styles.number());
+        write(excelRow, col++, row.affectedTranCount(), styles.number());
+        write(excelRow, col++, row.affectedFieldCount(), styles.number());
         write(excelRow, col++, row.sampleCount(), styles.number());
         write(excelRow, col, row.reason(), styles.body());
     }
@@ -166,21 +169,21 @@ public class SampleExcelExportService {
     private void writeDetailRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailRow row) {
         Row excelRow = sheet.createRow(rowIndex);
         int col = 0;
+        write(excelRow, col++, row.origCdate(), styles.body());
         write(excelRow, col++, row.sampleType(), styles.body());
+        write(excelRow, col++, row.configStatus(), styles.body());
         write(excelRow, col++, row.tranCode(), styles.body());
         write(excelRow, col++, row.serviceCode(), styles.body());
         write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.sopFieldName(), styles.body());
-        write(excelRow, col++, row.soapFieldName(), styles.body());
-        write(excelRow, col++, row.bizjsonFieldName(), styles.body());
-        write(excelRow, col++, row.fieldCnName(), styles.body());
-        write(excelRow, col++, row.origFieldValue(), styles.body());
-        write(excelRow, col++, row.origFieldDesc(), styles.body());
-        write(excelRow, col++, row.destFieldValue(), styles.body());
-        write(excelRow, col++, row.destFieldDesc(), styles.body());
         write(excelRow, col++, row.tranSeqNo(), styles.body());
+        write(excelRow, col++, row.fieldCount(), styles.number());
+        write(excelRow, col++, row.origErrorCode(), styles.body());
+        write(excelRow, col++, row.origErrorDesc(), styles.body());
+        write(excelRow, col++, row.destErrorCode(), styles.body());
+        write(excelRow, col++, row.destErrorDesc(), styles.body());
         write(excelRow, col++, row.owner(), styles.body());
         write(excelRow, col++, row.affectedCount(), styles.number());
+        write(excelRow, col++, row.sourceTable(), styles.body());
         write(excelRow, col, row.reason(), styles.body());
     }
 

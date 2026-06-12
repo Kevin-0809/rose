@@ -66,6 +66,29 @@ public class SampleQueryService {
                 query.params, handler);
     }
 
+    public PagedResult<SampleDetailFieldRow> detailFields(Long sampleId, PageRequestParams page) {
+        QueryParts query = detailFieldWhere(new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), sampleId);
+        query.params.addValue("limit", page.size()).addValue("offset", page.offset());
+        List<SampleDetailFieldRow> rows = jdbc.query(detailFieldSelect() + query.where + " order by field_index, field_detail_id limit :limit offset :offset",
+                query.params, (rs, i) -> mapDetailFieldRow(rs));
+        long total = count("ana_sample_detail_field f", query);
+        return PagedResult.of(rows, total, page);
+    }
+
+    public List<SampleDetailFieldRow> exportDetailFields(SampleSearchCriteria criteria) {
+        QueryParts query = detailFieldWhere(criteria, null);
+        query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
+        return detailFieldRows(query, " order by sample_id desc, field_index, field_detail_id limit :exportLimit", null);
+    }
+
+    public void streamDetailFields(SampleSearchCriteria criteria, SampleDetailFieldConsumer consumer) {
+        QueryParts query = detailFieldWhere(criteria, null);
+        query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
+        RowCallbackHandler handler = rs -> consumer.accept(mapDetailFieldRow(rs));
+        jdbc.query(detailFieldSelect() + query.where + " order by sample_id desc, field_index, field_detail_id limit :exportLimit",
+                query.params, handler);
+    }
+
     private List<SampleGroupRow> groupRows(QueryParts query, String order, PageRequestParams page) {
         if (page != null) {
             query.params.addValue("limit", page.size()).addValue("offset", page.offset());
@@ -80,11 +103,19 @@ public class SampleQueryService {
         return jdbc.query(detailSelect() + query.where + order, query.params, (rs, i) -> mapDetailRow(rs));
     }
 
+    private List<SampleDetailFieldRow> detailFieldRows(QueryParts query, String order, PageRequestParams page) {
+        if (page != null) {
+            query.params.addValue("limit", page.size()).addValue("offset", page.offset());
+        }
+        return jdbc.query(detailFieldSelect() + query.where + order, query.params, (rs, i) -> mapDetailFieldRow(rs));
+    }
+
     private String groupSelect() {
         return """
-                select group_id, batch_id, sample_type, dest_trcd, service_code, message_type, tran_code,
-                       comp_result, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
-                       owner, affected_count, sample_count, reason
+                select group_id, batch_id, orig_cdate, sample_type, config_status, mapping_status,
+                       semantic_signature, semantic_signature_hash, semantic_field_names, message_types,
+                       dest_trcd, service_code, message_type, tran_code, comp_result,
+                       owner, affected_count, affected_tran_count, affected_field_count, sample_count, reason
                 from ana_sample_group
                 """;
     }
@@ -95,34 +126,47 @@ public class SampleQueryService {
                        d.sample_id,
                        d.group_id,
                        d.batch_id,
+                       d.orig_cdate,
                        d.sample_type,
                        d.sample_seq_no,
+                       d.config_status,
                        d.dest_trcd,
                        d.service_code,
                        d.message_type,
                        d.tran_code,
                        d.comp_result,
-                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.sop_field_name, d.sop_field_name) end as sop_field_name,
-                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.soap_field_name, d.soap_field_name) end as soap_field_name,
-                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.bizjson_field_name, d.bizjson_field_name) end as bizjson_field_name,
-                       case when d.sample_type = 'RETURN_CODE' then null else coalesce(m.field_cn_name, d.field_cn_name) end as field_cn_name,
-                       d.orig_field_value,
-                       case when d.sample_type = 'RETURN_CODE' then r.orig_error_desc else null end as orig_field_desc,
-                       d.dest_field_value,
-                       case when d.sample_type = 'RETURN_CODE' then r.dest_error_desc else null end as dest_field_desc,
                        d.tran_seq_no,
                        d.owner,
                        d.affected_count,
-                       d.reason
+                       d.field_count,
+                       d.orig_error_code,
+                       d.orig_error_desc,
+                       d.dest_error_code,
+                       d.dest_error_desc,
+                       d.reason,
+                       d.source_table,
+                       d.source_pk
                 from ana_sample_detail d
-                left join ana_field_mapping m
-                  on m.tran_code = d.tran_code
-                 and m.service_code = d.service_code
-                 and m.sop_field_name = d.sop_field_name
-                 and d.sample_type = 'FIELD_DIFF'
-                left join tss_retcode_comp r
-                  on r.mesg_seq = d.tran_seq_no
-                 and d.sample_type = 'RETURN_CODE'
+                """;
+    }
+
+    private String detailFieldSelect() {
+        return """
+                select
+                       f.field_detail_id,
+                       f.sample_id,
+                       f.group_id,
+                       f.batch_id,
+                       f.mesg_seq,
+                       f.message_type,
+                       f.raw_field_name,
+                       f.std_field_name,
+                       f.field_cn_name,
+                       f.orig_field_value,
+                       f.dest_field_value,
+                       f.mapping_status,
+                       f.field_index
+                from ana_sample_detail_field f
                 """;
     }
 
@@ -130,18 +174,23 @@ public class SampleQueryService {
         return new SampleGroupRow(
                 rs.getLong("group_id"),
                 rs.getString("batch_id"),
+                rs.getString("orig_cdate"),
                 rs.getString("sample_type"),
+                rs.getString("config_status"),
+                rs.getString("mapping_status"),
+                rs.getString("semantic_signature"),
+                rs.getString("semantic_signature_hash"),
+                rs.getString("semantic_field_names"),
+                rs.getString("message_types"),
                 rs.getString("dest_trcd"),
                 rs.getString("service_code"),
                 rs.getString("message_type"),
                 rs.getString("tran_code"),
                 rs.getString("comp_result"),
-                rs.getString("sop_field_name"),
-                rs.getString("soap_field_name"),
-                rs.getString("bizjson_field_name"),
-                rs.getString("field_cn_name"),
                 rs.getString("owner"),
                 rs.getLong("affected_count"),
+                rs.getLong("affected_tran_count"),
+                rs.getLong("affected_field_count"),
                 rs.getInt("sample_count"),
                 rs.getString("reason")
         );
@@ -152,25 +201,44 @@ public class SampleQueryService {
                 rs.getLong("sample_id"),
                 rs.getLong("group_id"),
                 rs.getString("batch_id"),
+                rs.getString("orig_cdate"),
                 rs.getString("sample_type"),
                 rs.getInt("sample_seq_no"),
+                rs.getString("config_status"),
                 rs.getString("dest_trcd"),
                 rs.getString("service_code"),
                 rs.getString("message_type"),
                 rs.getString("tran_code"),
                 rs.getString("comp_result"),
-                rs.getString("sop_field_name"),
-                rs.getString("soap_field_name"),
-                rs.getString("bizjson_field_name"),
-                rs.getString("field_cn_name"),
-                rs.getString("orig_field_value"),
-                rs.getString("orig_field_desc"),
-                rs.getString("dest_field_value"),
-                rs.getString("dest_field_desc"),
                 rs.getString("tran_seq_no"),
                 rs.getString("owner"),
                 rs.getLong("affected_count"),
-                rs.getString("reason")
+                rs.getInt("field_count"),
+                rs.getString("orig_error_code"),
+                rs.getString("orig_error_desc"),
+                rs.getString("dest_error_code"),
+                rs.getString("dest_error_desc"),
+                rs.getString("reason"),
+                rs.getString("source_table"),
+                rs.getString("source_pk")
+        );
+    }
+
+    private SampleDetailFieldRow mapDetailFieldRow(ResultSet rs) throws SQLException {
+        return new SampleDetailFieldRow(
+                rs.getLong("field_detail_id"),
+                rs.getLong("sample_id"),
+                rs.getLong("group_id"),
+                rs.getString("batch_id"),
+                rs.getString("mesg_seq"),
+                rs.getString("message_type"),
+                rs.getString("raw_field_name"),
+                rs.getString("std_field_name"),
+                rs.getString("field_cn_name"),
+                rs.getString("orig_field_value"),
+                rs.getString("dest_field_value"),
+                rs.getString("mapping_status"),
+                rs.getInt("field_index")
         );
     }
 
@@ -267,6 +335,23 @@ public class SampleQueryService {
         return where(c, true);
     }
 
+    private QueryParts detailFieldWhere(SampleSearchCriteria c, Long sampleId) {
+        List<String> clauses = new ArrayList<>();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (sampleId != null) {
+            clauses.add("f.sample_id = :sampleId");
+            params.addValue("sampleId", sampleId);
+        }
+        if (c != null) {
+            addEquals(clauses, params, "f.batch_id", "batchId", c.batchId());
+            addEquals(clauses, params, "f.message_type", "messageType", c.messageType());
+            addEquals(clauses, params, "f.mapping_status", "mappingStatus", c.mappingStatus());
+            addLike(clauses, params, "f.std_field_name", "semanticFieldName", c.semanticFieldName());
+            addLike(clauses, params, "f.mesg_seq", "tranSeqNo", c.tranSeqNo());
+        }
+        return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
+    }
+
     private QueryParts summaryWhere(SamplingSummarySearchCriteria c) {
         List<String> clauses = new ArrayList<>();
         MapSqlParameterSource params = new MapSqlParameterSource();
@@ -282,12 +367,17 @@ public class SampleQueryService {
         MapSqlParameterSource params = new MapSqlParameterSource();
         String prefix = includeTranSeq ? "d." : "";
         addEquals(clauses, params, prefix + "batch_id", "batchId", c.batchId());
+        addEquals(clauses, params, prefix + "orig_cdate", "origCdate", c.origCdate());
         addEquals(clauses, params, prefix + "sample_type", "sampleType", c.sampleType());
         addLike(clauses, params, prefix + "tran_code", "tranCode", c.tranCode());
         addLike(clauses, params, prefix + "service_code", "serviceCode", c.serviceCode());
-        addLike(clauses, params, prefix + "sop_field_name", "sopFieldName", c.sopFieldName());
-        addLike(clauses, params, prefix + "field_cn_name", "fieldCnName", c.fieldCnName());
+        addEquals(clauses, params, prefix + "message_type", "messageType", c.messageType());
+        addEquals(clauses, params, prefix + "config_status", "configStatus", c.configStatus());
         addLike(clauses, params, prefix + "owner", "owner", c.owner());
+        if (!includeTranSeq) {
+            addEquals(clauses, params, prefix + "mapping_status", "mappingStatus", c.mappingStatus());
+            addLike(clauses, params, prefix + "semantic_field_names", "semanticFieldName", c.semanticFieldName());
+        }
         if (includeTranSeq) {
             addLike(clauses, params, "d.tran_seq_no", "tranSeqNo", c.tranSeqNo());
         }

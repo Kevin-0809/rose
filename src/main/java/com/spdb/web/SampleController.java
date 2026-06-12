@@ -35,7 +35,10 @@ public class SampleController {
                          @RequestParam(required = false) Integer size,
                          Model model) {
         PageRequestParams params = PageRequestParams.of(page, size);
-        SampleSearchCriteria criteria = new SampleSearchCriteria(batchId, sampleType, tranCode, serviceCode, sopFieldName, fieldCnName, owner, null);
+        SampleSearchCriteria criteria = new SampleSearchCriteria(
+                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
+                firstText(sopFieldName, fieldCnName), owner, null
+        );
         model.addAttribute("criteria", criteria);
         model.addAttribute("result", sampleQueryService.groups(criteria, params));
         model.addAttribute("active", "sample-groups");
@@ -51,7 +54,10 @@ public class SampleController {
                              @RequestParam(required = false) String fieldCnName,
                              @RequestParam(required = false) String owner,
                              HttpServletResponse response) throws IOException {
-        SampleSearchCriteria criteria = new SampleSearchCriteria(batchId, sampleType, tranCode, serviceCode, sopFieldName, fieldCnName, owner, null);
+        SampleSearchCriteria criteria = new SampleSearchCriteria(
+                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
+                firstText(sopFieldName, fieldCnName), owner, null
+        );
         prepareExcel(response, "采样分组.xlsx");
         sampleExcelExportService.streamGroups(sampleQueryService, criteria, response.getOutputStream());
     }
@@ -69,7 +75,10 @@ public class SampleController {
                           @RequestParam(required = false) Integer size,
                           Model model) {
         PageRequestParams params = PageRequestParams.of(page, size);
-        SampleSearchCriteria criteria = new SampleSearchCriteria(batchId, sampleType, tranCode, serviceCode, sopFieldName, fieldCnName, owner, tranSeqNo);
+        SampleSearchCriteria criteria = new SampleSearchCriteria(
+                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
+                firstText(sopFieldName, fieldCnName), owner, tranSeqNo
+        );
         model.addAttribute("criteria", criteria);
         model.addAttribute("result", sampleQueryService.details(criteria, params));
         model.addAttribute("active", "sample-details");
@@ -86,9 +95,19 @@ public class SampleController {
                               @RequestParam(required = false) String owner,
                               @RequestParam(required = false) String tranSeqNo,
                               HttpServletResponse response) throws IOException {
-        SampleSearchCriteria criteria = new SampleSearchCriteria(batchId, sampleType, tranCode, serviceCode, sopFieldName, fieldCnName, owner, tranSeqNo);
+        SampleSearchCriteria criteria = new SampleSearchCriteria(
+                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
+                firstText(sopFieldName, fieldCnName), owner, tranSeqNo
+        );
         prepareExcel(response, "采样明细.xlsx");
         sampleExcelExportService.streamDetails(sampleQueryService, criteria, response.getOutputStream());
+    }
+
+    private String firstText(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        return second;
     }
 
     private void prepareExcel(HttpServletResponse response, String filename) {
