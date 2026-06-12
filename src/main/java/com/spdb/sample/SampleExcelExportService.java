@@ -34,6 +34,12 @@ public class SampleExcelExportService {
     };
     private static final int[] DETAIL_WIDTHS = {12, 16, 16, 12, 28, 12, 24, 10, 24, 28, 24, 28, 14, 12, 18, 28};
 
+    private static final String[] DETAIL_FIELD_HEADERS = {
+            "批次", "流水号", "报文类型", "原字段名", "标准字段名", "中文名",
+            "528字段值", "CCBS字段值", "映射状态", "字段序号"
+    };
+    private static final int[] DETAIL_FIELD_WIDTHS = {18, 24, 12, 28, 24, 18, 28, 28, 16, 10};
+
     public byte[] exportGroups(List<SampleGroupRow> rows) {
         return workbookToBytes("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, (sheet, styles) -> {
             int rowIndex = 2;
@@ -63,6 +69,22 @@ public class SampleExcelExportService {
         workbookToStream("采样明细", "采样明细导出", DETAIL_HEADERS, DETAIL_WIDTHS, outputStream, (sheet, styles) -> {
             int[] rowIndex = {2};
             queryService.streamDetails(criteria, row -> writeDetailRow(sheet, styles, rowIndex[0]++, row));
+        });
+    }
+
+    public byte[] exportDetailFields(List<SampleDetailFieldRow> rows) {
+        return workbookToBytes("字段明细", "样本字段明细导出", DETAIL_FIELD_HEADERS, DETAIL_FIELD_WIDTHS, (sheet, styles) -> {
+            int rowIndex = 2;
+            for (SampleDetailFieldRow row : rows) {
+                writeDetailFieldRow(sheet, styles, rowIndex++, row);
+            }
+        });
+    }
+
+    public void streamDetailFields(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
+        workbookToStream("字段明细", "样本字段明细导出", DETAIL_FIELD_HEADERS, DETAIL_FIELD_WIDTHS, outputStream, (sheet, styles) -> {
+            int[] rowIndex = {2};
+            queryService.streamDetailFields(criteria, row -> writeDetailFieldRow(sheet, styles, rowIndex[0]++, row));
         });
     }
 
@@ -185,6 +207,21 @@ public class SampleExcelExportService {
         write(excelRow, col++, row.affectedCount(), styles.number());
         write(excelRow, col++, row.sourceTable(), styles.body());
         write(excelRow, col, row.reason(), styles.body());
+    }
+
+    private void writeDetailFieldRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailFieldRow row) {
+        Row excelRow = sheet.createRow(rowIndex);
+        int col = 0;
+        write(excelRow, col++, row.batchId(), styles.body());
+        write(excelRow, col++, row.mesgSeq(), styles.body());
+        write(excelRow, col++, row.messageType(), styles.body());
+        write(excelRow, col++, row.rawFieldName(), styles.body());
+        write(excelRow, col++, row.stdFieldName(), styles.body());
+        write(excelRow, col++, row.fieldCnName(), styles.body());
+        write(excelRow, col++, row.origFieldValue(), styles.body());
+        write(excelRow, col++, row.destFieldValue(), styles.body());
+        write(excelRow, col++, row.mappingStatus(), styles.body());
+        write(excelRow, col, row.fieldIndex(), styles.number());
     }
 
     private void border(CellStyle style) {

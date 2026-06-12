@@ -21,7 +21,7 @@ class SampleControllerExportTest {
         SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
         SampleController controller = new SampleController(queryService, excelExportService);
 
-        controller.exportGroups(null, null, null, null, null, null, null, new MockHttpServletResponse());
+        controller.exportGroups(null, null, null, null, null, null, null, null, null, null, new MockHttpServletResponse());
 
         verify(excelExportService).streamGroups(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
         verify(queryService, never()).exportGroups(any());
@@ -33,9 +33,21 @@ class SampleControllerExportTest {
         SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
         SampleController controller = new SampleController(queryService, excelExportService);
 
-        controller.exportDetails(null, null, null, null, null, null, null, null, new MockHttpServletResponse());
+        controller.exportDetails(null, null, null, null, null, null, null, null, null, null, null, new MockHttpServletResponse());
 
         verify(excelExportService).streamDetails(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
         verify(queryService, never()).exportDetails(any());
+    }
+
+    @Test
+    void detailFieldExportStreamsRowsToResponseWithoutBuildingListFirst() throws Exception {
+        SampleQueryService queryService = mock(SampleQueryService.class);
+        SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
+        SampleController controller = new SampleController(queryService, excelExportService);
+
+        controller.exportDetailFields(null, null, null, null, null, null, new MockHttpServletResponse());
+
+        verify(excelExportService).streamDetailFields(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
+        verify(queryService, never()).exportDetailFields(any());
     }
 }

@@ -25,19 +25,22 @@ public class SampleController {
 
     @GetMapping("/samples/groups")
     public String groups(@RequestParam(required = false) String batchId,
+                         @RequestParam(required = false) String origCdate,
                          @RequestParam(required = false) String sampleType,
                          @RequestParam(required = false) String tranCode,
                          @RequestParam(required = false) String serviceCode,
-                         @RequestParam(required = false) String sopFieldName,
-                         @RequestParam(required = false) String fieldCnName,
+                         @RequestParam(required = false) String messageType,
+                         @RequestParam(required = false) String configStatus,
+                         @RequestParam(required = false) String mappingStatus,
+                         @RequestParam(required = false) String semanticFieldName,
                          @RequestParam(required = false) String owner,
                          @RequestParam(required = false) Integer page,
                          @RequestParam(required = false) Integer size,
                          Model model) {
         PageRequestParams params = PageRequestParams.of(page, size);
         SampleSearchCriteria criteria = new SampleSearchCriteria(
-                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
-                firstText(sopFieldName, fieldCnName), owner, null
+                batchId, origCdate, sampleType, tranCode, serviceCode, messageType, configStatus, mappingStatus,
+                semanticFieldName, owner, null
         );
         model.addAttribute("criteria", criteria);
         model.addAttribute("result", sampleQueryService.groups(criteria, params));
@@ -47,16 +50,19 @@ public class SampleController {
 
     @GetMapping("/samples/groups/export")
     public void exportGroups(@RequestParam(required = false) String batchId,
+                             @RequestParam(required = false) String origCdate,
                              @RequestParam(required = false) String sampleType,
                              @RequestParam(required = false) String tranCode,
                              @RequestParam(required = false) String serviceCode,
-                             @RequestParam(required = false) String sopFieldName,
-                             @RequestParam(required = false) String fieldCnName,
+                             @RequestParam(required = false) String messageType,
+                             @RequestParam(required = false) String configStatus,
+                             @RequestParam(required = false) String mappingStatus,
+                             @RequestParam(required = false) String semanticFieldName,
                              @RequestParam(required = false) String owner,
                              HttpServletResponse response) throws IOException {
         SampleSearchCriteria criteria = new SampleSearchCriteria(
-                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
-                firstText(sopFieldName, fieldCnName), owner, null
+                batchId, origCdate, sampleType, tranCode, serviceCode, messageType, configStatus, mappingStatus,
+                semanticFieldName, owner, null
         );
         prepareExcel(response, "采样分组.xlsx");
         sampleExcelExportService.streamGroups(sampleQueryService, criteria, response.getOutputStream());
@@ -64,11 +70,14 @@ public class SampleController {
 
     @GetMapping("/samples/details")
     public String details(@RequestParam(required = false) String batchId,
+                          @RequestParam(required = false) String origCdate,
                           @RequestParam(required = false) String sampleType,
                           @RequestParam(required = false) String tranCode,
                           @RequestParam(required = false) String serviceCode,
-                          @RequestParam(required = false) String sopFieldName,
-                          @RequestParam(required = false) String fieldCnName,
+                          @RequestParam(required = false) String messageType,
+                          @RequestParam(required = false) String configStatus,
+                          @RequestParam(required = false) String mappingStatus,
+                          @RequestParam(required = false) String semanticFieldName,
                           @RequestParam(required = false) String owner,
                           @RequestParam(required = false) String tranSeqNo,
                           @RequestParam(required = false) Integer page,
@@ -76,8 +85,8 @@ public class SampleController {
                           Model model) {
         PageRequestParams params = PageRequestParams.of(page, size);
         SampleSearchCriteria criteria = new SampleSearchCriteria(
-                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
-                firstText(sopFieldName, fieldCnName), owner, tranSeqNo
+                batchId, origCdate, sampleType, tranCode, serviceCode, messageType, configStatus, mappingStatus,
+                semanticFieldName, owner, tranSeqNo
         );
         model.addAttribute("criteria", criteria);
         model.addAttribute("result", sampleQueryService.details(criteria, params));
@@ -87,27 +96,39 @@ public class SampleController {
 
     @GetMapping("/samples/details/export")
     public void exportDetails(@RequestParam(required = false) String batchId,
+                              @RequestParam(required = false) String origCdate,
                               @RequestParam(required = false) String sampleType,
                               @RequestParam(required = false) String tranCode,
                               @RequestParam(required = false) String serviceCode,
-                              @RequestParam(required = false) String sopFieldName,
-                              @RequestParam(required = false) String fieldCnName,
+                              @RequestParam(required = false) String messageType,
+                              @RequestParam(required = false) String configStatus,
+                              @RequestParam(required = false) String mappingStatus,
+                              @RequestParam(required = false) String semanticFieldName,
                               @RequestParam(required = false) String owner,
                               @RequestParam(required = false) String tranSeqNo,
                               HttpServletResponse response) throws IOException {
         SampleSearchCriteria criteria = new SampleSearchCriteria(
-                batchId, null, sampleType, tranCode, serviceCode, null, null, null,
-                firstText(sopFieldName, fieldCnName), owner, tranSeqNo
+                batchId, origCdate, sampleType, tranCode, serviceCode, messageType, configStatus, mappingStatus,
+                semanticFieldName, owner, tranSeqNo
         );
         prepareExcel(response, "采样明细.xlsx");
         sampleExcelExportService.streamDetails(sampleQueryService, criteria, response.getOutputStream());
     }
 
-    private String firstText(String first, String second) {
-        if (first != null && !first.isBlank()) {
-            return first;
-        }
-        return second;
+    @GetMapping("/samples/detail-fields/export")
+    public void exportDetailFields(@RequestParam(required = false) String batchId,
+                                   @RequestParam(required = false) String messageType,
+                                   @RequestParam(required = false) String mappingStatus,
+                                   @RequestParam(required = false) String semanticFieldName,
+                                   @RequestParam(required = false) String tranSeqNo,
+                                   @RequestParam(required = false) String owner,
+                                   HttpServletResponse response) throws IOException {
+        SampleSearchCriteria criteria = new SampleSearchCriteria(
+                batchId, null, null, null, null, messageType, null, mappingStatus,
+                semanticFieldName, owner, tranSeqNo
+        );
+        prepareExcel(response, "样本字段明细.xlsx");
+        sampleExcelExportService.streamDetailFields(sampleQueryService, criteria, response.getOutputStream());
     }
 
     private void prepareExcel(HttpServletResponse response, String filename) {

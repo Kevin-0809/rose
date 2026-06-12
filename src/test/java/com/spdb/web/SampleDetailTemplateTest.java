@@ -10,15 +10,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SampleDetailTemplateTest {
 
     @Test
-    void detailPageShowsMessageTypeBeforeFieldMappingColumns() throws IOException {
+    void detailPageShowsSampleTransactionsAndFieldDetailActions() throws IOException {
         String html = new String(
                 getClass().getResourceAsStream("/templates/samples/details.html").readAllBytes(),
                 StandardCharsets.UTF_8
         );
 
-        assertThat(html).contains("<th>报文类型</th><th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th>");
+        assertThat(html).contains("<th>报文类型</th><th>流水号</th><th>字段数</th>");
         assertThat(html).contains("row.messageType()");
-        assertThat(html.indexOf("row.messageType()")).isLessThan(html.indexOf("row.sopFieldName()"));
+        assertThat(html).contains("row.fieldCount()");
+        assertThat(html).contains("/samples/detail-fields/export");
     }
 
     @Test
@@ -29,7 +30,20 @@ class SampleDetailTemplateTest {
         );
 
         assertThat(html).contains("<th>528响应码</th><th>528响应描述</th><th>CCBS响应码</th><th>CCBS响应描述</th>");
-        assertThat(html).contains("row.origFieldDesc()");
-        assertThat(html).contains("row.destFieldDesc()");
+        assertThat(html).contains("row.origErrorDesc()");
+        assertThat(html).contains("row.destErrorDesc()");
+    }
+
+    @Test
+    void groupPageShowsSemanticFieldsAndStatuses() throws IOException {
+        String html = new String(
+                getClass().getResourceAsStream("/templates/samples/groups.html").readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(html).contains("<th>业务日期</th><th>批次</th><th>类型</th><th>配置状态</th><th>映射状态</th>");
+        assertThat(html).contains("row.semanticFieldNames()");
+        assertThat(html).contains("row.messageTypes()");
+        assertThat(html).contains("semanticFieldName");
     }
 }
