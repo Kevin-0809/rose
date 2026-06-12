@@ -99,6 +99,24 @@ create table if not exists ana_sample_group (
     constraint uk_ana_sample_group_key unique (batch_id, group_key)
 );
 
+alter table ana_sample_group add column if not exists orig_cdate varchar(8);
+alter table ana_sample_group add column if not exists config_status varchar(32);
+alter table ana_sample_group alter column config_status set default 'CONFIGURED';
+update ana_sample_group set config_status = 'CONFIGURED' where config_status is null;
+alter table ana_sample_group add column if not exists mapping_status varchar(32);
+alter table ana_sample_group alter column mapping_status set default 'MAPPED';
+update ana_sample_group set mapping_status = 'MAPPED' where mapping_status is null;
+alter table ana_sample_group add column if not exists semantic_signature varchar(2000);
+alter table ana_sample_group add column if not exists semantic_signature_hash varchar(32);
+alter table ana_sample_group add column if not exists semantic_field_names varchar(1000);
+alter table ana_sample_group add column if not exists message_types varchar(200);
+alter table ana_sample_group add column if not exists affected_tran_count bigint;
+alter table ana_sample_group alter column affected_tran_count set default 0;
+update ana_sample_group set affected_tran_count = affected_count where affected_tran_count is null;
+alter table ana_sample_group add column if not exists affected_field_count bigint;
+alter table ana_sample_group alter column affected_field_count set default 0;
+update ana_sample_group set affected_field_count = 0 where affected_field_count is null;
+
 comment on table ana_sample_group is '差异采样分组表';
 comment on column ana_sample_group.group_id is '采样分组ID';
 comment on column ana_sample_group.batch_id is '批次ID';
@@ -184,6 +202,18 @@ create table if not exists ana_sample_detail_field (
     field_index integer,
     created_at timestamp not null default current_timestamp
 );
+
+alter table ana_sample_detail add column if not exists orig_cdate varchar(8);
+alter table ana_sample_detail add column if not exists config_status varchar(32);
+alter table ana_sample_detail alter column config_status set default 'CONFIGURED';
+update ana_sample_detail set config_status = 'CONFIGURED' where config_status is null;
+alter table ana_sample_detail add column if not exists field_count integer;
+alter table ana_sample_detail alter column field_count set default 0;
+update ana_sample_detail set field_count = 0 where field_count is null;
+alter table ana_sample_detail add column if not exists orig_error_code varchar(64);
+alter table ana_sample_detail add column if not exists orig_error_desc varchar(500);
+alter table ana_sample_detail add column if not exists dest_error_code varchar(64);
+alter table ana_sample_detail add column if not exists dest_error_desc varchar(500);
 
 comment on table ana_sample_detail is '差异采样明细表';
 comment on column ana_sample_detail.sample_id is '样本ID';
@@ -355,6 +385,22 @@ create table if not exists ana_sampling_summary (
     constraint uk_ana_sampling_summary_batch unique (batch_id)
 );
 
+alter table ana_sampling_summary add column if not exists tran_issue_count bigint;
+alter table ana_sampling_summary alter column tran_issue_count set default 0;
+update ana_sampling_summary set tran_issue_count = 0 where tran_issue_count is null;
+alter table ana_sampling_summary add column if not exists return_code_issue_count bigint;
+alter table ana_sampling_summary alter column return_code_issue_count set default 0;
+update ana_sampling_summary set return_code_issue_count = 0 where return_code_issue_count is null;
+alter table ana_sampling_summary add column if not exists field_diff_tran_count bigint;
+alter table ana_sampling_summary alter column field_diff_tran_count set default 0;
+update ana_sampling_summary set field_diff_tran_count = 0 where field_diff_tran_count is null;
+alter table ana_sampling_summary add column if not exists unconfigured_service_count bigint;
+alter table ana_sampling_summary alter column unconfigured_service_count set default 0;
+update ana_sampling_summary set unconfigured_service_count = 0 where unconfigured_service_count is null;
+alter table ana_sampling_summary add column if not exists unmapped_field_count bigint;
+alter table ana_sampling_summary alter column unmapped_field_count set default 0;
+update ana_sampling_summary set unmapped_field_count = 0 where unmapped_field_count is null;
+
 comment on table ana_sampling_summary is '采样批次统计表';
 comment on column ana_sampling_summary.summary_id is '统计ID';
 comment on column ana_sampling_summary.batch_id is '采样批次号';
@@ -522,9 +568,7 @@ COMMENT ON COLUMN recording_config.created_time IS '创建时间';
 COMMENT ON COLUMN recording_config.updated_time IS '更新时间';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_txn_code
-    ON recording_config USING ubtree (txn_code)
-    WITH (storage_type = USTORE)
-    TABLESPACE pg_default;
+    ON recording_config (txn_code);
 
 -- Indexes for set-based sampling execution.
 create index if not exists idx_tss_field_comp_sampling_diff

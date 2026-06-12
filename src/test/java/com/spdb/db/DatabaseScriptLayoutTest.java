@@ -65,6 +65,13 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlAvoidsUstoreOnlyIndexSyntaxForExistingTables() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(ddl).doesNotContain("using ubtree");
+    }
+
+    @Test
     void retcodeComparisonTableHasChineseCommentsAndSeedData() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
         String ddlLower = ddl.toLowerCase();
@@ -120,6 +127,23 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("message_types varchar(200)");
         assertThat(ddl).contains("affected_tran_count bigint");
         assertThat(ddl).contains("affected_field_count bigint");
+    }
+
+    @Test
+    void ddlCanUpgradeExistingSemanticSamplingTables() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists orig_cdate varchar(8)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists config_status varchar(32)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists mapping_status varchar(32)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists semantic_signature varchar(2000)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists semantic_signature_hash varchar(32)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists semantic_field_names varchar(1000)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists message_types varchar(200)");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists affected_tran_count bigint");
+        assertThat(ddl).contains("alter table ana_sample_group add column if not exists affected_field_count bigint");
+        assertThat(ddl).contains("alter table ana_sample_detail add column if not exists field_count integer");
+        assertThat(ddl).contains("alter table ana_sampling_summary add column if not exists tran_issue_count bigint");
     }
 
     @Test

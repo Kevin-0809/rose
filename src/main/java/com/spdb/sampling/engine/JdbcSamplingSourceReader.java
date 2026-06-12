@@ -1,6 +1,7 @@
 package com.spdb.sampling.engine;
 
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,7 @@ public class JdbcSamplingSourceReader implements SamplingSourceReader {
     private final JdbcTemplate jdbc;
     private final int fetchSize;
 
+    @Autowired
     public JdbcSamplingSourceReader(DataSource dataSource) {
         this(dataSource, 1000);
     }

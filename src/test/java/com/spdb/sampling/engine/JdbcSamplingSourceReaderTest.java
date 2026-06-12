@@ -79,6 +79,14 @@ class JdbcSamplingSourceReaderTest {
     }
 
     @Test
+    void dataSourceConstructorIsAutowiredForSpringComponentCreation() {
+        String source = javaSource("JdbcSamplingSourceReader.java");
+
+        assertThat(source).contains("@Autowired");
+        assertThat(source).contains("public JdbcSamplingSourceReader(DataSource dataSource)");
+    }
+
+    @Test
     void readsTranFactsInStableOrder() {
         var jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
         jdbc.update("""
@@ -113,5 +121,13 @@ class JdbcSamplingSourceReaderTest {
         reader.readFieldDiffs("20260611", diffs::add);
 
         assertThat(diffs).extracting(FieldDiff::rawFieldName).containsExactly("First", "Second");
+    }
+
+    private String javaSource(String fileName) {
+        try {
+            return java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/com/spdb/sampling/engine/" + fileName));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }
