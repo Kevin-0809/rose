@@ -10,7 +10,12 @@ public record SummaryStats(
         long compResult4Count,
         long compResult8Count,
         long passTranCount,
+        long tranIssueCount,
+        long returnCodeIssueCount,
         long issueFieldCount,
+        long fieldDiffTranCount,
+        long unconfiguredServiceCount,
+        long unmappedFieldCount,
         long fullyMatchedCount,
         long sampleGroupCount,
         long sampleDetailCount

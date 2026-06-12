@@ -45,7 +45,7 @@
       <thead>
       <tr>
         <th>批次号</th><th>业务日期</th><th>状态</th>
-        <th>耗时</th><th>开始时间</th><th>结束时间</th><th>失败原因</th><th>操作</th>
+        <th>耗时</th><th>交易问题</th><th>响应码问题</th><th>字段差异流水</th><th>未配置服务</th><th>未映射字段</th><th>开始时间</th><th>结束时间</th><th>失败原因</th><th>操作</th>
       </tr>
       </thead>
       <tbody>
@@ -54,6 +54,11 @@
         <td th:text="${row.origCdate()}"></td>
         <td><span class="tag" th:classappend="${row.status() == 'COMPLETED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
         <td th:text="${row.durationText()}"></td>
+        <td th:text="${row.tranIssueCount()}"></td>
+        <td th:text="${row.returnCodeIssueCount()}"></td>
+        <td th:text="${row.fieldDiffTranCount()}"></td>
+        <td th:text="${row.unconfiguredServiceCount()}"></td>
+        <td th:text="${row.unmappedFieldCount()}"></td>
         <td th:text="${row.startedTime()}"></td>
         <td th:text="${row.endedTime()}"></td>
         <td th:text="${row.errorMessage()}"></td>

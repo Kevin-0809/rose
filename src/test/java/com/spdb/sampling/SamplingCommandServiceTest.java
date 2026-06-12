@@ -43,6 +43,25 @@ class SamplingCommandServiceTest {
                 .hasMessageContaining("orig_cdate必须是8位日期");
     }
 
+    @Test
+    void commandServiceSelectsSemanticSummaryCounters() {
+        String source = javaSource("SamplingCommandService.java");
+
+        assertThat(source).contains("tran_issue_count");
+        assertThat(source).contains("return_code_issue_count");
+        assertThat(source).contains("field_diff_tran_count");
+        assertThat(source).contains("unconfigured_service_count");
+        assertThat(source).contains("unmapped_field_count");
+    }
+
+    private String javaSource(String fileName) {
+        try {
+            return java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/com/spdb/sampling/" + fileName));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private ObjectProvider<SamplingTaskLauncher> emptyProvider() {
         return new ObjectProvider<>() {
             @Override

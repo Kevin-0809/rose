@@ -42,8 +42,8 @@
       <thead>
       <tr>
         <th>批次号</th><th>业务日期</th><th>发起交易</th><th>原失败新成功</th><th>原成功新失败</th>
-        <th>都失败</th><th>都成功</th><th>响应码不一致</th><th>通过交易</th><th>问题字段</th>
-        <th>完全匹配</th><th>分组数</th><th>明细数</th><th>创建时间</th>
+        <th>都失败</th><th>都成功</th><th>响应码不一致</th><th>通过交易</th><th>交易问题</th><th>响应码问题</th><th>问题字段</th>
+        <th>字段差异流水</th><th>未配置服务</th><th>未映射字段</th><th>完全匹配</th><th>分组数</th><th>明细数</th><th>创建时间</th>
       </tr>
       </thead>
       <tbody>
@@ -57,7 +57,12 @@
         <td th:text="${row.compResult4Count()}"></td>
         <td th:text="${row.compResult8Count()}"></td>
         <td th:text="${row.passTranCount()}"></td>
+        <td th:text="${row.tranIssueCount()}"></td>
+        <td th:text="${row.returnCodeIssueCount()}"></td>
         <td th:text="${row.issueFieldCount()}"></td>
+        <td th:text="${row.fieldDiffTranCount()}"></td>
+        <td th:text="${row.unconfiguredServiceCount()}"></td>
+        <td th:text="${row.unmappedFieldCount()}"></td>
         <td th:text="${row.fullyMatchedCount()}"></td>
         <td th:text="${row.sampleGroupCount()}"></td>
         <td th:text="${row.sampleDetailCount()}"></td>
@@ -76,14 +81,17 @@
     const labels = summaryChartData.map(item => item.origCdate + '\n' + item.batchId.slice(-4));
     chart.setOption({
       backgroundColor: 'transparent',
-      color: ['#38bdf8', '#4ade80', '#facc15', '#fb7185'],
+      color: ['#ef4444', '#f97316', '#38bdf8', '#a855f7', '#4ade80', '#facc15', '#fb7185'],
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       legend: { top: 0, right: 0, textStyle: { color: '#8fa3ba' } },
       grid: { top: 46, left: 64, right: 28, bottom: 46 },
       xAxis: { type: 'category', data: labels, axisLabel: { color: '#8fa3ba' }, axisLine: { lineStyle: { color: 'rgba(97,128,165,.38)' } } },
       yAxis: { type: 'value', axisLabel: { color: '#8fa3ba' }, splitLine: { lineStyle: { color: 'rgba(97,128,165,.18)' } } },
       series: [
+        { name: '交易问题', type: 'bar', data: summaryChartData.map(item => item.tranIssueCount), barMaxWidth: 20 },
+        { name: '响应码问题', type: 'bar', data: summaryChartData.map(item => item.returnCodeIssueCount), barMaxWidth: 20 },
         { name: '问题字段', type: 'bar', data: summaryChartData.map(item => item.issueFieldCount), barMaxWidth: 20 },
+        { name: '字段差异流水', type: 'bar', data: summaryChartData.map(item => item.fieldDiffTranCount), barMaxWidth: 20 },
         { name: '完全匹配', type: 'bar', data: summaryChartData.map(item => item.fullyMatchedCount), barMaxWidth: 20 },
         { name: '分组数', type: 'bar', data: summaryChartData.map(item => item.sampleGroupCount), barMaxWidth: 20 },
         { name: '明细数', type: 'bar', data: summaryChartData.map(item => item.sampleDetailCount), barMaxWidth: 20 }

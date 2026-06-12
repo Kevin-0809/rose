@@ -23,7 +23,12 @@ class HomeTemplateTest {
         assertThat(html).contains("都成功");
         assertThat(html).contains("响应码不一致");
         assertThat(html).contains("通过交易");
+        assertThat(html).contains("交易问题");
+        assertThat(html).contains("响应码问题");
         assertThat(html).contains("问题字段");
+        assertThat(html).contains("字段差异流水");
+        assertThat(html).contains("未配置服务");
+        assertThat(html).contains("未映射字段");
         assertThat(html).contains("完全匹配");
         assertThat(html).contains("分组数");
         assertThat(html).contains("明细数");

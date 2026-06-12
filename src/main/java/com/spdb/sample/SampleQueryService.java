@@ -247,7 +247,8 @@ public class SampleQueryService {
                 select batch_id, orig_cdate, total_tran_count,
                        comp_result_1_count, comp_result_2_count, comp_result_3_count,
                        comp_result_4_count, comp_result_8_count,
-                       pass_tran_count, issue_field_count,
+                       pass_tran_count, tran_issue_count, return_code_issue_count, issue_field_count,
+                       field_diff_tran_count, unconfigured_service_count, unmapped_field_count,
                        fully_matched_count, sample_group_count, sample_detail_count
                 from ana_sampling_summary
                 order by created_at desc
@@ -262,12 +263,17 @@ public class SampleQueryService {
                 rs.getLong("comp_result_4_count"),
                 rs.getLong("comp_result_8_count"),
                 rs.getLong("pass_tran_count"),
+                rs.getLong("tran_issue_count"),
+                rs.getLong("return_code_issue_count"),
                 rs.getLong("issue_field_count"),
+                rs.getLong("field_diff_tran_count"),
+                rs.getLong("unconfigured_service_count"),
+                rs.getLong("unmapped_field_count"),
                 rs.getLong("fully_matched_count"),
                 rs.getLong("sample_group_count"),
                 rs.getLong("sample_detail_count")
         ));
-        return rows.isEmpty() ? new SummaryStats(null, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) : rows.get(0);
+        return rows.isEmpty() ? new SummaryStats(null, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) : rows.get(0);
     }
 
     public PagedResult<SamplingSummaryHistoryRow> summaryHistory(SamplingSummarySearchCriteria criteria, PageRequestParams page) {
@@ -277,7 +283,8 @@ public class SampleQueryService {
                 select batch_id, orig_cdate, total_tran_count,
                        comp_result_1_count, comp_result_2_count, comp_result_3_count,
                        comp_result_4_count, comp_result_8_count,
-                       pass_tran_count, issue_field_count,
+                       pass_tran_count, tran_issue_count, return_code_issue_count, issue_field_count,
+                       field_diff_tran_count, unconfigured_service_count, unmapped_field_count,
                        fully_matched_count, sample_group_count, sample_detail_count,
                        created_at
                 from ana_sampling_summary
@@ -292,7 +299,12 @@ public class SampleQueryService {
                         rs.getLong("comp_result_4_count"),
                         rs.getLong("comp_result_8_count"),
                         rs.getLong("pass_tran_count"),
+                        rs.getLong("tran_issue_count"),
+                        rs.getLong("return_code_issue_count"),
                         rs.getLong("issue_field_count"),
+                        rs.getLong("field_diff_tran_count"),
+                        rs.getLong("unconfigured_service_count"),
+                        rs.getLong("unmapped_field_count"),
                         rs.getLong("fully_matched_count"),
                         rs.getLong("sample_group_count"),
                         rs.getLong("sample_detail_count"),
@@ -305,7 +317,8 @@ public class SampleQueryService {
     public List<SummaryChartPoint> summaryChart(int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 50));
         List<SummaryChartPoint> rows = jdbc.query("""
-                select batch_id, orig_cdate, issue_field_count, fully_matched_count,
+                select batch_id, orig_cdate, tran_issue_count, return_code_issue_count,
+                       issue_field_count, field_diff_tran_count, fully_matched_count,
                        sample_group_count, sample_detail_count
                 from ana_sampling_summary
                 order by created_at desc
@@ -313,7 +326,10 @@ public class SampleQueryService {
                 """, new MapSqlParameterSource().addValue("limit", safeLimit), (rs, i) -> new SummaryChartPoint(
                 rs.getString("batch_id"),
                 rs.getString("orig_cdate"),
+                rs.getLong("tran_issue_count"),
+                rs.getLong("return_code_issue_count"),
                 rs.getLong("issue_field_count"),
+                rs.getLong("field_diff_tran_count"),
                 rs.getLong("fully_matched_count"),
                 rs.getLong("sample_group_count"),
                 rs.getLong("sample_detail_count")

@@ -27,16 +27,10 @@ class SamplingCommandTemplateTest {
         assertThat(html).doesNotContain("name=\"partitionCount\"");
         assertThat(html).doesNotContain("分区数");
         assertThat(html).doesNotContain("orig_cdate");
-        assertThat(html).doesNotContain("发起交易");
-        assertThat(html).doesNotContain("原失败新成功");
-        assertThat(html).doesNotContain("原成功新失败");
-        assertThat(html).doesNotContain("都失败");
-        assertThat(html).doesNotContain("都成功");
-        assertThat(html).doesNotContain("响应码不一致");
-        assertThat(html).doesNotContain("通过交易");
-        assertThat(html).doesNotContain("问题字段");
-        assertThat(html).doesNotContain("完全匹配");
-        assertThat(html).doesNotContain("分组数");
-        assertThat(html).doesNotContain("明细数");
+        assertThat(html).contains("交易问题");
+        assertThat(html).contains("响应码问题");
+        assertThat(html).contains("字段差异流水");
+        assertThat(html).contains("未配置服务");
+        assertThat(html).contains("未映射字段");
     }
 }

@@ -25,7 +25,12 @@ class SamplingSummaryTemplateTest {
         assertThat(html).doesNotContain("cdn.jsdelivr");
         assertThat(html).contains("批次号");
         assertThat(html).contains("业务日期");
+        assertThat(html).contains("交易问题");
+        assertThat(html).contains("响应码问题");
         assertThat(html).contains("问题字段");
+        assertThat(html).contains("字段差异流水");
+        assertThat(html).contains("未配置服务");
+        assertThat(html).contains("未映射字段");
         assertThat(html).contains("完全匹配");
         assertThat(html).contains("分组数");
         assertThat(html).contains("明细数");
