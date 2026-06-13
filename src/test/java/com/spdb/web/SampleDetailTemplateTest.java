@@ -10,6 +10,41 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SampleDetailTemplateTest {
 
     @Test
+    void transactionDiffPageShowsReturnCodeDetailsAndExportAction() throws IOException {
+        String html = new String(
+                getClass().getResourceAsStream("/templates/samples/transaction-diffs.html").readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(html).contains("交易级差异");
+        assertThat(html).contains("/samples/transaction-diffs/export");
+        assertThat(html).contains("<th>交易结果</th>");
+        assertThat(html).contains("<th>528响应码</th><th>528响应描述</th><th>CCBS响应码</th><th>CCBS响应描述</th>");
+        assertThat(html).doesNotContain("name=\"sampleType\"");
+        assertThat(html).contains("row.compResult()");
+        assertThat(html).contains("row.origErrorDesc()");
+        assertThat(html).contains("row.destErrorDesc()");
+    }
+
+    @Test
+    void fieldDiffPageShowsMappedFieldNamesAndExportActions() throws IOException {
+        String html = new String(
+                getClass().getResourceAsStream("/templates/samples/field-diffs.html").readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(html).contains("字段级差异");
+        assertThat(html).contains("/samples/field-diffs/export");
+        assertThat(html).contains("/samples/detail-fields/export");
+        assertThat(html).contains("<th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th><th>字段中文名</th>");
+        assertThat(html).doesNotContain("name=\"sampleType\"");
+        assertThat(html).contains("row.sopFieldName()");
+        assertThat(html).contains("row.soapFieldName()");
+        assertThat(html).contains("row.bizjsonFieldName()");
+        assertThat(html).contains("row.fieldCnName()");
+    }
+
+    @Test
     void detailPageShowsSampleTransactionsAndFieldDetailActions() throws IOException {
         String html = new String(
                 getClass().getResourceAsStream("/templates/samples/details.html").readAllBytes(),

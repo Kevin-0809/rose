@@ -71,13 +71,69 @@ class SamplingBatchRunnerTest {
                 """, String.class, fieldGroup.get("group_id"));
         assertThat(rawFieldNames).containsExactly("CurrencyId", "FcyCollCrspBnkLkg", "HUOBDH", "FAB251");
 
+        Long returnCodeGroups = jdbc.queryForObject("""
+                select count(*)
+                from ana_sample_group
+                where batch_id = 'BATCH_A825'
+                  and sample_type = 'RETURN_CODE'
+                """, Long.class);
+        assertThat(returnCodeGroups).isEqualTo(3L);
+    }
+
+    @Test
+    void transactionLevelIssuesUseReturnCodeSampleTypeOnly() {
+        runner.run(command());
+
+        List<String> sampleTypes = jdbc.queryForList("""
+                select distinct sample_type
+                from ana_sample_group
+                where batch_id = 'BATCH_A825'
+                order by sample_type
+                """, String.class);
+        assertThat(sampleTypes).containsExactly("FIELD_DIFF", "RETURN_CODE");
+
+        Long returnCodeGroups = jdbc.queryForObject("""
+                select count(*)
+                from ana_sample_group
+                where batch_id = 'BATCH_A825'
+                  and sample_type = 'RETURN_CODE'
+                """, Long.class);
+        assertThat(returnCodeGroups).isEqualTo(3L);
+
         Long tranResultGroups = jdbc.queryForObject("""
                 select count(*)
                 from ana_sample_group
                 where batch_id = 'BATCH_A825'
                   and sample_type = 'TRAN_RESULT'
                 """, Long.class);
-        assertThat(tranResultGroups).isEqualTo(2L);
+        assertThat(tranResultGroups).isZero();
+    }
+
+    @Test
+    void sampleDetailsIncludeMappedFieldDisplayNames() {
+        runner.run(command());
+
+        Map<String, Object> bizjson = jdbc.queryForMap("""
+                select sop_field_name, soap_field_name, bizjson_field_name, field_cn_name
+                from ana_sample_detail
+                where batch_id = 'BATCH_A825'
+                  and tran_seq_no = '11111111111'
+                """);
+        assertThat(bizjson.get("sop_field_name")).isEqualTo("HUOBDH,FAB251");
+        assertThat(bizjson.get("soap_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(bizjson.get("bizjson_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(bizjson.get("field_cn_name")).isEqualTo("币种,联动信息");
+
+        Map<String, Object> sop = jdbc.queryForMap("""
+                select sop_field_name, soap_field_name, bizjson_field_name, field_cn_name
+                from ana_sample_detail
+                where batch_id = 'BATCH_A825'
+                  and tran_seq_no = '11111111114'
+                """);
+        assertThat(sop.get("sop_field_name")).isEqualTo("HUOBDH,FAB251");
+        assertThat(sop.get("soap_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(sop.get("bizjson_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(sop.get("field_cn_name")).isEqualTo("币种,联动信息");
     }
 
     @Test

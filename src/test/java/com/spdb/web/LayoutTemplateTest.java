@@ -20,8 +20,10 @@ class LayoutTemplateTest {
         assertThat(html).contains("首页");
         assertThat(html).contains("采样指令");
         assertThat(html).contains("统计历史");
-        assertThat(html).contains("采样分组");
-        assertThat(html).contains("采样明细");
+        assertThat(html).contains("交易级差异");
+        assertThat(html).contains("字段级差异");
+        assertThat(html).contains("/samples/transaction-diffs");
+        assertThat(html).contains("/samples/field-diffs");
         assertThat(html).contains("交易配置");
         assertThat(html).contains("字段映射");
         assertThat(html).contains("交易导入");

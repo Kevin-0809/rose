@@ -3,51 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>采样明细</title>
+  <title>交易级差异</title>
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 <main class="shell layout-frame">
   <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
-  <div class="page-head"><div><div class="eyebrow">Sample Details</div><h1>采样明细查询</h1></div></div>
+  <div class="page-head"><div><div class="eyebrow">Transaction Diffs</div><h1>交易级差异</h1></div></div>
   <form class="panel filters" method="get">
     <input type="hidden" name="page" value="1">
     <div class="filter-grid">
       <div><label>批次</label><input name="batchId" th:value="${criteria.batchId()}"></div>
       <div><label>业务日期</label><input name="origCdate" th:value="${criteria.origCdate()}"></div>
-      <div><label>类型</label><select name="sampleType"><option value="">全部</option><option value="RETURN_CODE" th:selected="${criteria.sampleType() == 'RETURN_CODE'}">RETURN_CODE</option><option value="FIELD_DIFF" th:selected="${criteria.sampleType() == 'FIELD_DIFF'}">FIELD_DIFF</option></select></div>
       <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div>
       <div><label>服务码</label><input name="serviceCode" th:value="${criteria.serviceCode()}"></div>
       <div><label>报文类型</label><input name="messageType" th:value="${criteria.messageType()}"></div>
       <div><label>配置状态</label><input name="configStatus" th:value="${criteria.configStatus()}"></div>
-      <div><label>映射状态</label><input name="mappingStatus" th:value="${criteria.mappingStatus()}"></div>
-      <div><label>语义字段</label><input name="semanticFieldName" th:value="${criteria.semanticFieldName()}"></div>
       <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/details/export">导出Excel</button><button class="btn" type="submit" formaction="/samples/detail-fields/export">导出字段明细</button><a class="btn" href="/samples/details">重置</a></div>
+      <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/transaction-diffs/export">导出Excel</button><a class="btn" href="/samples/transaction-diffs">重置</a></div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>
   <section class="panel table-wrap">
     <table>
-      <thead><tr><th>业务日期</th><th>批次</th><th>类型</th><th>配置状态</th><th>交易码</th><th>服务码</th><th>报文类型</th><th>流水号</th><th>字段数</th><th>528响应码</th><th>528响应描述</th><th>CCBS响应码</th><th>CCBS响应描述</th><th>责任人</th><th>数量</th><th>操作</th></tr></thead>
+      <thead><tr><th>业务日期</th><th>批次</th><th>交易码</th><th>服务码</th><th>报文类型</th><th>流水号</th><th>交易结果</th><th>528响应码</th><th>528响应描述</th><th>CCBS响应码</th><th>CCBS响应描述</th><th>责任人</th><th>数量</th><th>来源表</th></tr></thead>
       <tbody>
       <tr th:each="row : ${result.rows()}">
         <td th:text="${row.origCdate()}"></td>
         <td th:text="${row.batchId()}"></td>
-        <td><span class="tag" th:text="${row.sampleType()}"></span></td>
-        <td th:text="${row.configStatus()}"></td>
         <td th:text="${row.tranCode()}"></td>
         <td th:text="${row.serviceCode()}"></td>
         <td th:text="${row.messageType()}"></td>
         <td th:text="${row.tranSeqNo()}"></td>
-        <td th:text="${row.fieldCount()}"></td>
+        <td th:text="${row.compResult()}"></td>
         <td th:text="${row.origErrorCode()}"></td>
         <td th:text="${row.origErrorDesc()}"></td>
         <td th:text="${row.destErrorCode()}"></td>
         <td th:text="${row.destErrorDesc()}"></td>
         <td th:text="${row.owner()}"></td>
         <td th:text="${row.affectedCount()}"></td>
-        <td><a class="btn" th:href="@{/samples/detail-fields/export(batchId=${row.batchId()},messageType=${row.messageType()},tranSeqNo=${row.tranSeqNo()})}">字段</a></td>
+        <td th:text="${row.sourceTable()}"></td>
       </tr>
       </tbody>
     </table>

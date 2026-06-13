@@ -2,6 +2,7 @@ package com.spdb.sampling.engine;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +67,10 @@ public class IssueGrouper {
                         candidate.destTrcd(),
                         candidate.compResult(),
                         candidate.configStatus(),
+                        joined(fields -> fields.sopFieldName(), candidate.fields()),
+                        joined(fields -> fields.soapFieldName(), candidate.fields()),
+                        joined(fields -> fields.bizjsonFieldName(), candidate.fields()),
+                        joined(fields -> fields.fieldCnName(), candidate.fields()),
                         candidate.origErrorCode(),
                         candidate.origErrorDesc(),
                         candidate.destErrorCode(),
@@ -73,6 +78,18 @@ public class IssueGrouper {
                         candidate.fields()
                 ));
             }
+        }
+
+        private String joined(java.util.function.Function<SampleDetailFieldDraft, String> extractor,
+                              List<SampleDetailFieldDraft> fields) {
+            LinkedHashSet<String> values = new LinkedHashSet<>();
+            for (SampleDetailFieldDraft field : fields) {
+                String value = extractor.apply(field);
+                if (value != null && !value.isBlank()) {
+                    values.add(value);
+                }
+            }
+            return String.join(",", values);
         }
 
         private SampleGroupDraft toDraft() {

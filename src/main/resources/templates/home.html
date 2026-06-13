@@ -13,7 +13,7 @@
     <div>
       <div class="eyebrow">Replay Sampling Console</div>
       <h1>交易回放差异采样管理</h1>
-      <p class="muted">面向采样分组、字段明细、交易配置和字段映射的统一工作台。</p>
+      <p class="muted">面向交易级差异、字段级差异、交易配置和字段映射的统一工作台。</p>
       <p class="muted" th:if="${stats.batchId()}" th:text="'最新批次：' + ${stats.batchId()} + ' / 业务日期：' + ${stats.origCdate()}"></p>
     </div>
   </section>
@@ -123,8 +123,8 @@
   </section>
   <section class="entry-grid">
     <a class="card entry" href="/sampling/commands"><strong>采样指令</strong><span>按业务日期发起异步采样批次，并查看后台执行记录。</span></a>
-    <a class="card entry" href="/samples/groups"><strong>采样分组管理</strong><span>按交易、服务码、字段、责任人查看影响数量和样本数。</span></a>
-    <a class="card entry" href="/samples/details"><strong>采样明细查询</strong><span>查看流水号、528 的值、CCBS 的值和字段映射。</span></a>
+    <a class="card entry" href="/samples/transaction-diffs"><strong>交易级差异</strong><span>查看交易结果、响应码和响应描述差异。</span></a>
+    <a class="card entry" href="/samples/field-diffs"><strong>字段级差异</strong><span>查看字段映射、字段中文名、528 的值和 CCBS 的值。</span></a>
     <a class="card entry" href="/config/recording"><strong>录制配置</strong><span>维护全局录制开关，以及每个交易代码的录制比例。</span></a>
     <a class="card entry" href="/config/trans"><strong>交易配置</strong><span>维护交易码、服务码、模块、责任人和关键交易标记。</span></a>
     <a class="card entry" href="/config/fields"><strong>字段映射配置</strong><span>维护 SOP、SOAP、BizJSON 字段映射和中文名。</span></a>

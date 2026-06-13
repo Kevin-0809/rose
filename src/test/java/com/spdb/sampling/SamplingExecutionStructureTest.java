@@ -63,7 +63,7 @@ class SamplingExecutionStructureTest {
         assertThat(source).contains("readTranFacts");
         assertThat(source).contains("readReturnCodes");
         assertThat(source).contains("readFieldDiffs");
-        assertThat(source).contains("\"TRAN_RESULT\"");
+        assertThat(source).contains("\"RETURN_CODE\"");
         assertThat(source).contains("\"RETURN_CODE\"");
         assertThat(source).contains("IssueCandidate.fieldDiff");
         assertThat(source).contains("\"4\".equals(fact.compResult())");

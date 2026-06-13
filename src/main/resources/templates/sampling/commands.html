@@ -63,8 +63,8 @@
         <td th:text="${row.endedTime()}"></td>
         <td th:text="${row.errorMessage()}"></td>
         <td class="actions">
-          <a class="btn" th:href="@{/samples/groups(batchId=${row.batchId()})}">分组</a>
-          <a class="btn" th:href="@{/samples/details(batchId=${row.batchId()})}">明细</a>
+          <a class="btn" th:href="@{/samples/transaction-diffs(batchId=${row.batchId()})}">交易级</a>
+          <a class="btn" th:href="@{/samples/field-diffs(batchId=${row.batchId()})}">字段级</a>
         </td>
       </tr>
       </tbody>

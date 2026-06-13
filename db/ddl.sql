@@ -81,7 +81,7 @@ create table if not exists ana_sample_group (
     message_type varchar(32),
     tran_code varchar(32) not null,
     comp_result varchar(1) not null,
-    sop_field_name varchar(200) not null,
+    sop_field_name varchar(200),
     soap_field_name varchar(200),
     bizjson_field_name varchar(200),
     field_cn_name varchar(200),
@@ -95,7 +95,7 @@ create table if not exists ana_sample_group (
     reason varchar(1000),
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
-    constraint ck_ana_sample_group_type check (sample_type in ('TRAN_RESULT', 'RETURN_CODE', 'FIELD_DIFF')),
+    constraint ck_ana_sample_group_type check (sample_type in ('RETURN_CODE', 'FIELD_DIFF')),
     constraint uk_ana_sample_group_key unique (batch_id, group_key)
 );
 
@@ -116,14 +116,16 @@ update ana_sample_group set affected_tran_count = affected_count where affected_
 alter table ana_sample_group add column if not exists affected_field_count bigint;
 alter table ana_sample_group alter column affected_field_count set default 0;
 update ana_sample_group set affected_field_count = 0 where affected_field_count is null;
+alter table ana_sample_group alter column sop_field_name drop not null;
+update ana_sample_group set sample_type = 'RETURN_CODE' where sample_type = 'TRAN_RESULT';
 alter table ana_sample_group drop constraint if exists ck_ana_sample_group_type;
-alter table ana_sample_group add constraint ck_ana_sample_group_type check (sample_type in ('TRAN_RESULT', 'RETURN_CODE', 'FIELD_DIFF'));
+alter table ana_sample_group add constraint ck_ana_sample_group_type check (sample_type in ('RETURN_CODE', 'FIELD_DIFF'));
 
 comment on table ana_sample_group is '差异采样分组表';
 comment on column ana_sample_group.group_id is '采样分组ID';
 comment on column ana_sample_group.batch_id is '批次ID';
 comment on column ana_sample_group.orig_cdate is '原始回放日期，格式yyyyMMdd';
-comment on column ana_sample_group.sample_type is '采样类型，TRAN_RESULT为交易结果差异，RETURN_CODE为响应码差异，FIELD_DIFF为字段差异';
+comment on column ana_sample_group.sample_type is '采样类型，RETURN_CODE为交易级差异，FIELD_DIFF为字段级差异';
 comment on column ana_sample_group.group_key is '稳定分组键';
 comment on column ana_sample_group.group_hash is '分组键MD5，用于批量关联优化';
 comment on column ana_sample_group.config_status is '交易配置状态，CONFIGURED或UNCONFIGURED_SERVICE';
@@ -165,7 +167,7 @@ create table if not exists ana_sample_detail (
     message_type varchar(32),
     tran_code varchar(32) not null,
     comp_result varchar(1) not null,
-    sop_field_name varchar(200) not null,
+    sop_field_name varchar(200),
     soap_field_name varchar(200),
     bizjson_field_name varchar(200),
     field_cn_name varchar(200),
@@ -184,7 +186,7 @@ create table if not exists ana_sample_detail (
     source_pk varchar(300),
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
-    constraint ck_ana_sample_detail_type check (sample_type in ('TRAN_RESULT', 'RETURN_CODE', 'FIELD_DIFF')),
+    constraint ck_ana_sample_detail_type check (sample_type in ('RETURN_CODE', 'FIELD_DIFF')),
     constraint uk_ana_sample_detail_seq unique (group_id, sample_seq_no)
 );
 
@@ -216,15 +218,17 @@ alter table ana_sample_detail add column if not exists orig_error_code varchar(6
 alter table ana_sample_detail add column if not exists orig_error_desc varchar(500);
 alter table ana_sample_detail add column if not exists dest_error_code varchar(64);
 alter table ana_sample_detail add column if not exists dest_error_desc varchar(500);
+alter table ana_sample_detail alter column sop_field_name drop not null;
+update ana_sample_detail set sample_type = 'RETURN_CODE' where sample_type = 'TRAN_RESULT';
 alter table ana_sample_detail drop constraint if exists ck_ana_sample_detail_type;
-alter table ana_sample_detail add constraint ck_ana_sample_detail_type check (sample_type in ('TRAN_RESULT', 'RETURN_CODE', 'FIELD_DIFF'));
+alter table ana_sample_detail add constraint ck_ana_sample_detail_type check (sample_type in ('RETURN_CODE', 'FIELD_DIFF'));
 
 comment on table ana_sample_detail is '差异采样明细表';
 comment on column ana_sample_detail.sample_id is '样本ID';
 comment on column ana_sample_detail.group_id is '采样分组ID，逻辑关联ana_sample_group';
 comment on column ana_sample_detail.batch_id is '批次ID';
 comment on column ana_sample_detail.orig_cdate is '原始回放日期，格式yyyyMMdd';
-comment on column ana_sample_detail.sample_type is '采样类型，TRAN_RESULT为交易结果差异，RETURN_CODE为响应码差异，FIELD_DIFF为字段差异';
+comment on column ana_sample_detail.sample_type is '采样类型，RETURN_CODE为交易级差异，FIELD_DIFF为字段级差异';
 comment on column ana_sample_detail.sample_seq_no is '分组内样本序号';
 comment on column ana_sample_detail.config_status is '交易配置状态，CONFIGURED或UNCONFIGURED_SERVICE';
 comment on column ana_sample_detail.dest_trcd is '原始表目标交易标识，格式为服务码&报文类型';

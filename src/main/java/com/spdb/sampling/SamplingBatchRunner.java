@@ -147,13 +147,13 @@ public class SamplingBatchRunner {
     }
 
     private IssueCandidate tranResultCandidate(TranFact fact) {
-        String signature = "TRAN_RESULT:" + fact.compResult();
+        String signature = "TRANSACTION:" + fact.compResult();
         String hash = signatureBuilder.build(List.of(new SemanticSignatureBuilder.SignatureField(
-                "TRAN_RESULT", "TRAN_RESULT", fact.compResult(), fact.compResult()
+                "TRANSACTION", "TRANSACTION", fact.compResult(), fact.compResult()
         ))).hash();
         return new IssueCandidate(
                 fact.origCdate(),
-                "TRAN_RESULT",
+                "RETURN_CODE",
                 fact.sourceKey(),
                 fact.tranCode(),
                 fact.tranName(),
@@ -241,10 +241,13 @@ public class SamplingBatchRunner {
             if (FieldSemantic.UNMAPPED.equals(semantic.mappingStatus())) {
                 summary.unmappedFieldNames.add(fact.serviceCode() + "|" + diff.rawFieldName());
             }
-            fields.add(new SampleDetailFieldDraft(
+                fields.add(new SampleDetailFieldDraft(
                     diff.rawFieldName(),
                     semantic.stdFieldName(),
                     semantic.fieldCnName(),
+                    semantic.sopFieldName(),
+                    semantic.soapFieldName(),
+                    semantic.bizjsonFieldName(),
                     diff.origFieldValue(),
                     diff.destFieldValue(),
                     semantic.mappingStatus(),
@@ -332,12 +335,14 @@ public class SamplingBatchRunner {
         jdbc.update("""
                 insert into ana_sample_detail (
                     group_id, batch_id, orig_cdate, sample_type, sample_seq_no, config_status,
-                    dest_trcd, service_code, message_type, tran_code, comp_result, sop_field_name,
+                    dest_trcd, service_code, message_type, tran_code, comp_result,
+                    sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
                     tran_seq_no, owner, affected_count, field_count, orig_error_code, orig_error_desc,
                     dest_error_code, dest_error_desc, source_table, source_pk
                 ) values (
                     :groupId, :batchId, :origCdate, :sampleType, :sampleSeqNo, :configStatus,
-                    :destTrcd, :serviceCode, :messageType, :tranCode, :compResult, :sopFieldName,
+                    :destTrcd, :serviceCode, :messageType, :tranCode, :compResult,
+                    :sopFieldName, :soapFieldName, :bizjsonFieldName, :fieldCnName,
                     :tranSeqNo, :owner, :affectedCount, :fieldCount, :origErrorCode, :origErrorDesc,
                     :destErrorCode, :destErrorDesc, :sourceTable, :sourcePk
                 )
@@ -353,7 +358,10 @@ public class SamplingBatchRunner {
                 .addValue("messageType", detail.messageType())
                 .addValue("tranCode", group.tranCode())
                 .addValue("compResult", detail.compResult())
-                .addValue("sopFieldName", firstSemanticField(group))
+                .addValue("sopFieldName", detail.sopFieldName())
+                .addValue("soapFieldName", detail.soapFieldName())
+                .addValue("bizjsonFieldName", detail.bizjsonFieldName())
+                .addValue("fieldCnName", detail.fieldCnName())
                 .addValue("tranSeqNo", detail.tranSeqNo())
                 .addValue("owner", group.owner())
                 .addValue("affectedCount", group.affectedTranCount())
@@ -462,9 +470,6 @@ public class SamplingBatchRunner {
     private String sourceTable(String sampleType) {
         if ("RETURN_CODE".equals(sampleType)) {
             return "tss_retcode_comp";
-        }
-        if ("TRAN_RESULT".equals(sampleType)) {
-            return "tss_tran_comp";
         }
         return "tss_field_comp";
     }

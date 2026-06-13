@@ -53,9 +53,17 @@ public class SamplingConfigSnapshot {
             fieldConfig = fieldByAnyRawName.get(fieldKey(tranCode, serviceCode, WILDCARD_TYPE, rawFieldName));
         }
         if (fieldConfig == null) {
-            return new FieldSemantic(rawFieldName, rawFieldName, null, FieldSemantic.UNMAPPED);
+            return new FieldSemantic(rawFieldName, rawFieldName, null, null, null, null, FieldSemantic.UNMAPPED);
         }
-        return new FieldSemantic(rawFieldName, fieldConfig.stdFieldName(), fieldConfig.fieldCnName(), FieldSemantic.MAPPED);
+        return new FieldSemantic(
+                rawFieldName,
+                fieldConfig.stdFieldName(),
+                fieldConfig.fieldCnName(),
+                fieldConfig.sopFieldName(),
+                fieldConfig.soapFieldName(),
+                fieldConfig.bizjsonFieldName(),
+                FieldSemantic.MAPPED
+        );
     }
 
     private static void putTyped(Map<String, FieldConfig> target, FieldConfig fieldConfig, String messageType, String rawFieldName) {

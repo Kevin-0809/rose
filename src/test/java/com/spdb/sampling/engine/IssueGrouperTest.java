@@ -45,6 +45,14 @@ class IssueGrouperTest {
         assertThat(group.affectedFieldCount()).isEqualTo(4);
         assertThat(group.details()).extracting(SampleDetailDraft::tranSeqNo)
                 .containsExactly("11111111111", "11111111114");
+        assertThat(group.details()).extracting(SampleDetailDraft::sopFieldName)
+                .containsExactly("HUOBDH,FAB251", "HUOBDH,FAB251");
+        assertThat(group.details()).extracting(SampleDetailDraft::soapFieldName)
+                .containsExactly("CurrencyId,FcyCollCrspBnkLkg", "CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(group.details()).extracting(SampleDetailDraft::bizjsonFieldName)
+                .containsExactly("CurrencyId,FcyCollCrspBnkLkg", "CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(group.details()).extracting(SampleDetailDraft::fieldCnName)
+                .containsExactly("币种,联动信息", "币种,联动信息");
         assertThat(group.details()).flatExtracting(SampleDetailDraft::fields)
                 .extracting(SampleDetailFieldDraft::rawFieldName)
                 .containsExactly("CurrencyId", "FcyCollCrspBnkLkg", "HUOBDH", "FAB251");
@@ -87,7 +95,10 @@ class IssueGrouperTest {
         return new SampleDetailFieldDraft(
                 rawFieldName,
                 stdFieldName,
-                null,
+                "currency_id".equals(stdFieldName) ? "币种" : "联动信息",
+                "currency_id".equals(stdFieldName) ? "HUOBDH" : "FAB251",
+                "currency_id".equals(stdFieldName) ? "CurrencyId" : "FcyCollCrspBnkLkg",
+                "currency_id".equals(stdFieldName) ? "CurrencyId" : "FcyCollCrspBnkLkg",
                 origValue,
                 destValue,
                 "MAPPED",

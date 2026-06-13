@@ -58,6 +58,10 @@ class SampleQueryServiceTest {
         SampleDetailRow detail = service.details(criteria, PageRequestParams.of(1, 20)).rows().get(0);
         assertThat(detail.sampleId()).isEqualTo(101L);
         assertThat(detail.tranSeqNo()).isEqualTo("11111111111");
+        assertThat(detail.sopFieldName()).isEqualTo("HUOBDH,FAB251");
+        assertThat(detail.soapFieldName()).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(detail.bizjsonFieldName()).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(detail.fieldCnName()).isEqualTo("币种,联动信息");
         assertThat(detail.fieldCount()).isEqualTo(2);
         assertThat(detail.origErrorCode()).isNull();
         assertThat(detail.destErrorCode()).isNull();
@@ -189,7 +193,8 @@ class SampleQueryServiceTest {
                     group_id bigint, batch_id varchar(64), orig_cdate varchar(8), sample_type varchar(32),
                     sample_seq_no integer, config_status varchar(32), dest_trcd varchar(200),
                     service_code varchar(200), message_type varchar(32), tran_code varchar(32),
-                    comp_result varchar(1), sop_field_name varchar(200), tran_seq_no varchar(64),
+                    comp_result varchar(1), sop_field_name varchar(200), soap_field_name varchar(200),
+                    bizjson_field_name varchar(200), field_cn_name varchar(200), tran_seq_no varchar(64),
                     owner varchar(100), affected_count bigint, field_count integer,
                     orig_error_code varchar(64), orig_error_desc varchar(500),
                     dest_error_code varchar(64), dest_error_desc varchar(500),
@@ -226,13 +231,16 @@ class SampleQueryServiceTest {
                 insert into ana_sample_detail (
                     sample_id, group_id, batch_id, orig_cdate, sample_type, sample_seq_no,
                     config_status, dest_trcd, service_code, message_type, tran_code,
-                    comp_result, sop_field_name, tran_seq_no, owner, affected_count, field_count,
+                    comp_result, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
+                    tran_seq_no, owner, affected_count, field_count,
                     orig_error_code, orig_error_desc, dest_error_code, dest_error_desc,
                     reason, source_table, source_pk
                 ) values (
                     101, 11, 'BATCH_A825', '20260611', 'FIELD_DIFF', 1, 'CONFIGURED',
                     'S030030014FcyCollCrspBnkLkgQry&bizjson', 'S030030014FcyCollCrspBnkLkgQry',
-                    'bizjson', 'A825', '4', 'currency_id', '11111111111', '张伟', 2, 2,
+                    'bizjson', 'A825', '4', 'HUOBDH,FAB251', 'CurrencyId,FcyCollCrspBnkLkg',
+                    'CurrencyId,FcyCollCrspBnkLkg', '币种,联动信息',
+                    '11111111111', '张伟', 2, 2,
                     null, null, null, null, null, 'tss_field_comp', '11111111111'
                 )
                 """);
