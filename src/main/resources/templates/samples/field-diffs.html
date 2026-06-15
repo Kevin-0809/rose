@@ -11,7 +11,6 @@
   <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
   <div class="page-head"><div><div class="eyebrow">Field Diffs</div><h1>字段级差异</h1></div></div>
   <form class="panel filters" method="get">
-    <input type="hidden" name="page" value="1">
     <div class="filter-grid">
       <div><label>批次</label><input name="batchId" th:value="${criteria.batchId()}"></div>
       <div><label>业务日期</label><input name="origCdate" th:value="${criteria.origCdate()}"></div>
@@ -23,28 +22,27 @@
       <div><label>语义字段</label><input name="semanticFieldName" th:value="${criteria.semanticFieldName()}"></div>
       <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
       <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/field-diffs/export">导出Excel</button><button class="btn" type="submit" formaction="/samples/detail-fields/export">导出字段明细</button><a class="btn" href="/samples/field-diffs">重置</a></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/field-diffs/export">导出Excel</button><a class="btn" href="/samples/field-diffs">重置</a></div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>
-  <section class="panel table-wrap">
-    <table>
-      <thead><tr><th>业务日期</th><th>批次</th><th>交易码</th><th>服务码</th><th>报文类型</th><th>流水号</th><th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th><th>字段中文名</th><th>字段数</th><th>责任人</th><th>操作</th></tr></thead>
+  <section class="panel table-wrap table-wrap-wide">
+    <table class="table-compact field-diff-table">
+      <thead><tr><th class="col-date">业务日期</th><th class="col-batch">批次</th><th class="col-code">交易码</th><th class="col-service">服务码</th><th class="col-type">报文类型</th><th class="col-seq">流水号</th><th class="col-field-list">SOP字段名</th><th class="col-field-list">SOAP字段名</th><th class="col-field-list">BizJSON字段名</th><th class="col-field-cn">字段中文名</th><th class="col-count">字段数</th><th class="col-owner">责任人</th></tr></thead>
       <tbody>
       <tr th:each="row : ${result.rows()}">
-        <td th:text="${row.origCdate()}"></td>
-        <td th:text="${row.batchId()}"></td>
-        <td th:text="${row.tranCode()}"></td>
-        <td th:text="${row.serviceCode()}"></td>
-        <td th:text="${row.messageType()}"></td>
-        <td th:text="${row.tranSeqNo()}"></td>
-        <td th:text="${row.sopFieldName()}"></td>
-        <td th:text="${row.soapFieldName()}"></td>
-        <td th:text="${row.bizjsonFieldName()}"></td>
-        <td th:text="${row.fieldCnName()}"></td>
-        <td th:text="${row.fieldCount()}"></td>
-        <td th:text="${row.owner()}"></td>
-        <td><a class="btn" th:href="@{/samples/detail-fields/export(batchId=${row.batchId()},messageType=${row.messageType()},tranSeqNo=${row.tranSeqNo()})}">字段</a></td>
+        <td class="col-date" th:text="${row.origCdate()}"></td>
+        <td class="col-batch" th:text="${row.batchId()}" th:title="${row.batchId()}"></td>
+        <td class="col-code" th:text="${row.tranCode()}"></td>
+        <td class="col-service" th:text="${row.serviceCode()}" th:title="${row.serviceCode()}"></td>
+        <td class="col-type" th:text="${row.messageType()}"></td>
+        <td class="col-seq" th:text="${row.tranSeqNo()}" th:title="${row.tranSeqNo()}"></td>
+        <td class="col-field-list" th:text="${row.sopFieldName()}" th:title="${row.sopFieldName()}"></td>
+        <td class="col-field-list" th:text="${row.soapFieldName()}" th:title="${row.soapFieldName()}"></td>
+        <td class="col-field-list" th:text="${row.bizjsonFieldName()}" th:title="${row.bizjsonFieldName()}"></td>
+        <td class="col-field-cn" th:text="${row.fieldCnName()}" th:title="${row.fieldCnName()}"></td>
+        <td class="col-count" th:text="${row.fieldCount()}"></td>
+        <td class="col-owner" th:text="${row.owner()}"></td>
       </tr>
       </tbody>
     </table>

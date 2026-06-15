@@ -27,7 +27,7 @@ class SampleDetailTemplateTest {
     }
 
     @Test
-    void fieldDiffPageShowsMappedFieldNamesAndExportActions() throws IOException {
+    void fieldDiffPageShowsMappedFieldNamesAndSingleCombinedExportAction() throws IOException {
         String html = new String(
                 getClass().getResourceAsStream("/templates/samples/field-diffs.html").readAllBytes(),
                 StandardCharsets.UTF_8
@@ -35,8 +35,20 @@ class SampleDetailTemplateTest {
 
         assertThat(html).contains("字段级差异");
         assertThat(html).contains("/samples/field-diffs/export");
-        assertThat(html).contains("/samples/detail-fields/export");
-        assertThat(html).contains("<th>SOP字段名</th><th>SOAP字段名</th><th>BizJSON字段名</th><th>字段中文名</th>");
+        assertThat(html).doesNotContain("/samples/detail-fields/export");
+        assertThat(html).contains("table-wrap table-wrap-wide");
+        assertThat(html).contains("class=\"table-compact field-diff-table\"");
+        assertThat(html).contains("class=\"col-batch\"");
+        assertThat(html).contains("class=\"col-service\"");
+        assertThat(html).contains("class=\"col-field-list\"");
+        assertThat(html).contains("th:title=\"${row.sopFieldName()}\"");
+        assertThat(html).contains("th:title=\"${row.soapFieldName()}\"");
+        assertThat(html).contains("th:title=\"${row.bizjsonFieldName()}\"");
+        assertThat(html).contains("th:title=\"${row.fieldCnName()}\"");
+        assertThat(html).contains("SOP字段名");
+        assertThat(html).contains("SOAP字段名");
+        assertThat(html).contains("BizJSON字段名");
+        assertThat(html).contains("字段中文名");
         assertThat(html).doesNotContain("name=\"sampleType\"");
         assertThat(html).contains("row.sopFieldName()");
         assertThat(html).contains("row.soapFieldName()");

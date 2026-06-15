@@ -96,7 +96,7 @@ class ConfigImportServiceTest {
                 "S030030014FcyCollCrspBnkLkgQry", null, null);
 
         ConfigImportResult result = service.importWorkbook(workbook, "A825+loan+李四.xlsx",
-                "S030030014FcyCollCrspBnkLkgQry", null, null);
+                "S030030014FcyCollCrspBnkLkgQry", null, "李四");
 
         assertThat(result.tranUpdated()).isEqualTo(1);
         assertThat(result.fieldUpdated()).isEqualTo(4);
@@ -115,7 +115,7 @@ class ConfigImportServiceTest {
         ConfigImportBatchResult result = service.importWorkbooks(List.of(
                 new ConfigImportFile(first, "A825+comm+张三.xlsx"),
                 new ConfigImportFile(second, "A825+loan+李四.xlsx")
-        ), "S030030014FcyCollCrspBnkLkgQry", null, null);
+        ), "S030030014FcyCollCrspBnkLkgQry", null, "李四");
 
         assertThat(result.results()).hasSize(2);
         assertThat(result.tranInserted()).isEqualTo(1);
@@ -127,6 +127,58 @@ class ConfigImportServiceTest {
                 where tran_code = :tranCode and service_code = :serviceCode
                 """, params(), String.class);
         assertThat(owner).isEqualTo("李四");
+    }
+
+    @Test
+    void importsBlankServiceCodeFromServiceNameAndOperationNameAndKeepsBlankOwner() throws Exception {
+        Path workbook = writeWorkbook();
+
+        ConfigImportResult result = service.importWorkbook(workbook, "A825+comm+张三.xlsx",
+                "", null, "");
+
+        assertThat(result.tranInserted()).isEqualTo(1);
+        String owner = jdbc.queryForObject("""
+                select owner from ana_tran_catalog
+                where tran_code = :tranCode and service_code = :serviceCode
+                """, new MapSqlParameterSource()
+                .addValue("tranCode", "A825")
+                .addValue("serviceCode", "S030030014FcyCollCrspBnkLkgQry"), String.class);
+        assertThat(owner).isEqualTo("");
+    }
+
+    @Test
+    void importsAllTransactionsFromRestoredWorkbook() throws Exception {
+        ConfigImportBatchResult result = service.importWorkbooks(List.of(
+                new ConfigImportFile(Path.of("11_22_restored.xlsx"), "11_22_restored.xlsx")
+        ), "", "", "");
+
+        assertThat(result.results()).hasSize(3);
+        assertThat(result.tranInserted()).isEqualTo(3);
+        assertThat(result.fieldInserted()).isEqualTo(12);
+
+        List<String> tranCodes = jdbc.query("""
+                select tran_code from ana_tran_catalog order by tran_code
+                """, (rs, rowNum) -> rs.getString("tran_code"));
+        assertThat(tranCodes).containsExactly("A825", "A826", "A827");
+
+        List<String> serviceCodes = jdbc.query("""
+                select service_code from ana_tran_catalog order by tran_code
+                """, (rs, rowNum) -> rs.getString("service_code"));
+        assertThat(serviceCodes).containsExactly(
+                "S030030014FcyCollCrspBnkLkgQry",
+                "S030030015FcyCollCrspBnkLkgQry",
+                "S030030016FcyCollCrspBnkLkgQry"
+        );
+
+        Integer fieldCount = jdbc.queryForObject("""
+                select count(*) from ana_field_mapping
+                """, new MapSqlParameterSource(), Integer.class);
+        assertThat(fieldCount).isEqualTo(12);
+
+        List<String> owners = jdbc.query("""
+                select distinct owner from ana_tran_catalog
+                """, (rs, rowNum) -> rs.getString("owner"));
+        assertThat(owners).containsExactly("");
     }
 
     private MapSqlParameterSource params() {

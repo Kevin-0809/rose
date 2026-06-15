@@ -30,7 +30,6 @@
   </form>
 
   <form class="panel filters" method="get">
-    <input type="hidden" name="page" value="1">
     <div class="filter-grid">
       <div><label>批次号</label><input name="batchId" th:value="${criteria.batchId()}"></div>
       <div><label>业务日期</label><input name="origCdate" placeholder="20260608" maxlength="8" th:value="${criteria.origCdate()}"></div>
@@ -40,29 +39,24 @@
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>
 
-  <section class="panel table-wrap">
-    <table>
+  <section class="panel table-wrap command-table-wrap">
+    <table class="command-table">
       <thead>
       <tr>
-        <th>批次号</th><th>业务日期</th><th>状态</th>
-        <th>耗时</th><th>交易问题</th><th>响应码问题</th><th>字段差异流水</th><th>未配置服务</th><th>未映射字段</th><th>开始时间</th><th>结束时间</th><th>失败原因</th><th>操作</th>
+        <th class="col-batch">批次号</th><th class="col-date">业务日期</th><th class="col-status">状态</th>
+        <th class="col-duration">耗时</th><th class="col-time">开始时间</th><th class="col-time">结束时间</th><th class="col-error">失败原因</th><th class="col-actions">操作</th>
       </tr>
       </thead>
       <tbody>
       <tr th:each="row : ${result.rows()}">
-        <td th:text="${row.batchId()}"></td>
-        <td th:text="${row.origCdate()}"></td>
-        <td><span class="tag" th:classappend="${row.status() == 'COMPLETED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
-        <td th:text="${row.durationText()}"></td>
-        <td th:text="${row.tranIssueCount()}"></td>
-        <td th:text="${row.returnCodeIssueCount()}"></td>
-        <td th:text="${row.fieldDiffTranCount()}"></td>
-        <td th:text="${row.unconfiguredServiceCount()}"></td>
-        <td th:text="${row.unmappedFieldCount()}"></td>
-        <td th:text="${row.startedTime()}"></td>
-        <td th:text="${row.endedTime()}"></td>
-        <td th:text="${row.errorMessage()}"></td>
-        <td class="actions">
+        <td class="col-batch" th:title="${row.batchId()}"><span class="cell-clip" th:text="${row.batchId()}"></span></td>
+        <td class="col-date"><span class="cell-clip" th:text="${row.origCdate()}"></span></td>
+        <td class="col-status"><span class="tag" th:classappend="${row.status() == 'COMPLETED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
+        <td class="col-duration"><span class="cell-clip" th:text="${row.durationText()}"></span></td>
+        <td class="col-time" th:title="${row.startedTime()}"><span class="cell-clip" th:text="${row.startedTime()}"></span></td>
+        <td class="col-time" th:title="${row.endedTime()}"><span class="cell-clip" th:text="${row.endedTime()}"></span></td>
+        <td class="col-error" th:title="${row.errorMessage()}"><span class="cell-clip" th:text="${row.errorMessage()}"></span></td>
+        <td class="col-actions command-actions">
           <a class="btn" th:href="@{/samples/transaction-diffs(batchId=${row.batchId()})}">交易级</a>
           <a class="btn" th:href="@{/samples/field-diffs(batchId=${row.batchId()})}">字段级</a>
         </td>

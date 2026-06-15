@@ -6,6 +6,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,8 +24,8 @@ class ConfigWorkbookParserTest {
             assertThat(parsed.tran().tranCode()).isEqualTo("A825");
             assertThat(parsed.tran().serviceCode()).isEqualTo("S030030014FcyCollCrspBnkLkgQry");
             assertThat(parsed.tran().tranName()).isEqualTo("外币托收代理行联动查询");
-            assertThat(parsed.tran().moduleName()).isEqualTo("comm");
-            assertThat(parsed.tran().owner()).isEqualTo("张三");
+            assertThat(parsed.tran().moduleName()).isEqualTo("");
+            assertThat(parsed.tran().owner()).isEqualTo("");
 
             List<ParsedFieldImport> fields = parsed.fields();
             assertThat(fields).extracting(ParsedFieldImport::sopFieldName)
@@ -49,16 +50,49 @@ class ConfigWorkbookParserTest {
     }
 
     @Test
-    void acceptsHyphenSeparatedFilenameForModuleAndOwner() {
+    void ignoresFilenameForModuleAndUsesExplicitOwner() {
         try (Workbook workbook = a825Workbook()) {
             ParsedConfigImport parsed = parser.parse(workbook, "A825-loan-张伟.xlsx",
-                    "S030030014FcyCollCrspBnkLkgQry", null, null);
+                    "S030030014FcyCollCrspBnkLkgQry", null, "张伟");
 
-            assertThat(parsed.tran().moduleName()).isEqualTo("loan");
+            assertThat(parsed.tran().moduleName()).isEqualTo("");
             assertThat(parsed.tran().owner()).isEqualTo("张伟");
         } catch (Exception ex) {
             throw new AssertionError(ex);
         }
+    }
+
+    @Test
+    void derivesServiceCodeFromServiceNameAndOperationNameWhenServiceCodeIsBlank() throws Exception {
+        try (Workbook workbook = a825Workbook()) {
+            ParsedConfigImport parsed = parser.parse(workbook, "A825.xlsx", "", null, "");
+
+            assertThat(parsed.tran().serviceCode()).isEqualTo("S030030014FcyCollCrspBnkLkgQry");
+            assertThat(parsed.fields()).extracting(ParsedFieldImport::serviceCode)
+                    .containsOnly("S030030014FcyCollCrspBnkLkgQry");
+            assertThat(parsed.tran().owner()).isEqualTo("");
+        }
+    }
+
+    @Test
+    void parsesAllNonIndexSheetsFromRestoredWorkbook() throws Exception {
+        List<ParsedConfigImport> parsed = parser.parseAll(Path.of("11_22_restored.xlsx"),
+                "11_22_restored.xlsx", "", "", "");
+
+        assertThat(parsed).hasSize(3);
+        assertThat(parsed).extracting(item -> item.tran().tranCode())
+                .containsExactly("A825", "A826", "A827");
+        assertThat(parsed).extracting(item -> item.tran().serviceCode())
+                .containsExactly(
+                        "S030030014FcyCollCrspBnkLkgQry",
+                        "S030030015FcyCollCrspBnkLkgQry",
+                        "S030030016FcyCollCrspBnkLkgQry"
+                );
+        assertThat(parsed).allSatisfy(item -> {
+            assertThat(item.tran().moduleName()).isEqualTo("");
+            assertThat(item.tran().owner()).isEqualTo("");
+            assertThat(item.fields()).hasSize(4);
+        });
     }
 
     @Test

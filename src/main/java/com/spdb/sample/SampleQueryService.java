@@ -66,6 +66,19 @@ public class SampleQueryService {
                 query.params, handler);
     }
 
+    public void streamTransactionDiffExport(SampleSearchCriteria criteria, SampleDetailConsumer consumer) {
+        QueryParts query = detailWhere(criteria);
+        query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
+        RowCallbackHandler handler = rs -> consumer.accept(mapTransactionDiffRow(rs));
+        jdbc.query(transactionDiffExportSelect() + query.where + """
+                 group by d.batch_id, d.orig_cdate, d.sample_type, d.config_status,
+                          d.dest_trcd, d.service_code, d.message_type, d.tran_code,
+                          d.comp_result, d.tran_seq_no, d.owner
+                 order by max(d.sample_id) desc
+                 limit :exportLimit
+                """, query.params, handler);
+    }
+
     public PagedResult<SampleDetailFieldRow> detailFields(Long sampleId, PageRequestParams page) {
         QueryParts query = detailFieldWhere(new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), sampleId);
         query.params.addValue("limit", page.size()).addValue("offset", page.offset());
@@ -87,6 +100,16 @@ public class SampleQueryService {
         RowCallbackHandler handler = rs -> consumer.accept(mapDetailFieldRow(rs));
         jdbc.query(detailFieldSelect() + query.where + " order by sample_id desc, field_index, field_detail_id limit :exportLimit",
                 query.params, handler);
+    }
+
+    public void streamFieldDiffExport(SampleSearchCriteria criteria, SampleFieldDiffExportConsumer consumer) {
+        QueryParts query = fieldDiffExportWhere(criteria);
+        query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
+        RowCallbackHandler handler = rs -> consumer.accept(mapFieldDiffExportRow(rs));
+        jdbc.query(fieldDiffExportSelect() + query.where + """
+                 order by d.sample_id desc, f.field_index, f.field_detail_id
+                 limit :exportLimit
+                """, query.params, handler);
     }
 
     private List<SampleGroupRow> groupRows(QueryParts query, String order, PageRequestParams page) {
@@ -154,6 +177,40 @@ public class SampleQueryService {
                 """;
     }
 
+    private String transactionDiffExportSelect() {
+        return """
+                select
+                       max(d.sample_id) as sample_id,
+                       min(d.group_id) as group_id,
+                       d.batch_id,
+                       d.orig_cdate,
+                       d.sample_type,
+                       min(d.sample_seq_no) as sample_seq_no,
+                       d.config_status,
+                       d.dest_trcd,
+                       d.service_code,
+                       d.message_type,
+                       d.tran_code,
+                       d.comp_result,
+                       cast(null as varchar(200)) as sop_field_name,
+                       cast(null as varchar(200)) as soap_field_name,
+                       cast(null as varchar(200)) as bizjson_field_name,
+                       cast(null as varchar(200)) as field_cn_name,
+                       d.tran_seq_no,
+                       d.owner,
+                       count(distinct d.tran_seq_no) as affected_count,
+                       0 as field_count,
+                       string_agg(distinct d.orig_error_code, ',' order by d.orig_error_code) as orig_error_code,
+                       string_agg(distinct d.orig_error_desc, ',' order by d.orig_error_desc) as orig_error_desc,
+                       string_agg(distinct d.dest_error_code, ',' order by d.dest_error_code) as dest_error_code,
+                       string_agg(distinct d.dest_error_desc, ',' order by d.dest_error_desc) as dest_error_desc,
+                       cast(null as varchar(1000)) as reason,
+                       cast(null as varchar(64)) as source_table,
+                       d.tran_seq_no as source_pk
+                from ana_sample_detail d
+                """;
+    }
+
     private String detailFieldSelect() {
         return """
                 select
@@ -171,6 +228,49 @@ public class SampleQueryService {
                        f.mapping_status,
                        f.field_index
                 from ana_sample_detail_field f
+                """;
+    }
+
+    private String fieldDiffExportSelect() {
+        return """
+                select
+                       d.sample_id,
+                       f.field_detail_id,
+                       d.group_id,
+                       d.batch_id,
+                       d.orig_cdate,
+                       d.sample_type,
+                       d.sample_seq_no,
+                       d.config_status,
+                       d.dest_trcd,
+                       d.service_code,
+                       d.message_type,
+                       d.tran_code,
+                       d.comp_result,
+                       d.sop_field_name,
+                       d.soap_field_name,
+                       d.bizjson_field_name,
+                       d.field_cn_name,
+                       d.tran_seq_no,
+                       d.owner,
+                       d.affected_count,
+                       d.field_count,
+                       d.orig_error_code,
+                       d.orig_error_desc,
+                       d.dest_error_code,
+                       d.dest_error_desc,
+                       d.reason,
+                       d.source_table,
+                       d.source_pk,
+                       f.raw_field_name,
+                       f.std_field_name,
+                       f.field_cn_name as detail_field_cn_name,
+                       f.orig_field_value,
+                       f.dest_field_value,
+                       f.mapping_status,
+                       f.field_index
+                from ana_sample_detail d
+                join ana_sample_detail_field f on f.sample_id = d.sample_id
                 """;
     }
 
@@ -232,6 +332,10 @@ public class SampleQueryService {
         );
     }
 
+    private SampleDetailRow mapTransactionDiffRow(ResultSet rs) throws SQLException {
+        return mapDetailRow(rs);
+    }
+
     private SampleDetailFieldRow mapDetailFieldRow(ResultSet rs) throws SQLException {
         return new SampleDetailFieldRow(
                 rs.getLong("field_detail_id"),
@@ -243,6 +347,46 @@ public class SampleQueryService {
                 rs.getString("raw_field_name"),
                 rs.getString("std_field_name"),
                 rs.getString("field_cn_name"),
+                rs.getString("orig_field_value"),
+                rs.getString("dest_field_value"),
+                rs.getString("mapping_status"),
+                rs.getInt("field_index")
+        );
+    }
+
+    private SampleFieldDiffExportRow mapFieldDiffExportRow(ResultSet rs) throws SQLException {
+        return new SampleFieldDiffExportRow(
+                rs.getLong("sample_id"),
+                rs.getLong("field_detail_id"),
+                rs.getLong("group_id"),
+                rs.getString("batch_id"),
+                rs.getString("orig_cdate"),
+                rs.getString("sample_type"),
+                rs.getInt("sample_seq_no"),
+                rs.getString("config_status"),
+                rs.getString("dest_trcd"),
+                rs.getString("service_code"),
+                rs.getString("message_type"),
+                rs.getString("tran_code"),
+                rs.getString("comp_result"),
+                rs.getString("sop_field_name"),
+                rs.getString("soap_field_name"),
+                rs.getString("bizjson_field_name"),
+                rs.getString("field_cn_name"),
+                rs.getString("tran_seq_no"),
+                rs.getString("owner"),
+                rs.getLong("affected_count"),
+                rs.getInt("field_count"),
+                rs.getString("orig_error_code"),
+                rs.getString("orig_error_desc"),
+                rs.getString("dest_error_code"),
+                rs.getString("dest_error_desc"),
+                rs.getString("reason"),
+                rs.getString("source_table"),
+                rs.getString("source_pk"),
+                rs.getString("raw_field_name"),
+                rs.getString("std_field_name"),
+                rs.getString("detail_field_cn_name"),
                 rs.getString("orig_field_value"),
                 rs.getString("dest_field_value"),
                 rs.getString("mapping_status"),
@@ -372,6 +516,25 @@ public class SampleQueryService {
             addEquals(clauses, params, "f.mapping_status", "mappingStatus", c.mappingStatus());
             addLike(clauses, params, "f.std_field_name", "semanticFieldName", c.semanticFieldName());
             addLike(clauses, params, "f.mesg_seq", "tranSeqNo", c.tranSeqNo());
+        }
+        return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
+    }
+
+    private QueryParts fieldDiffExportWhere(SampleSearchCriteria c) {
+        List<String> clauses = new ArrayList<>();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (c != null) {
+            addEquals(clauses, params, "d.batch_id", "batchId", c.batchId());
+            addEquals(clauses, params, "d.orig_cdate", "origCdate", c.origCdate());
+            addEquals(clauses, params, "d.sample_type", "sampleType", c.sampleType());
+            addLike(clauses, params, "d.tran_code", "tranCode", c.tranCode());
+            addLike(clauses, params, "d.service_code", "serviceCode", c.serviceCode());
+            addEquals(clauses, params, "d.message_type", "messageType", c.messageType());
+            addEquals(clauses, params, "d.config_status", "configStatus", c.configStatus());
+            addEquals(clauses, params, "f.mapping_status", "mappingStatus", c.mappingStatus());
+            addLike(clauses, params, "f.std_field_name", "semanticFieldName", c.semanticFieldName());
+            addLike(clauses, params, "d.owner", "owner", c.owner());
+            addLike(clauses, params, "d.tran_seq_no", "tranSeqNo", c.tranSeqNo());
         }
         return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
     }

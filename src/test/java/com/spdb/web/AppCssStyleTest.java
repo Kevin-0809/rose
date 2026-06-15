@@ -27,6 +27,18 @@ class AppCssStyleTest {
         assertThat(css).contains("width: calc(31.5% + 265px)");
         assertThat(css).contains(".recording-branch-pulse");
         assertThat(css).contains("@keyframes recordingBranchFlow");
+        assertThat(css).contains(".table-wrap-wide");
+        assertThat(css).contains(".table-compact th,\n.table-compact td");
+        assertThat(css).contains("white-space: nowrap");
+        assertThat(css).contains("text-overflow: ellipsis");
+        assertThat(css).contains(".field-diff-table");
+        assertThat(css).contains("min-width: 2200px");
+        assertThat(css).contains(".col-field-list");
+        assertThat(css).contains(".command-table");
+        assertThat(css).contains("-webkit-line-clamp: 2");
+        assertThat(css).contains(".command-actions");
+        assertThat(css).contains(".command-actions .btn");
+        assertThat(css).contains("flex-wrap: nowrap");
         assertThat(css).doesNotContain(".record-track::before");
         assertThat(css).doesNotContain("radial-gradient");
         assertThat(css).doesNotContain("box-shadow: var(--shadow-card)");

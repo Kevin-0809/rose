@@ -25,9 +25,18 @@ public class ConfigWorkbookParser {
 
     public ParsedConfigImport parse(Path path, String originalFilename, String serviceCode,
                                     String moduleName, String owner) throws IOException {
+        List<ParsedConfigImport> parsed = parseAll(path, originalFilename, serviceCode, moduleName, owner);
+        if (parsed.isEmpty()) {
+            throw new IllegalArgumentException("未找到交易字段映射工作表");
+        }
+        return parsed.get(0);
+    }
+
+    public List<ParsedConfigImport> parseAll(Path path, String originalFilename, String serviceCode,
+                                             String moduleName, String owner) throws IOException {
         try (InputStream input = Files.newInputStream(path);
              Workbook workbook = WorkbookFactory.create(input)) {
-            return parse(workbook, originalFilename, serviceCode, moduleName, owner);
+            return parseAll(workbook, originalFilename, serviceCode, moduleName, owner);
         } catch (RuntimeException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -37,12 +46,29 @@ public class ConfigWorkbookParser {
 
     public ParsedConfigImport parse(Workbook workbook, String originalFilename, String serviceCode,
                                     String moduleName, String owner) {
-        FilenameParts filenameParts = parseFilename(originalFilename);
-        String resolvedModule = firstText(moduleName, filenameParts.moduleName());
-        String resolvedOwner = firstText(owner, filenameParts.owner());
-        String resolvedServiceCode = requireText(serviceCode, "服务码不能为空");
+        Sheet detailSheet = findDetailSheet(workbook);
+        return parseSheet(detailSheet, serviceCode, moduleName, owner);
+    }
 
-        Sheet detailSheet = findDetailSheet(workbook, filenameParts.tranCode());
+    public List<ParsedConfigImport> parseAll(Workbook workbook, String originalFilename, String serviceCode,
+                                             String moduleName, String owner) {
+        List<ParsedConfigImport> parsed = new ArrayList<>();
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (!"INDEX".equalsIgnoreCase(sheet.getSheetName())) {
+                parsed.add(parseSheet(sheet, serviceCode, moduleName, owner));
+            }
+        }
+        if (parsed.isEmpty()) {
+            throw new IllegalArgumentException("未找到交易字段映射工作表");
+        }
+        return parsed;
+    }
+
+    private ParsedConfigImport parseSheet(Sheet detailSheet, String serviceCode, String moduleName, String owner) {
+        String resolvedModule = textOrEmpty(moduleName);
+        String resolvedOwner = textOrEmpty(owner);
+        String resolvedServiceCode = requireText(firstText(serviceCode, deriveServiceCode(detailSheet)), "服务码不能为空");
         ParsedTranImport tran = parseTran(detailSheet, resolvedServiceCode, resolvedModule, resolvedOwner);
         List<ParsedFieldImport> fields = parseOutputFields(detailSheet, tran.tranCode(), resolvedServiceCode);
         return new ParsedConfigImport(tran, fields, List.of());
@@ -143,13 +169,39 @@ public class ConfigWorkbookParser {
         return String.join("; ", parts);
     }
 
-    private Sheet findDetailSheet(Workbook workbook, String preferredTranCode) {
-        if (StringUtils.hasText(preferredTranCode)) {
-            Sheet sheet = workbook.getSheet(preferredTranCode.trim());
-            if (sheet != null) {
-                return sheet;
-            }
+    private String deriveServiceCode(Sheet sheet) {
+        String serviceName = value(sheet, 0, 11);
+        String operationName = value(sheet, 1, 11);
+        String serviceNo = textInsideLastParentheses(serviceName);
+        String operationCode = textBeforeFirstParentheses(operationName);
+        if (StringUtils.hasText(serviceNo) && StringUtils.hasText(operationCode)) {
+            return serviceNo + operationCode;
         }
+        return sheet.getSheetName();
+    }
+
+    private String textInsideLastParentheses(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        int end = value.lastIndexOf(')');
+        int start = value.lastIndexOf('(', end);
+        if (start < 0 || end <= start) {
+            return null;
+        }
+        return value.substring(start + 1, end).trim();
+    }
+
+    private String textBeforeFirstParentheses(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        int start = value.indexOf('(');
+        String text = start >= 0 ? value.substring(0, start) : value;
+        return text.trim();
+    }
+
+    private Sheet findDetailSheet(Workbook workbook) {
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
             if (!"INDEX".equalsIgnoreCase(sheet.getSheetName())) {
@@ -167,28 +219,6 @@ public class ConfigWorkbookParser {
             }
         }
         return -1;
-    }
-
-    private FilenameParts parseFilename(String originalFilename) {
-        if (!StringUtils.hasText(originalFilename)) {
-            return new FilenameParts(null, null, null);
-        }
-        String name = originalFilename;
-        int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-        if (slash >= 0) {
-            name = name.substring(slash + 1);
-        }
-        int dot = name.lastIndexOf('.');
-        if (dot > 0) {
-            name = name.substring(0, dot);
-        }
-        for (String separator : List.of("\\+", "-", "_")) {
-            String[] parts = name.split(separator, 3);
-            if (parts.length == 3) {
-                return new FilenameParts(trimToNull(parts[0]), trimToNull(parts[1]), trimToNull(parts[2]));
-            }
-        }
-        return new FilenameParts(trimToNull(name), null, null);
     }
 
     private String value(Sheet sheet, int rowIndex, int colIndex) {
@@ -209,11 +239,11 @@ public class ConfigWorkbookParser {
     }
 
     private String firstText(String first, String second) {
-        return StringUtils.hasText(first) ? first.trim() : trimToNull(second);
+        return StringUtils.hasText(first) ? first.trim() : (StringUtils.hasText(second) ? second.trim() : null);
     }
 
-    private String trimToNull(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
+    private String textOrEmpty(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "";
     }
 
     private String joinRemark(String... parts) {
@@ -228,8 +258,5 @@ public class ConfigWorkbookParser {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private record FilenameParts(String tranCode, String moduleName, String owner) {
     }
 }

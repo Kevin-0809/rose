@@ -275,7 +275,7 @@ class SamplingBatchRunnerTest {
                 (mesg_seq, orig_cdate, dest_trcd, conv_index, conv_cindex, redo_index, field_index,
                  field_file_flag, orig_field_name, orig_field_value, dest_field_name, dest_field_value, comp_result)
                 values
-                ('11111111111', '20260611', 'S030030014FcyCollCrspBnkLkgQry&bizjson', 1, 1, null, 1, null, 'CurrencyId', '111', 'CurrencyId', '222', '0'),
+                ('11111111111', '20260611', 'S030030014FcyCollCrspBnkLkgQry&bizjson', 9, 9, null, 1, null, 'CurrencyId', '111', 'CurrencyId', '222', '0'),
                 ('11111111111', '20260611', 'S030030014FcyCollCrspBnkLkgQry&bizjson', 1, 1, null, 2, null, 'FcyCollCrspBnkLkg', 'A1/B1', 'FcyCollCrspBnkLkg', 'A/B', '0'),
                 ('11111111114', '20260611', 'S030030014FcyCollCrspBnkLkgQry&sop', 1, 1, null, 1, null, 'HUOBDH', '111', 'HUOBDH', '222', '0'),
                 ('11111111114', '20260611', 'S030030014FcyCollCrspBnkLkgQry&sop', 1, 1, null, 2, null, 'FAB251', 'A1/B1', 'FAB251', 'A/B', '0')

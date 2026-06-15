@@ -13,23 +13,16 @@
     <div>
       <div class="eyebrow">Config Import</div>
       <h1>交易配置导入</h1>
-      <p class="muted">上传交易 Excel，一次导入交易配置和响应输出字段映射。</p>
+      <p class="muted">上传交易 Excel，一次导入交易配置和响应输出字段映射。交易服务码为空时使用服务名称编号和服务操作名称拼接。</p>
     </div>
   </div>
 
   <div class="panel form-grid">
-    <form class="span-4 form-grid" method="post" action="/config/import/preview" enctype="multipart/form-data">
-      <div class="span-2"><label>Excel文件</label><input type="file" name="file" accept=".xlsx,.xls" multiple required></div>
-      <div><label>交易服务码</label><input name="serviceCode" th:value="${serviceCode}" required></div>
-      <div><label>领域</label><input name="moduleName" th:value="${moduleName}" placeholder="文件名中含领域时可不填"></div>
-      <div><label>负责人</label><input name="owner" th:value="${owner}" placeholder="文件名中含负责人时可不填"></div>
-      <div class="actions"><button class="btn primary" type="submit">预览</button></div>
-    </form>
     <form class="span-4 form-grid" method="post" action="/config/import/confirm" enctype="multipart/form-data">
       <div class="span-2"><label>Excel文件</label><input type="file" name="file" accept=".xlsx,.xls" multiple required></div>
-      <div><label>交易服务码</label><input name="serviceCode" th:value="${serviceCode}" required></div>
-      <div><label>领域</label><input name="moduleName" th:value="${moduleName}" placeholder="文件名中含领域时可不填"></div>
-      <div><label>负责人</label><input name="owner" th:value="${owner}" placeholder="文件名中含负责人时可不填"></div>
+      <div><label>交易服务码</label><input name="serviceCode" th:value="${serviceCode}" placeholder="为空时自动解析"></div>
+      <div><label>领域</label><input name="moduleName" th:value="${moduleName}" placeholder="不填则为空"></div>
+      <div><label>负责人</label><input name="owner" th:value="${owner}" placeholder="不填则为空"></div>
       <div class="actions"><button class="btn primary" type="submit">确认导入</button></div>
     </form>
   </div>
@@ -43,41 +36,6 @@
     <div class="card"><div class="label">交易更新</div><div class="value" th:text="${batchResult.tranUpdated()}">0</div></div>
     <div class="card"><div class="label">字段新增</div><div class="value" th:text="${batchResult.fieldInserted()}">0</div></div>
     <div class="card"><div class="label">字段更新</div><div class="value" th:text="${batchResult.fieldUpdated()}">0</div></div>
-  </section>
-
-  <section class="panel table-wrap" th:if="${previews}">
-    <table>
-      <thead><tr><th>交易码</th><th>服务码</th><th>交易名称</th><th>领域</th><th>负责人</th><th>备注</th></tr></thead>
-      <tbody>
-      <tr th:each="item : ${previews}">
-        <td th:text="${item.tran().tranCode()}"></td>
-        <td th:text="${item.tran().serviceCode()}"></td>
-        <td th:text="${item.tran().tranName()}"></td>
-        <td th:text="${item.tran().moduleName()}"></td>
-        <td th:text="${item.tran().owner()}"></td>
-        <td th:text="${item.tran().remark()}"></td>
-      </tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="panel table-wrap" th:if="${previews}">
-    <table>
-      <thead><tr><th>交易码</th><th>标准字段</th><th>中文名</th><th>SOP</th><th>SOAP</th><th>BizJSON</th><th>备注</th></tr></thead>
-      <tbody>
-      <th:block th:each="item : ${previews}">
-      <tr th:each="row : ${item.fields()}">
-        <td th:text="${item.tran().tranCode()}"></td>
-        <td th:text="${row.stdFieldName()}"></td>
-        <td th:text="${row.fieldCnName()}"></td>
-        <td th:text="${row.sopFieldName()}"></td>
-        <td th:text="${row.soapFieldName()}"></td>
-        <td th:text="${row.bizjsonFieldName()}"></td>
-        <td th:text="${row.remark()}"></td>
-      </tr>
-      </th:block>
-      </tbody>
-    </table>
   </section>
 </main>
 </body>

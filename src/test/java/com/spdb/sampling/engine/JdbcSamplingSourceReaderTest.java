@@ -79,6 +79,14 @@ class JdbcSamplingSourceReaderTest {
     }
 
     @Test
+    void sourceQueriesIgnoreConversationIndexes() {
+        assertThat(JdbcSamplingSourceReader.TRAN_FACT_SQL.toLowerCase()).doesNotContain("conv_index");
+        assertThat(JdbcSamplingSourceReader.TRAN_FACT_SQL.toLowerCase()).doesNotContain("conv_cindex");
+        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).doesNotContain("conv_index");
+        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).doesNotContain("conv_cindex");
+    }
+
+    @Test
     void dataSourceConstructorIsAutowiredForSpringComponentCreation() {
         String source = javaSource("JdbcSamplingSourceReader.java");
 

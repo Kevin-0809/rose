@@ -72,7 +72,7 @@ class IssueGrouperTest {
                 .toList());
         return IssueCandidate.fieldDiff(
                 "20260611",
-                new SourceKey(mesgSeq, 1, 1),
+                new SourceKey(mesgSeq),
                 "A825",
                 "外币托收代理行联动查询",
                 "loan",

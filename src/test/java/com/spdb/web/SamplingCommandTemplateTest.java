@@ -19,6 +19,12 @@ class SamplingCommandTemplateTest {
         assertThat(html).contains("业务日期");
         assertThat(html).contains("耗时");
         assertThat(html).contains("durationText()");
+        assertThat(html).contains("class=\"command-table\"");
+        assertThat(html).contains("class=\"col-batch\"");
+        assertThat(html).contains("class=\"col-error\"");
+        assertThat(html).contains("class=\"col-actions\"");
+        assertThat(html).contains("command-actions");
+        assertThat(html).contains("class=\"cell-clip\"");
         assertThat(html).doesNotContain("执行ID");
         assertThat(html).doesNotContain("jobExecutionId()");
         assertThat(html).doesNotContain("name=\"sampleType\"");
@@ -27,10 +33,15 @@ class SamplingCommandTemplateTest {
         assertThat(html).doesNotContain("name=\"partitionCount\"");
         assertThat(html).doesNotContain("分区数");
         assertThat(html).doesNotContain("orig_cdate");
-        assertThat(html).contains("交易问题");
-        assertThat(html).contains("响应码问题");
-        assertThat(html).contains("字段差异流水");
-        assertThat(html).contains("未配置服务");
-        assertThat(html).contains("未映射字段");
+        assertThat(html).doesNotContain("交易问题");
+        assertThat(html).doesNotContain("响应码问题");
+        assertThat(html).doesNotContain("字段差异流水");
+        assertThat(html).doesNotContain("未配置服务");
+        assertThat(html).doesNotContain("未映射字段");
+        assertThat(html).doesNotContain("tranIssueCount()");
+        assertThat(html).doesNotContain("returnCodeIssueCount()");
+        assertThat(html).doesNotContain("fieldDiffTranCount()");
+        assertThat(html).doesNotContain("unconfiguredServiceCount()");
+        assertThat(html).doesNotContain("unmappedFieldCount()");
     }
 }

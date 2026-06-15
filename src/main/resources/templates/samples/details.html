@@ -11,7 +11,6 @@
   <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
   <div class="page-head"><div><div class="eyebrow">Sample Details</div><h1>采样明细查询</h1></div></div>
   <form class="panel filters" method="get">
-    <input type="hidden" name="page" value="1">
     <div class="filter-grid">
       <div><label>批次</label><input name="batchId" th:value="${criteria.batchId()}"></div>
       <div><label>业务日期</label><input name="origCdate" th:value="${criteria.origCdate()}"></div>

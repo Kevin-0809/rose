@@ -74,6 +74,43 @@ class SampleQueryServiceTest {
         assertThat(fields)
                 .extracting(SampleDetailFieldRow::stdFieldName)
                 .containsExactly("currency_id", "link_info");
+
+        List<SampleFieldDiffExportRow> exportRows = new java.util.ArrayList<>();
+        service.streamFieldDiffExport(criteria, exportRows::add);
+        assertThat(exportRows).hasSize(1);
+        SampleFieldDiffExportRow exportRow = exportRows.get(0);
+        assertThat(exportRow.sampleId()).isEqualTo(101L);
+        assertThat(exportRow.fieldDetailId()).isEqualTo(1001L);
+        assertThat(exportRow.origCdate()).isEqualTo("20260611");
+        assertThat(exportRow.tranCode()).isEqualTo("A825");
+        assertThat(exportRow.serviceCode()).isEqualTo("S030030014FcyCollCrspBnkLkgQry");
+        assertThat(exportRow.tranSeqNo()).isEqualTo("11111111111");
+        assertThat(exportRow.sopFieldName()).isEqualTo("HUOBDH,FAB251");
+        assertThat(exportRow.soapFieldName()).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
+        assertThat(exportRow.rawFieldName()).isEqualTo("CurrencyId");
+        assertThat(exportRow.stdFieldName()).isEqualTo("currency_id");
+        assertThat(exportRow.origFieldValue()).isEqualTo("111");
+        assertThat(exportRow.destFieldValue()).isEqualTo("222");
+
+        SampleSearchCriteria unfilteredFieldCriteria = new SampleSearchCriteria(
+                "BATCH_A825",
+                "20260611",
+                "FIELD_DIFF",
+                "A825",
+                "S030030014FcyCollCrspBnkLkgQry",
+                "bizjson",
+                "CONFIGURED",
+                "MAPPED",
+                null,
+                null,
+                null
+        );
+        List<SampleFieldDiffExportRow> unfilteredExportRows = new java.util.ArrayList<>();
+        service.streamFieldDiffExport(unfilteredFieldCriteria, unfilteredExportRows::add);
+        assertThat(unfilteredExportRows).hasSize(2);
+        assertThat(unfilteredExportRows)
+                .extracting(SampleFieldDiffExportRow::rawFieldName)
+                .containsExactly("CurrencyId", "FcyCollCrspBnkLkg");
     }
 
     @Test
@@ -137,6 +174,35 @@ class SampleQueryServiceTest {
     }
 
     @Test
+    void streamTransactionDiffExportDeduplicatesRowsByTransaction() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:transaction_diff_export;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createSemanticSampleTables(jdbc);
+        seedDuplicateTransactionDiffRows(jdbc);
+        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
+
+        List<SampleDetailRow> rows = new java.util.ArrayList<>();
+        service.streamTransactionDiffExport(new SampleSearchCriteria(
+                "BATCH_TX", "20260611", "RETURN_CODE", null, null, null, null, null, null, null, null
+        ), rows::add);
+
+        assertThat(rows).hasSize(1);
+        SampleDetailRow row = rows.get(0);
+        assertThat(row.tranSeqNo()).isEqualTo("SEQ_DUP");
+        assertThat(row.tranCode()).isEqualTo("A825");
+        assertThat(row.compResult()).isEqualTo("8");
+        assertThat(row.origErrorCode()).isEqualTo("E1,E2");
+        assertThat(row.origErrorDesc()).isEqualTo("错误1,错误2");
+        assertThat(row.destErrorCode()).isEqualTo("C1,C2");
+        assertThat(row.destErrorDesc()).isEqualTo("错误A,错误B");
+        assertThat(row.affectedCount()).isEqualTo(1L);
+    }
+
+    @Test
     void streamDetailFieldsLimitsQueryToOneMillionRows() {
         NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
         SampleQueryService service = new SampleQueryService(jdbc);
@@ -146,6 +212,44 @@ class SampleQueryServiceTest {
 
         verify(jdbc).query(
                 org.mockito.ArgumentMatchers.contains("limit :exportLimit"),
+                org.mockito.ArgumentMatchers.<SqlParameterSource>argThat(params -> exportLimit(params) == 1_000_000),
+                any(RowCallbackHandler.class)
+        );
+    }
+
+    @Test
+    void streamFieldDiffExportUsesJoinedStreamingQueryAndLimitsToOneMillionRows() {
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        SampleQueryService service = new SampleQueryService(jdbc);
+
+        service.streamFieldDiffExport(emptyCriteria(), row -> {
+        });
+
+        verify(jdbc).query(
+                org.mockito.ArgumentMatchers.argThat(sql ->
+                        sql.contains("from ana_sample_detail d")
+                                && sql.contains("join ana_sample_detail_field f on f.sample_id = d.sample_id")
+                                && sql.contains("limit :exportLimit")
+                ),
+                org.mockito.ArgumentMatchers.<SqlParameterSource>argThat(params -> exportLimit(params) == 1_000_000),
+                any(RowCallbackHandler.class)
+        );
+    }
+
+    @Test
+    void streamTransactionDiffExportLimitsQueryToOneMillionRows() {
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        SampleQueryService service = new SampleQueryService(jdbc);
+
+        service.streamTransactionDiffExport(emptyCriteria(), row -> {
+        });
+
+        verify(jdbc).query(
+                org.mockito.ArgumentMatchers.argThat(sql ->
+                        sql.contains("from ana_sample_detail d")
+                                && sql.contains("group by d.batch_id")
+                                && sql.contains("limit :exportLimit")
+                ),
                 org.mockito.ArgumentMatchers.<SqlParameterSource>argThat(params -> exportLimit(params) == 1_000_000),
                 any(RowCallbackHandler.class)
         );
@@ -254,6 +358,27 @@ class SampleQueryServiceTest {
                      'CurrencyId', 'currency_id', '币种', '111', '222', 'MAPPED', 1),
                     (1002, 101, 11, 'BATCH_A825', '11111111111', 'bizjson',
                      'FcyCollCrspBnkLkg', 'link_info', '联动信息', 'A1/B1', 'A/B', 'MAPPED', 2)
+                """);
+    }
+
+    private void seedDuplicateTransactionDiffRows(JdbcTemplate jdbc) {
+        jdbc.update("""
+                insert into ana_sample_detail (
+                    sample_id, group_id, batch_id, orig_cdate, sample_type, sample_seq_no,
+                    config_status, dest_trcd, service_code, message_type, tran_code,
+                    comp_result, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
+                    tran_seq_no, owner, affected_count, field_count,
+                    orig_error_code, orig_error_desc, dest_error_code, dest_error_desc,
+                    reason, source_table, source_pk
+                ) values
+                    (201, 21, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
+                     'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
+                     null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
+                     'E1', '错误1', 'C1', '错误A', '响应码不一致', 'tss_retcode_comp', 'SEQ_DUP'),
+                    (202, 22, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
+                     'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
+                     null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
+                     'E2', '错误2', 'C2', '错误B', '响应码不一致', 'tss_retcode_comp', 'SEQ_DUP')
                 """);
     }
 

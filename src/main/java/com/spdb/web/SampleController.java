@@ -64,7 +64,7 @@ public class SampleController {
                 null, owner, tranSeqNo
         );
         prepareExcel(response, "交易级差异.xlsx");
-        sampleExcelExportService.streamDetails(sampleQueryService, criteria, response.getOutputStream());
+        sampleExcelExportService.streamTransactionDiffExport(sampleQueryService, criteria, response.getOutputStream());
     }
 
     @GetMapping("/samples/field-diffs")
@@ -109,7 +109,7 @@ public class SampleController {
                 semanticFieldName, owner, tranSeqNo
         );
         prepareExcel(response, "字段级差异.xlsx");
-        sampleExcelExportService.streamDetails(sampleQueryService, criteria, response.getOutputStream());
+        sampleExcelExportService.streamFieldDiffExport(sampleQueryService, criteria, response.getOutputStream());
     }
 
     @GetMapping("/samples/groups")

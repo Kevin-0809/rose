@@ -73,7 +73,7 @@ public class SamplingBatchRunner {
         });
 
         sourceReader.readReturnCodes(origCdate, diff -> {
-            TranFact fact = tranFacts.get(new SourceKey(diff.mesgSeq(), 1, 1));
+            TranFact fact = tranFacts.get(new SourceKey(diff.mesgSeq()));
             if (fact != null) {
                 candidates.add(returnCodeCandidate(fact, diff));
                 summary.returnCodeIssueCount++;

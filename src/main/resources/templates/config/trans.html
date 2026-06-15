@@ -23,7 +23,6 @@
     <div class="actions"><button class="btn primary" type="submit">保存</button><a class="btn" href="/config/trans">新增</a></div>
   </form>
   <form class="panel filters" method="get">
-    <input type="hidden" name="page" value="1">
     <div class="filter-grid">
       <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div>
       <div><label>服务码</label><input name="serviceCode" th:value="${criteria.serviceCode()}"></div>

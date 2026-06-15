@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>报文查询</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Message Flow Logs</div>
+      <h1>报文查询</h1>
+      <p class="muted">根据流水号查询交易请求和响应报文。</p>
+    </div>
+  </div>
+
+  <form class="panel filters" method="get" action="/messages/flow-logs">
+    <div class="filter-grid">
+      <div class="span-2">
+        <label>流水号</label>
+        <input name="query" th:value="${query}" placeholder="支持 trans_id 或 source_ip+trans_id">
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">查询</button>
+        <a class="btn" href="/messages/flow-logs">重置</a>
+      </div>
+    </div>
+    <p class="muted" th:if="${transId}" th:text="'实际查询流水号：' + ${transId}"></p>
+  </form>
+
+  <section class="panel table-wrap" th:if="${rows != null and !rows.isEmpty()}">
+    <table>
+      <thead>
+      <tr>
+        <th>来源IP</th><th>流水号</th><th>交易码</th><th>请求时间</th><th>响应时间</th>
+        <th>请求类型</th><th>响应类型</th><th>全局流水</th><th>柜员号</th><th>返回码</th><th>返回信息</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr th:each="row : ${rows}">
+        <td th:text="${row.sourceIp()}"></td>
+        <td th:text="${row.transId()}"></td>
+        <td th:text="${row.txnCode()}"></td>
+        <td th:text="${row.txnTime()}"></td>
+        <td th:text="${row.responseTime()}"></td>
+        <td th:text="${row.requestMessageType()}"></td>
+        <td th:text="${row.responseMessageType()}"></td>
+        <td th:text="${row.globalSeqNo()}"></td>
+        <td th:text="${row.tranTellerNo()}"></td>
+        <td th:text="${row.returnCode()}"></td>
+        <td th:text="${row.returnMsg()}"></td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="message-log-list" th:if="${rows != null and !rows.isEmpty()}">
+    <article class="message-log-item" th:each="row : ${rows}">
+      <div class="section-title">
+        <div>
+          <div class="eyebrow" th:text="${row.sourceIp()}">source</div>
+          <h2 th:text="${row.transId()}">transId</h2>
+        </div>
+        <span class="tag" th:text="${row.txnCode()}">txn</span>
+      </div>
+      <div class="message-panes">
+        <div class="message-pane">
+          <div class="message-pane-head">
+            <strong>请求报文</strong>
+            <span th:text="${row.requestMessageType()}"></span>
+            <button class="btn small" type="button" data-format-message>格式化</button>
+          </div>
+          <pre th:text="${row.requestMessage()}"></pre>
+        </div>
+        <div class="message-pane">
+          <div class="message-pane-head">
+            <strong>响应报文</strong>
+            <span th:text="${row.responseMessageType()}"></span>
+            <button class="btn small" type="button" data-format-message>格式化</button>
+          </div>
+          <pre th:text="${row.responseMessage()}"></pre>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="panel" th:if="${query != null and #strings.length(query) > 0 and (rows == null or rows.isEmpty())}">
+    <p class="muted">未查询到请求或响应报文。</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[data-format-message]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var pane = button.closest('.message-pane');
+      var message = pane ? pane.querySelector('pre') : null;
+      if (!message) {
+        return;
+      }
+      message.textContent = formatMessage(message.textContent);
+    });
+  });
+
+  function formatMessage(value) {
+    var text = value.trim();
+    if (!text) {
+      return value;
+    }
+    return formatJson(text) || formatXml(text) || value;
+  }
+
+  function formatJson(text) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function formatXml(text) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) {
+      return '';
+    }
+    var serialized = new XMLSerializer().serializeToString(doc);
+    return serialized
+      .replace(/>\s*</g, '>\n<')
+      .split('\n')
+      .reduce(function (lines, line) {
+        var trimmed = line.trim();
+        if (!trimmed) {
+          return lines;
+        }
+        if (trimmed.match(/^<\/[^>]+>$/)) {
+          lines.level = Math.max(lines.level - 1, 0);
+        }
+        lines.output.push('  '.repeat(lines.level) + trimmed);
+        if (trimmed.match(/^<[^!?/][^>]*[^/]?>$/) && !trimmed.match(/^<([^>\s]+)[^>]*>.*<\/\1>$/)) {
+          lines.level += 1;
+        }
+        return lines;
+      }, { output: [], level: 0 })
+      .output
+      .join('\n');
+  }
+</script>
+</body>
+</html>

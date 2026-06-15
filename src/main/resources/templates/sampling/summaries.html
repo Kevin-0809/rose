@@ -28,7 +28,6 @@
   </section>
 
   <form class="panel filters" method="get">
-    <input type="hidden" name="page" value="1">
     <div class="filter-grid">
       <div><label>批次号</label><input name="batchId" th:value="${criteria.batchId()}"></div>
       <div><label>业务日期</label><input name="origCdate" placeholder="20260608" maxlength="8" th:value="${criteria.origCdate()}"></div>

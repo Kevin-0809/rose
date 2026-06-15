@@ -40,6 +40,19 @@ class SampleControllerExportTest {
     }
 
     @Test
+    void transactionDiffExportStreamsDedicatedTransactionRows() throws Exception {
+        SampleQueryService queryService = mock(SampleQueryService.class);
+        SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
+        SampleController controller = new SampleController(queryService, excelExportService);
+
+        controller.exportTransactionDiffs(null, null, null, null, null, null, null, null, new MockHttpServletResponse());
+
+        verify(excelExportService).streamTransactionDiffExport(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
+        verify(excelExportService, never()).streamDetails(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
+        verify(queryService, never()).exportDetails(any());
+    }
+
+    @Test
     void detailFieldExportStreamsRowsToResponseWithoutBuildingListFirst() throws Exception {
         SampleQueryService queryService = mock(SampleQueryService.class);
         SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
@@ -48,6 +61,19 @@ class SampleControllerExportTest {
         controller.exportDetailFields(null, null, null, null, null, null, new MockHttpServletResponse());
 
         verify(excelExportService).streamDetailFields(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
+        verify(queryService, never()).exportDetailFields(any());
+    }
+
+    @Test
+    void fieldDiffExportStreamsCombinedRowsToResponseWithoutBuildingListFirst() throws Exception {
+        SampleQueryService queryService = mock(SampleQueryService.class);
+        SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
+        SampleController controller = new SampleController(queryService, excelExportService);
+
+        controller.exportFieldDiffs(null, null, null, null, null, null, null, null, null, null, new MockHttpServletResponse());
+
+        verify(excelExportService).streamFieldDiffExport(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
+        verify(queryService, never()).exportDetails(any());
         verify(queryService, never()).exportDetailFields(any());
     }
 }

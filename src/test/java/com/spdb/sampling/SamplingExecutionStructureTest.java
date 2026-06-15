@@ -124,6 +124,21 @@ class SamplingExecutionStructureTest {
     }
 
     @Test
+    void samplingKeysIgnoreConversationIndexes() throws IOException {
+        String sourceKey = engineSource("SourceKey.java");
+        String sourceReader = engineSource("JdbcSamplingSourceReader.java").toLowerCase();
+        String referenceSql = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Path.of("docs/sampling-batch-logic.sql")
+        ), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(sourceKey).contains("record SourceKey(String mesgSeq)");
+        assertThat(sourceReader).doesNotContain("conv_index");
+        assertThat(sourceReader).doesNotContain("conv_cindex");
+        assertThat(referenceSql).doesNotContain("conv_index");
+        assertThat(referenceSql).doesNotContain("conv_cindex");
+    }
+
+    @Test
     void samplingServiceDoesNotRefreshDatabaseStatsForTemporaryJoins() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 

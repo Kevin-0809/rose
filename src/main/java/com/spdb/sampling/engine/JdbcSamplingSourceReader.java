@@ -15,10 +15,10 @@ import java.util.function.Consumer;
 @Component
 public class JdbcSamplingSourceReader implements SamplingSourceReader {
     public static final String TRAN_FACT_SQL = """
-            select mesg_seq, orig_cdate, conv_index, conv_cindex, dest_trcd, comp_result
+            select mesg_seq, orig_cdate, dest_trcd, comp_result
             from tss_tran_comp
             where orig_cdate = ?
-            order by mesg_seq, conv_index, conv_cindex
+            order by mesg_seq
             """;
 
     public static final String RETURN_CODE_SQL = """
@@ -30,12 +30,12 @@ public class JdbcSamplingSourceReader implements SamplingSourceReader {
             """;
 
     public static final String FIELD_DIFF_SQL = """
-            select mesg_seq, orig_cdate, dest_trcd, conv_index, conv_cindex, field_index,
+            select mesg_seq, orig_cdate, dest_trcd, field_index,
                    orig_field_name, orig_field_value, dest_field_name, dest_field_value
             from tss_field_comp
             where orig_cdate = ?
               and comp_result = '0'
-            order by mesg_seq, conv_index, conv_cindex, field_index
+            order by mesg_seq, field_index
             """;
 
     private final JdbcTemplate jdbc;
@@ -56,7 +56,7 @@ public class JdbcSamplingSourceReader implements SamplingSourceReader {
         stream(TRAN_FACT_SQL, origCdate, rs -> {
             ServiceParts parts = splitDestTrcd(rs.getString("dest_trcd"));
             consumer.accept(new TranFact(
-                    new SourceKey(rs.getString("mesg_seq"), rs.getInt("conv_index"), rs.getInt("conv_cindex")),
+                    new SourceKey(rs.getString("mesg_seq")),
                     rs.getString("orig_cdate"),
                     rs.getString("dest_trcd"),
                     parts.serviceCode(),
@@ -94,7 +94,7 @@ public class JdbcSamplingSourceReader implements SamplingSourceReader {
         stream(FIELD_DIFF_SQL, origCdate, rs -> {
             ServiceParts parts = splitDestTrcd(rs.getString("dest_trcd"));
             consumer.accept(new FieldDiff(
-                    new SourceKey(rs.getString("mesg_seq"), rs.getInt("conv_index"), rs.getInt("conv_cindex")),
+                    new SourceKey(rs.getString("mesg_seq")),
                     rs.getString("orig_cdate"),
                     rs.getString("dest_trcd"),
                     parts.serviceCode(),

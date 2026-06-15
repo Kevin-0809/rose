@@ -51,14 +51,16 @@ public class ConfigImportService {
         int fieldUpdated = 0;
         int fieldSkipped = 0;
         for (ConfigImportFile file : files) {
-            ParsedConfigImport parsed = parser.parse(file.path(), file.originalFilename(), serviceCode, moduleName, owner);
-            ConfigImportResult result = importParsed(parsed);
-            results.add(result);
-            tranInserted += result.tranInserted();
-            tranUpdated += result.tranUpdated();
-            fieldInserted += result.fieldInserted();
-            fieldUpdated += result.fieldUpdated();
-            fieldSkipped += result.fieldSkipped();
+            List<ParsedConfigImport> parsedImports = parser.parseAll(file.path(), file.originalFilename(), serviceCode, moduleName, owner);
+            for (ParsedConfigImport parsed : parsedImports) {
+                ConfigImportResult result = importParsed(parsed);
+                results.add(result);
+                tranInserted += result.tranInserted();
+                tranUpdated += result.tranUpdated();
+                fieldInserted += result.fieldInserted();
+                fieldUpdated += result.fieldUpdated();
+                fieldSkipped += result.fieldSkipped();
+            }
         }
         return new ConfigImportBatchResult(tranInserted, tranUpdated, fieldInserted, fieldUpdated, fieldSkipped, results);
     }

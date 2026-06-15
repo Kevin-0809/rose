@@ -11,6 +11,8 @@ public record PagedResult<T>(
         int[] allowedSizes
 ) {
     public static <T> PagedResult<T> of(List<T> rows, long total, PageRequestParams params) {
-        return new PagedResult<>(rows, total, params.page(), params.size(), params.totalPages(total), params.allowedSizes());
+        int totalPages = params.totalPages(total);
+        int displayPage = Math.min(params.page(), totalPages);
+        return new PagedResult<>(rows, total, displayPage, params.size(), totalPages, params.allowedSizes());
     }
 }

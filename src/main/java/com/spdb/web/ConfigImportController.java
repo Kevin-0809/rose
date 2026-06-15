@@ -2,9 +2,7 @@ package com.spdb.web;
 
 import com.spdb.config.ConfigImportBatchResult;
 import com.spdb.config.ConfigImportFile;
-import com.spdb.config.ConfigImportResult;
 import com.spdb.config.ConfigImportService;
-import com.spdb.config.ParsedConfigImport;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.StringUtils;
@@ -21,8 +19,6 @@ import java.util.List;
 
 @Controller
 public class ConfigImportController {
-    private static final String DEFAULT_SERVICE_CODE = "S030030014FcyCollCrspBnkLkgQry";
-
     private final ConfigImportService importService;
 
     public ConfigImportController(ConfigImportService importService) {
@@ -35,38 +31,9 @@ public class ConfigImportController {
         return "config/import";
     }
 
-    @PostMapping("/config/import/preview")
-    public String preview(@RequestParam("file") MultipartFile[] files,
-                          @RequestParam String serviceCode,
-                          @RequestParam(required = false) String moduleName,
-                          @RequestParam(required = false) String owner,
-                          Model model) throws IOException {
-        prepare(model);
-        model.addAttribute("serviceCode", serviceCode);
-        model.addAttribute("moduleName", moduleName);
-        model.addAttribute("owner", owner);
-        if (isEmpty(files)) {
-            model.addAttribute("errorMessage", "请选择Excel文件");
-            return "config/import";
-        }
-        List<ConfigImportFile> tempFiles = copyToTempFiles(files);
-        try {
-            List<ParsedConfigImport> previews = importService.previewWorkbooks(tempFiles, serviceCode, moduleName, owner);
-            model.addAttribute("previews", previews);
-            if (!previews.isEmpty()) {
-                model.addAttribute("preview", previews.get(0));
-            }
-        } catch (RuntimeException | IOException ex) {
-            model.addAttribute("errorMessage", ex.getMessage());
-        } finally {
-            deleteTempFiles(tempFiles);
-        }
-        return "config/import";
-    }
-
     @PostMapping("/config/import/confirm")
     public String confirm(@RequestParam("file") MultipartFile[] files,
-                          @RequestParam String serviceCode,
+                          @RequestParam(required = false) String serviceCode,
                           @RequestParam(required = false) String moduleName,
                           @RequestParam(required = false) String owner,
                           Model model) throws IOException {
@@ -81,12 +48,7 @@ public class ConfigImportController {
         List<ConfigImportFile> tempFiles = copyToTempFiles(files);
         try {
             ConfigImportBatchResult result = importService.importWorkbooks(tempFiles, serviceCode, moduleName, owner);
-            List<ParsedConfigImport> previews = result.results().stream().map(ConfigImportResult::parsed).toList();
             model.addAttribute("batchResult", result);
-            model.addAttribute("previews", previews);
-            if (!previews.isEmpty()) {
-                model.addAttribute("preview", previews.get(0));
-            }
         } catch (RuntimeException | IOException ex) {
             model.addAttribute("errorMessage", ex.getMessage());
         } finally {
@@ -97,9 +59,6 @@ public class ConfigImportController {
 
     private void prepare(Model model) {
         model.addAttribute("active", "configImport");
-        if (!model.containsAttribute("serviceCode")) {
-            model.addAttribute("serviceCode", DEFAULT_SERVICE_CODE);
-        }
     }
 
     private Path copyToTempFile(MultipartFile file) throws IOException {
