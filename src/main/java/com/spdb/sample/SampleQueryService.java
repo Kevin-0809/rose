@@ -52,6 +52,17 @@ public class SampleQueryService {
         return PagedResult.of(rows, total, page);
     }
 
+    public PagedResult<SampleDetailRow> transactionDiffs(SampleSearchCriteria criteria, PageRequestParams page) {
+        QueryParts query = transactionDiffWhere(criteria);
+        query.params.addValue("limit", page.size()).addValue("offset", page.offset());
+        List<SampleDetailRow> rows = jdbc.query(transactionDiffSelect() + query.where + transactionDiffGroupBy() + """
+                 order by max(d.sample_id) desc
+                 limit :limit offset :offset
+                """, query.params, (rs, i) -> mapTransactionDiffRow(rs));
+        long total = groupedCount(query, transactionDiffGroupBy());
+        return PagedResult.of(rows, total, page);
+    }
+
     public List<SampleDetailRow> exportDetails(SampleSearchCriteria criteria) {
         QueryParts query = detailWhere(criteria);
         query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
@@ -67,13 +78,10 @@ public class SampleQueryService {
     }
 
     public void streamTransactionDiffExport(SampleSearchCriteria criteria, SampleDetailConsumer consumer) {
-        QueryParts query = detailWhere(criteria);
+        QueryParts query = transactionDiffWhere(criteria);
         query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
         RowCallbackHandler handler = rs -> consumer.accept(mapTransactionDiffRow(rs));
-        jdbc.query(transactionDiffExportSelect() + query.where + """
-                 group by d.batch_id, d.orig_cdate, d.sample_type, d.config_status,
-                          d.dest_trcd, d.service_code, d.message_type, d.tran_code,
-                          d.comp_result, d.tran_seq_no, d.owner
+        jdbc.query(transactionDiffSelect() + query.where + transactionDiffGroupBy() + """
                  order by max(d.sample_id) desc
                  limit :exportLimit
                 """, query.params, handler);
@@ -177,7 +185,7 @@ public class SampleQueryService {
                 """;
     }
 
-    private String transactionDiffExportSelect() {
+    private String transactionDiffSelect() {
         return """
                 select
                        max(d.sample_id) as sample_id,
@@ -208,6 +216,14 @@ public class SampleQueryService {
                        cast(null as varchar(64)) as source_table,
                        d.tran_seq_no as source_pk
                 from ana_sample_detail d
+                """;
+    }
+
+    private String transactionDiffGroupBy() {
+        return """
+                 group by d.batch_id, d.orig_cdate, d.sample_type, d.config_status,
+                          d.dest_trcd, d.service_code, d.message_type, d.tran_code,
+                          d.comp_result, d.tran_seq_no, d.owner
                 """;
     }
 
@@ -495,12 +511,33 @@ public class SampleQueryService {
         return total == null ? 0 : total;
     }
 
+    private long groupedCount(QueryParts query, String groupBy) {
+        Long total = jdbc.queryForObject("select count(*) from (select 1 from ana_sample_detail d"
+                + query.where + groupBy + ") grouped_rows", query.params, Long.class);
+        return total == null ? 0 : total;
+    }
+
     private QueryParts groupWhere(SampleSearchCriteria c) {
         return where(c, false);
     }
 
     private QueryParts detailWhere(SampleSearchCriteria c) {
         return where(c, true);
+    }
+
+    private QueryParts transactionDiffWhere(SampleSearchCriteria c) {
+        QueryParts query = detailWhere(c);
+        List<String> clauses = new ArrayList<>();
+        if (StringUtils.hasText(query.where)) {
+            clauses.add(query.where.substring(" where ".length()));
+        }
+        clauses.add("""
+                (length(trim(coalesce(d.orig_error_code, ' '))) > 0
+                 or length(trim(coalesce(d.orig_error_desc, ' '))) > 0
+                 or length(trim(coalesce(d.dest_error_code, ' '))) > 0
+                 or length(trim(coalesce(d.dest_error_desc, ' '))) > 0)
+                """);
+        return new QueryParts(" where " + String.join(" and ", clauses), query.params);
     }
 
     private QueryParts detailFieldWhere(SampleSearchCriteria c, Long sampleId) {

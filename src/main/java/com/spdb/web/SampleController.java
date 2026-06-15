@@ -44,7 +44,7 @@ public class SampleController {
                 null, owner, tranSeqNo
         );
         model.addAttribute("criteria", criteria);
-        model.addAttribute("result", sampleQueryService.details(criteria, params));
+        model.addAttribute("result", sampleQueryService.transactionDiffs(criteria, params));
         model.addAttribute("active", "transaction-diffs");
         return "samples/transaction-diffs";
     }

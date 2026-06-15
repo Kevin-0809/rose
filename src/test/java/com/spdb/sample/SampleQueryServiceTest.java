@@ -203,6 +203,30 @@ class SampleQueryServiceTest {
     }
 
     @Test
+    void transactionDiffsDeduplicatePagedRowsByTransactionAndIgnoreBlankRetcodeRows() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:transaction_diff_page;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createSemanticSampleTables(jdbc);
+        seedDuplicateTransactionDiffRows(jdbc);
+        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
+
+        var result = service.transactionDiffs(new SampleSearchCriteria(
+                "BATCH_TX", "20260611", "RETURN_CODE", null, null, null, null, null, null, null, null
+        ), PageRequestParams.of(1, 20));
+
+        assertThat(result.total()).isEqualTo(1L);
+        assertThat(result.rows()).hasSize(1);
+        SampleDetailRow row = result.rows().get(0);
+        assertThat(row.tranSeqNo()).isEqualTo("SEQ_DUP");
+        assertThat(row.origErrorCode()).isEqualTo("E1,E2");
+        assertThat(row.destErrorCode()).isEqualTo("C1,C2");
+    }
+
+    @Test
     void streamDetailFieldsLimitsQueryToOneMillionRows() {
         NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
         SampleQueryService service = new SampleQueryService(jdbc);
@@ -378,7 +402,11 @@ class SampleQueryServiceTest {
                     (202, 22, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
                      'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
                      null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
-                     'E2', '错误2', 'C2', '错误B', '响应码不一致', 'tss_retcode_comp', 'SEQ_DUP')
+                     'E2', '错误2', 'C2', '错误B', '响应码不一致', 'tss_retcode_comp', 'SEQ_DUP'),
+                    (203, 23, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
+                     'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
+                     null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
+                     '', '', '', '', '空响应补充行', 'tss_retcode_comp', 'SEQ_DUP')
                 """);
     }
 
