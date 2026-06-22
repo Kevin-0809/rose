@@ -3,6 +3,7 @@ package com.spdb.message;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.ByteBuffer;
@@ -20,6 +21,53 @@ public class MessageFlowLogService {
 
     public MessageFlowLogService(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    @Transactional
+    public void saveEntry(MessageFlowLogEntryForm form) {
+        if (form == null || !form.hasRequiredRequestFields()) {
+            throw new IllegalArgumentException("sourceIp, transId, txnCode, txnTime, and requestMessage are required");
+        }
+        MapSqlParameterSource requestParams = new MapSqlParameterSource()
+                .addValue("sourceIp", form.cleanSourceIp())
+                .addValue("transId", form.cleanTransId())
+                .addValue("txnCode", form.cleanTxnCode())
+                .addValue("txnTime", form.txnTime())
+                .addValue("messageType", form.cleanMessageType())
+                .addValue("requestMessage", form.cleanRequestMessage().getBytes(StandardCharsets.UTF_8))
+                .addValue("globalSeqNo", form.cleanGlobalSeqNo())
+                .addValue("tranTellerNo", form.cleanTranTellerNo());
+        jdbc.update("""
+                insert into msg_flow_log_request (
+                    source_ip, trans_id, txn_code, txn_time, message_type,
+                    request_message, global_seq_no, tran_teller_no
+                ) values (
+                    :sourceIp, :transId, :txnCode, :txnTime, :messageType,
+                    :requestMessage, :globalSeqNo, :tranTellerNo
+                )
+                """, requestParams);
+
+        if (!form.hasResponseFields()) {
+            return;
+        }
+        MapSqlParameterSource responseParams = new MapSqlParameterSource()
+                .addValue("sourceIp", form.cleanSourceIp())
+                .addValue("transId", form.cleanTransId())
+                .addValue("txnCode", form.cleanTxnCode())
+                .addValue("responseTime", form.responseTime())
+                .addValue("messageType", form.cleanMessageType())
+                .addValue("responseMessage", bytesOrNull(form.cleanResponseMessage()))
+                .addValue("returnCode", form.cleanReturnCode())
+                .addValue("returnMsg", form.cleanReturnMsg());
+        jdbc.update("""
+                insert into msg_flow_log_response (
+                    source_ip, trans_id, txn_code, response_time, message_type,
+                    response_message, return_code, return_msg
+                ) values (
+                    :sourceIp, :transId, :txnCode, :responseTime, :messageType,
+                    :responseMessage, :returnCode, :returnMsg
+                )
+                """, responseParams);
     }
 
     public List<MessageFlowLogRow> search(String rawQuery) {
@@ -138,5 +186,9 @@ public class MessageFlowLogService {
             bytes[i / 2] = (byte) Integer.parseInt(text.substring(i, i + 2), 16);
         }
         return bytes;
+    }
+
+    private static byte[] bytesOrNull(String value) {
+        return value == null ? null : value.getBytes(StandardCharsets.UTF_8);
     }
 }

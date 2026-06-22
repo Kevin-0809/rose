@@ -7,12 +7,14 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MessageFlowLogServiceTest {
 
     private MessageFlowLogService service;
+    private NamedParameterJdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() {
@@ -21,7 +23,7 @@ class MessageFlowLogServiceTest {
                 "sa",
                 ""
         );
-        NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+        jdbc = new NamedParameterJdbcTemplate(dataSource);
         jdbc.getJdbcTemplate().execute("drop table if exists msg_flow_log_request");
         jdbc.getJdbcTemplate().execute("drop table if exists msg_flow_log_response");
         jdbc.getJdbcTemplate().execute("""
@@ -130,5 +132,81 @@ class MessageFlowLogServiceTest {
     @Test
     void returnsEmptyRowsForBlankInput() {
         assertThat(service.search(" ")).isEmpty();
+    }
+
+    @Test
+    void savesRequestAndResponseRowsFromEntryForm() {
+        MessageFlowLogEntryForm form = new MessageFlowLogEntryForm(
+                " 10.10.1.20 ",
+                " 0200202606220001 ",
+                " PAY001 ",
+                "JSON",
+                1782090000000L,
+                " GLOBAL-1 ",
+                " TELLER009 ",
+                "{\"amount\":\"88.00\"}",
+                1782090000123L,
+                "000000",
+                "交易成功",
+                "{\"status\":\"OK\"}"
+        );
+
+        service.saveEntry(form);
+
+        Map<String, Object> request = jdbc.getJdbcTemplate().queryForMap(
+                "select * from msg_flow_log_request where trans_id = '0200202606220001'"
+        );
+        assertThat(request.get("source_ip")).isEqualTo("10.10.1.20");
+        assertThat(request.get("txn_code")).isEqualTo("PAY001");
+        assertThat(request.get("txn_time")).isEqualTo(1782090000000L);
+        assertThat(request.get("message_type")).isEqualTo("JSON");
+        assertThat(request.get("global_seq_no")).isEqualTo("GLOBAL-1");
+        assertThat(request.get("tran_teller_no")).isEqualTo("TELLER009");
+        assertThat(new String((byte[]) request.get("request_message"), StandardCharsets.UTF_8))
+                .isEqualTo("{\"amount\":\"88.00\"}");
+
+        Map<String, Object> response = jdbc.getJdbcTemplate().queryForMap(
+                "select * from msg_flow_log_response where trans_id = '0200202606220001'"
+        );
+        assertThat(response.get("source_ip")).isEqualTo("10.10.1.20");
+        assertThat(response.get("txn_code")).isEqualTo("PAY001");
+        assertThat(response.get("response_time")).isEqualTo(1782090000123L);
+        assertThat(response.get("message_type")).isEqualTo("JSON");
+        assertThat(response.get("return_code")).isEqualTo("000000");
+        assertThat(response.get("return_msg")).isEqualTo("交易成功");
+        assertThat(new String((byte[]) response.get("response_message"), StandardCharsets.UTF_8))
+                .isEqualTo("{\"status\":\"OK\"}");
+    }
+
+    @Test
+    void savesOnlyRequestWhenResponseFieldsAreBlank() {
+        MessageFlowLogEntryForm form = new MessageFlowLogEntryForm(
+                "10.10.1.21",
+                "0200202606220002",
+                "PAY002",
+                "JSON",
+                1782090100000L,
+                "",
+                "",
+                "{\"amount\":\"99.00\"}",
+                null,
+                "",
+                "",
+                ""
+        );
+
+        service.saveEntry(form);
+
+        Integer requestCount = jdbc.getJdbcTemplate().queryForObject(
+                "select count(*) from msg_flow_log_request where trans_id = '0200202606220002'",
+                Integer.class
+        );
+        Integer responseCount = jdbc.getJdbcTemplate().queryForObject(
+                "select count(*) from msg_flow_log_response where trans_id = '0200202606220002'",
+                Integer.class
+        );
+
+        assertThat(requestCount).isEqualTo(1);
+        assertThat(responseCount).isZero();
     }
 }
