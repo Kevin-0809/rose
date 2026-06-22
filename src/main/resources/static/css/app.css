@@ -718,6 +718,12 @@ textarea {
   flex-wrap: wrap;
 }
 
+.summary-actions {
+  grid-column: span 4;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .btn {
   border: 1px solid var(--border-strong);
   background: transparent;
@@ -983,6 +989,10 @@ tbody tr:hover {
   .message-panes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .summary-actions {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1011,6 +1021,11 @@ tbody tr:hover {
   .form-grid,
   .message-panes {
     grid-template-columns: 1fr;
+  }
+
+  .summary-actions {
+    flex-wrap: wrap;
+    white-space: normal;
   }
 
   .replay-flow-canvas {

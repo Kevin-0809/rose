@@ -38,6 +38,8 @@ class AppCssStyleTest {
         assertThat(css).contains("-webkit-line-clamp: 2");
         assertThat(css).contains(".command-actions");
         assertThat(css).contains(".command-actions .btn");
+        assertThat(css).contains(".summary-actions");
+        assertThat(css).contains("grid-column: span 4");
         assertThat(css).contains("flex-wrap: nowrap");
         assertThat(css).doesNotContain(".record-track::before");
         assertThat(css).doesNotContain("radial-gradient");

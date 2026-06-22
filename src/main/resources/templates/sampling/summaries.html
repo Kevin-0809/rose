@@ -31,7 +31,11 @@
     <div class="filter-grid">
       <div><label>批次号</label><input name="batchId" th:value="${criteria.batchId()}"></div>
       <div><label>业务日期</label><input name="origCdate" placeholder="20260608" maxlength="8" th:value="${criteria.origCdate()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/sampling/summaries">重置</a></div>
+      <div class="actions summary-actions">
+        <button class="btn primary" type="submit">查询</button>
+        <button class="btn" type="submit" formaction="/sampling/summaries/report/export">导出汇总Excel</button>
+        <a class="btn" href="/sampling/summaries">重置</a>
+      </div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>

@@ -35,5 +35,9 @@ class SamplingSummaryTemplateTest {
         assertThat(html).contains("分组数");
         assertThat(html).contains("明细数");
         assertThat(html).contains("pager");
+        assertThat(html).contains("/sampling/summaries/report/export");
+        assertThat(html).contains("summary-actions");
+        assertThat(html).contains("导出汇总Excel");
+        assertThat(html).doesNotContain("导出领导汇报Excel");
     }
 }

@@ -207,6 +207,38 @@ class SampleExcelExportServiceTest {
     }
 
     @Test
+    void streamsServiceReportWithCountsAndPercentColumnsForLeadership() throws Exception {
+        SampleExcelExportService service = new SampleExcelExportService();
+        SampleQueryService queryService = mock(SampleQueryService.class);
+        SamplingServiceReportRow row = new SamplingServiceReportRow(
+                "BATCH_RPT", "20260611", "A001", "S001", "交易一", "张三",
+                10L, 1L, 2L, 1L, 4L, 2L, 4L, 3L, 2L, 1L, 3L, 5L
+        );
+        doAnswer(invocation -> {
+            SamplingServiceReportConsumer consumer = invocation.getArgument(1);
+            consumer.accept(row);
+            return null;
+        }).when(queryService).streamServiceReport(any(), any());
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        service.streamServiceReport(queryService, new SamplingSummarySearchCriteria("BATCH_RPT", "20260611"), out);
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(out.toByteArray()))) {
+            Sheet sheet = workbook.getSheet("服务码汇报");
+            assertThat(sheet).isNotNull();
+            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("采样服务码维度汇报");
+            Row header = sheet.getRow(1);
+            assertThat(rowText(header)).contains("服务码", "发起交易数", "通过率", "响应码问题占比", "问题字段数");
+            assertThat(sheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("S001");
+            assertThat(sheet.getRow(2).getCell(6).getNumericCellValue()).isEqualTo(10);
+            assertThat(sheet.getRow(2).getCell(8).getNumericCellValue()).isEqualTo(0.4d);
+            assertThat(sheet.getRow(2).getCell(20).getNumericCellValue()).isEqualTo(0.2d);
+            assertThat(sheet.getRow(2).getCell(26).getNumericCellValue()).isEqualTo(5);
+            assertThat(sheet.getPaneInformation().isFreezePane()).isTrue();
+        }
+    }
+
+    @Test
     void exportsSampleGroupsWithStyledTitleAndCoreColumns() throws Exception {
         SampleExcelExportService service = new SampleExcelExportService();
         SampleGroupRow row = new SampleGroupRow(

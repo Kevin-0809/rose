@@ -292,6 +292,82 @@ class SampleQueryServiceTest {
         assertThat(source).doesNotContain("left join tss_retcode_comp r");
     }
 
+    @Test
+    void streamServiceReportAggregatesCountsByServiceCodeWithTotalAsRateDenominator() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:service_report;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createSemanticSampleTables(jdbc);
+        createServiceReportSourceTables(jdbc);
+        seedServiceReportRows(jdbc);
+        assertThat(jdbc.queryForObject("select count(*) from tss_tran_comp where orig_cdate = '20260611'", Long.class))
+                .isEqualTo(6L);
+        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
+
+        List<SamplingServiceReportRow> rows = new java.util.ArrayList<>();
+        service.streamServiceReport(new SamplingSummarySearchCriteria("BATCH_RPT", "20260611"), rows::add);
+
+        assertThat(rows).hasSize(2);
+        SamplingServiceReportRow s001 = rows.get(0);
+        assertThat(s001.batchId()).isEqualTo("BATCH_RPT");
+        assertThat(s001.origCdate()).isEqualTo("20260611");
+        assertThat(s001.tranCode()).isEqualTo("A001");
+        assertThat(s001.serviceCode()).isEqualTo("S001");
+        assertThat(s001.tranName()).isEqualTo("交易一");
+        assertThat(s001.owner()).isEqualTo("张三");
+        assertThat(s001.totalTranCount()).isEqualTo(5L);
+        assertThat(s001.compResult1Count()).isEqualTo(1L);
+        assertThat(s001.compResult2Count()).isEqualTo(1L);
+        assertThat(s001.compResult3Count()).isEqualTo(1L);
+        assertThat(s001.compResult4Count()).isEqualTo(1L);
+        assertThat(s001.compResult8Count()).isEqualTo(1L);
+        assertThat(s001.passTranCount()).isEqualTo(1L);
+        assertThat(s001.tranIssueCount()).isEqualTo(2L);
+        assertThat(s001.returnCodeIssueCount()).isEqualTo(1L);
+        assertThat(s001.fieldDiffTranCount()).isEqualTo(1L);
+        assertThat(s001.fullyMatchedCount()).isEqualTo(0L);
+        assertThat(s001.issueFieldCount()).isEqualTo(2L);
+        assertThat(s001.rate(s001.returnCodeIssueCount())).isEqualTo(0.2d);
+
+        SamplingServiceReportRow s002 = rows.get(1);
+        assertThat(s002.serviceCode()).isEqualTo("S002");
+        assertThat(s002.totalTranCount()).isEqualTo(1L);
+        assertThat(s002.compResult4Count()).isEqualTo(1L);
+        assertThat(s002.fullyMatchedCount()).isEqualTo(1L);
+    }
+
+    @Test
+    void streamServiceReportUsesBatchBusinessDateWhenOnlyBatchIdIsProvided() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:service_report_batch_only;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createSemanticSampleTables(jdbc);
+        createServiceReportSourceTables(jdbc);
+        createSamplingSummaryTable(jdbc);
+        seedServiceReportRows(jdbc);
+        jdbc.update("insert into ana_sampling_summary (batch_id, orig_cdate) values ('BATCH_RPT', '20260611')");
+        jdbc.update("""
+                insert into tss_tran_comp (
+                    mesg_seq, orig_cdate, dest_trcd, comp_result
+                ) values ('SEQ_OTHER_DATE', '20260612', 'S999&bizjson', '4')
+                """);
+        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
+
+        List<SamplingServiceReportRow> rows = new java.util.ArrayList<>();
+        service.streamServiceReport(new SamplingSummarySearchCriteria("BATCH_RPT", null), rows::add);
+
+        assertThat(rows).hasSize(2);
+        assertThat(rows)
+                .extracting(SamplingServiceReportRow::serviceCode)
+                .containsExactly("S001", "S002");
+    }
+
     private int exportLimit(SqlParameterSource params) {
         assertThat(params.hasValue("exportLimit")).isTrue();
         return ((Number) params.getValue("exportLimit")).intValue();
@@ -337,6 +413,83 @@ class SampleQueryServiceTest {
                     field_cn_name varchar(200), orig_field_value varchar(2000),
                     dest_field_value varchar(2000), mapping_status varchar(32), field_index integer
                 )
+                """);
+    }
+
+    private void createServiceReportSourceTables(JdbcTemplate jdbc) {
+        jdbc.execute("""
+                create table tss_tran_comp (
+                    mesg_seq varchar(64) primary key,
+                    orig_cdate varchar(8),
+                    dest_trcd varchar(200),
+                    comp_result varchar(1)
+                )
+                """);
+        jdbc.execute("""
+                create table ana_tran_catalog (
+                    tran_code varchar(32),
+                    service_code varchar(200),
+                    tran_name varchar(200),
+                    module_name varchar(100),
+                    owner varchar(100)
+                )
+                """);
+    }
+
+    private void createSamplingSummaryTable(JdbcTemplate jdbc) {
+        jdbc.execute("""
+                create table ana_sampling_summary (
+                    batch_id varchar(64),
+                    orig_cdate varchar(8)
+                )
+                """);
+    }
+
+    private void seedServiceReportRows(JdbcTemplate jdbc) {
+        jdbc.update("""
+                insert into ana_tran_catalog (
+                    tran_code, service_code, tran_name, module_name, owner
+                ) values
+                    ('A001', 'S001', '交易一', 'M1', '张三'),
+                    ('A002', 'S002', '交易二', 'M2', '李四')
+                """);
+        jdbc.update("""
+                insert into tss_tran_comp (
+                    mesg_seq, orig_cdate, dest_trcd, comp_result
+                ) values
+                    ('SEQ1', '20260611', 'S001&bizjson', '1'),
+                    ('SEQ2', '20260611', 'S001&bizjson', '2'),
+                    ('SEQ3', '20260611', 'S001&bizjson', '3'),
+                    ('SEQ4', '20260611', 'S001&bizjson', '4'),
+                    ('SEQ5', '20260611', 'S001&bizjson', '8'),
+                    ('SEQ6', '20260611', 'S002&bizjson', '4')
+                """);
+        jdbc.update("""
+                insert into ana_sample_detail (
+                    sample_id, group_id, batch_id, orig_cdate, sample_type, sample_seq_no,
+                    config_status, dest_trcd, service_code, message_type, tran_code,
+                    comp_result, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
+                    tran_seq_no, owner, affected_count, field_count,
+                    orig_error_code, orig_error_desc, dest_error_code, dest_error_desc,
+                    reason, source_table, source_pk
+                ) values
+                    (301, 31, 'BATCH_RPT', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
+                     'S001&bizjson', 'S001', 'bizjson', 'A001', '8',
+                     null, null, null, null, 'SEQ5', '张三', 1, 0,
+                     'E1', '错误1', 'C1', '错误A', '响应码不一致', 'tss_retcode_comp', 'SEQ5'),
+                    (302, 32, 'BATCH_RPT', '20260611', 'FIELD_DIFF', 1, 'CONFIGURED',
+                     'S001&bizjson', 'S001', 'bizjson', 'A001', '4',
+                     'F1,F2', 'F1,F2', 'F1,F2', '字段1,字段2', 'SEQ4', '张三', 1, 2,
+                     null, null, null, null, '字段取值不一致', 'tss_field_comp', 'SEQ4')
+                """);
+        jdbc.update("""
+                insert into ana_sample_detail_field (
+                    field_detail_id, sample_id, group_id, batch_id, mesg_seq, message_type,
+                    raw_field_name, std_field_name, field_cn_name, orig_field_value,
+                    dest_field_value, mapping_status, field_index
+                ) values
+                    (3001, 302, 32, 'BATCH_RPT', 'SEQ4', 'bizjson', 'F1', 'f1', '字段1', '1', '2', 'MAPPED', 1),
+                    (3002, 302, 32, 'BATCH_RPT', 'SEQ4', 'bizjson', 'F2', 'f2', '字段2', 'A', 'B', 'MAPPED', 2)
                 """);
     }
 

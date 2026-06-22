@@ -120,6 +120,41 @@ public class SampleQueryService {
                 """, query.params, handler);
     }
 
+    public void streamServiceReport(SamplingSummarySearchCriteria criteria, SamplingServiceReportConsumer consumer) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        List<String> tranClauses = new ArrayList<>();
+        List<String> detailClauses = new ArrayList<>();
+        if (criteria != null) {
+            String effectiveOrigCdate = criteria.origCdate();
+            if (!StringUtils.hasText(effectiveOrigCdate) && StringUtils.hasText(criteria.batchId())) {
+                effectiveOrigCdate = origCdateForBatch(criteria.batchId().trim());
+            }
+            if (StringUtils.hasText(effectiveOrigCdate)) {
+                tranClauses.add("t.orig_cdate = :origCdate");
+                detailClauses.add("d.orig_cdate = :origCdate");
+                params.addValue("origCdate", effectiveOrigCdate.trim());
+            }
+            if (StringUtils.hasText(criteria.batchId())) {
+                detailClauses.add("d.batch_id = :batchId");
+                params.addValue("batchId", criteria.batchId().trim());
+            }
+        }
+        String tranWhere = tranClauses.isEmpty() ? "" : " where " + String.join(" and ", tranClauses);
+        String detailWhere = detailClauses.isEmpty() ? "" : " where " + String.join(" and ", detailClauses);
+        RowCallbackHandler handler = rs -> consumer.accept(mapServiceReportRow(rs));
+        jdbc.query(serviceReportSelect(tranWhere, detailWhere), params, handler);
+    }
+
+    private String origCdateForBatch(String batchId) {
+        List<String> rows = jdbc.query("""
+                select orig_cdate
+                from ana_sampling_summary
+                where batch_id = :batchId
+                limit 1
+                """, new MapSqlParameterSource().addValue("batchId", batchId), (rs, i) -> rs.getString("orig_cdate"));
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     private List<SampleGroupRow> groupRows(QueryParts query, String order, PageRequestParams page) {
         if (page != null) {
             query.params.addValue("limit", page.size()).addValue("offset", page.offset());
@@ -410,6 +445,29 @@ public class SampleQueryService {
         );
     }
 
+    private SamplingServiceReportRow mapServiceReportRow(ResultSet rs) throws SQLException {
+        return new SamplingServiceReportRow(
+                rs.getString("batch_id"),
+                rs.getString("orig_cdate"),
+                rs.getString("tran_code"),
+                rs.getString("service_code"),
+                rs.getString("tran_name"),
+                rs.getString("owner"),
+                rs.getLong("total_tran_count"),
+                rs.getLong("comp_result_1_count"),
+                rs.getLong("comp_result_2_count"),
+                rs.getLong("comp_result_3_count"),
+                rs.getLong("comp_result_4_count"),
+                rs.getLong("comp_result_8_count"),
+                rs.getLong("pass_tran_count"),
+                rs.getLong("tran_issue_count"),
+                rs.getLong("return_code_issue_count"),
+                rs.getLong("field_diff_tran_count"),
+                rs.getLong("fully_matched_count"),
+                rs.getLong("issue_field_count")
+        );
+    }
+
     public SummaryStats summary() {
         List<SummaryStats> rows = jdbc.query("""
                 select batch_id, orig_cdate, total_tran_count,
@@ -504,6 +562,72 @@ public class SampleQueryService {
         ));
         Collections.reverse(rows);
         return rows;
+    }
+
+    private String serviceReportSelect(String tranWhere, String detailWhere) {
+        return """
+                select
+                    coalesce(ds.batch_id, '') as batch_id,
+                    ts.orig_cdate,
+                    coalesce(ds.tran_code, c.tran_code) as tran_code,
+                    ts.service_code,
+                    c.tran_name,
+                    coalesce(ds.owner, c.owner) as owner,
+                    ts.total_tran_count,
+                    ts.comp_result_1_count,
+                    ts.comp_result_2_count,
+                    ts.comp_result_3_count,
+                    ts.comp_result_4_count,
+                    ts.comp_result_8_count,
+                    ts.pass_tran_count,
+                    ts.tran_issue_count,
+                    coalesce(ds.return_code_issue_count, 0) as return_code_issue_count,
+                    coalesce(ds.field_diff_tran_count, 0) as field_diff_tran_count,
+                    ts.comp_result_4_count - coalesce(ds.field_diff_tran_count, 0) as fully_matched_count,
+                    coalesce(ds.issue_field_count, 0) as issue_field_count
+                from (
+                    select
+                        orig_cdate,
+                        service_code,
+                        count(*) as total_tran_count,
+                        sum(case when comp_result = '1' then 1 else 0 end) as comp_result_1_count,
+                        sum(case when comp_result = '2' then 1 else 0 end) as comp_result_2_count,
+                        sum(case when comp_result = '3' then 1 else 0 end) as comp_result_3_count,
+                        sum(case when comp_result = '4' then 1 else 0 end) as comp_result_4_count,
+                        sum(case when comp_result = '8' then 1 else 0 end) as comp_result_8_count,
+                        sum(case when comp_result = '4' then 1 else 0 end) as pass_tran_count,
+                        sum(case when comp_result in ('1', '2') then 1 else 0 end) as tran_issue_count
+                    from (
+                        select
+                            t.orig_cdate,
+                            case
+                                when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                                else t.dest_trcd
+                            end as service_code,
+                            t.comp_result
+                        from tss_tran_comp t
+                """ + tranWhere + """
+                    ) tran_base
+                    group by orig_cdate, service_code
+                ) ts
+                left join (
+                    select
+                        max(d.batch_id) as batch_id,
+                        d.orig_cdate,
+                        d.service_code,
+                        min(d.tran_code) as tran_code,
+                        min(d.owner) as owner,
+                        count(distinct case when d.sample_type = 'RETURN_CODE' then d.tran_seq_no end) as return_code_issue_count,
+                        count(distinct case when d.sample_type = 'FIELD_DIFF' then d.tran_seq_no end) as field_diff_tran_count,
+                        count(f.field_detail_id) as issue_field_count
+                    from ana_sample_detail d
+                    left join ana_sample_detail_field f on f.sample_id = d.sample_id
+                """ + detailWhere + """
+                    group by d.orig_cdate, d.service_code
+                ) ds on ds.orig_cdate = ts.orig_cdate and ds.service_code = ts.service_code
+                left join ana_tran_catalog c on c.service_code = ts.service_code
+                order by ts.total_tran_count desc, ts.service_code
+                """;
     }
 
     private long count(String table, QueryParts query) {

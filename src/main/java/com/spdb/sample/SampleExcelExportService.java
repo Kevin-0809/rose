@@ -57,6 +57,23 @@ public class SampleExcelExportService {
             12, 16, 16, 12, 28, 12, 24, 24, 24, 28, 18, 10, 14,
             24, 18, 28, 28, 16, 10, 12, 18, 14
     };
+    private static final String[] SERVICE_REPORT_HEADERS = {
+            "业务日期", "批次", "交易码", "服务码", "交易名称", "责任人",
+            "发起交易数", "通过交易数", "通过率",
+            "原失败新成功数", "原失败新成功占比",
+            "原成功新失败数", "原成功新失败占比",
+            "都失败数", "都失败占比",
+            "都成功数", "都成功占比",
+            "响应码不一致数", "响应码不一致占比",
+            "响应码问题数", "响应码问题占比",
+            "交易问题数", "交易问题占比",
+            "字段差异流水数", "字段差异流水占比",
+            "完全匹配数", "问题字段数"
+    };
+    private static final int[] SERVICE_REPORT_WIDTHS = {
+            12, 22, 12, 28, 24, 14,
+            12, 12, 12, 16, 16, 16, 16, 12, 12, 12, 12, 16, 16, 16, 16, 12, 12, 18, 18, 12, 12
+    };
 
     public byte[] exportGroups(List<SampleGroupRow> rows) {
         return workbookToBytes("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, (sheet, styles) -> {
@@ -117,6 +134,13 @@ public class SampleExcelExportService {
         workbookToStream("字段级差异明细", "字段级差异合并导出", FIELD_DIFF_EXPORT_HEADERS, FIELD_DIFF_EXPORT_WIDTHS, outputStream, (sheet, styles) -> {
             int[] rowIndex = {2};
             queryService.streamFieldDiffExport(criteria, row -> writeFieldDiffExportRow(sheet, styles, rowIndex[0]++, row));
+        });
+    }
+
+    public void streamServiceReport(SampleQueryService queryService, SamplingSummarySearchCriteria criteria, OutputStream outputStream) {
+        workbookToStream("服务码汇报", "采样服务码维度汇报", SERVICE_REPORT_HEADERS, SERVICE_REPORT_WIDTHS, outputStream, (sheet, styles) -> {
+            int[] rowIndex = {2};
+            queryService.streamServiceReport(criteria, row -> writeServiceReportRow(sheet, styles, rowIndex[0]++, row));
         });
     }
 
@@ -198,7 +222,11 @@ public class SampleExcelExportService {
         CellStyle number = workbook.createCellStyle();
         number.cloneStyleFrom(body);
         number.setAlignment(HorizontalAlignment.RIGHT);
-        return new Styles(title, header, body, number);
+
+        CellStyle percent = workbook.createCellStyle();
+        percent.cloneStyleFrom(number);
+        percent.setDataFormat(workbook.createDataFormat().getFormat("0.00%"));
+        return new Styles(title, header, body, number, percent);
     }
 
     private void writeGroupRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleGroupRow row) {
@@ -305,6 +333,38 @@ public class SampleExcelExportService {
         write(excelRow, col, row.owner(), styles.body());
     }
 
+    private void writeServiceReportRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SamplingServiceReportRow row) {
+        Row excelRow = sheet.createRow(rowIndex);
+        int col = 0;
+        write(excelRow, col++, row.origCdate(), styles.body());
+        write(excelRow, col++, row.batchId(), styles.body());
+        write(excelRow, col++, row.tranCode(), styles.body());
+        write(excelRow, col++, row.serviceCode(), styles.body());
+        write(excelRow, col++, row.tranName(), styles.body());
+        write(excelRow, col++, row.owner(), styles.body());
+        write(excelRow, col++, row.totalTranCount(), styles.number());
+        write(excelRow, col++, row.passTranCount(), styles.number());
+        write(excelRow, col++, row.rate(row.passTranCount()), styles.percent());
+        write(excelRow, col++, row.compResult1Count(), styles.number());
+        write(excelRow, col++, row.rate(row.compResult1Count()), styles.percent());
+        write(excelRow, col++, row.compResult2Count(), styles.number());
+        write(excelRow, col++, row.rate(row.compResult2Count()), styles.percent());
+        write(excelRow, col++, row.compResult3Count(), styles.number());
+        write(excelRow, col++, row.rate(row.compResult3Count()), styles.percent());
+        write(excelRow, col++, row.compResult4Count(), styles.number());
+        write(excelRow, col++, row.rate(row.compResult4Count()), styles.percent());
+        write(excelRow, col++, row.compResult8Count(), styles.number());
+        write(excelRow, col++, row.rate(row.compResult8Count()), styles.percent());
+        write(excelRow, col++, row.returnCodeIssueCount(), styles.number());
+        write(excelRow, col++, row.rate(row.returnCodeIssueCount()), styles.percent());
+        write(excelRow, col++, row.tranIssueCount(), styles.number());
+        write(excelRow, col++, row.rate(row.tranIssueCount()), styles.percent());
+        write(excelRow, col++, row.fieldDiffTranCount(), styles.number());
+        write(excelRow, col++, row.rate(row.fieldDiffTranCount()), styles.percent());
+        write(excelRow, col++, row.fullyMatchedCount(), styles.number());
+        write(excelRow, col, row.issueFieldCount(), styles.number());
+    }
+
     private void border(CellStyle style) {
         style.setBorderTop(BorderStyle.THIN);
         style.setBorderRight(BorderStyle.THIN);
@@ -326,7 +386,7 @@ public class SampleExcelExportService {
         cell.setCellStyle(style);
     }
 
-    private record Styles(CellStyle title, CellStyle header, CellStyle body, CellStyle number) {}
+    private record Styles(CellStyle title, CellStyle header, CellStyle body, CellStyle number, CellStyle percent) {}
 
     @FunctionalInterface
     private interface SheetWriter {
