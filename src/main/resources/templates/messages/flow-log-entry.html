@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>报文录入</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Message Flow Entry</div>
+      <h1>报文录入</h1>
+      <p class="muted">新增请求报文和可选响应报文。</p>
+    </div>
+  </div>
+
+  <section class="panel" th:if="${error}">
+    <p class="error-text" th:text="${error}">保存失败</p>
+  </section>
+
+  <form class="panel" method="post" action="/messages/flow-logs/new" th:object="${form}">
+    <div class="section-title">
+      <div>
+        <div class="eyebrow">Common</div>
+        <h2>公共信息</h2>
+      </div>
+    </div>
+    <div class="filter-grid">
+      <div>
+        <label>来源IP</label>
+        <input name="sourceIp" th:value="*{sourceIp}" required>
+      </div>
+      <div>
+        <label>流水号</label>
+        <input name="transId" th:value="*{transId}" required>
+      </div>
+      <div>
+        <label>交易码</label>
+        <input name="txnCode" th:value="*{txnCode}" required>
+      </div>
+      <div>
+        <label>报文类型</label>
+        <input name="messageType" th:value="*{messageType}" placeholder="JSON / XML">
+      </div>
+    </div>
+
+    <div class="section-title form-section-title">
+      <div>
+        <div class="eyebrow">Request</div>
+        <h2>请求报文</h2>
+      </div>
+    </div>
+    <div class="filter-grid">
+      <div>
+        <label>请求时间</label>
+        <input name="txnTime" type="number" th:value="*{txnTime}" required>
+      </div>
+      <div>
+        <label>全局流水</label>
+        <input name="globalSeqNo" th:value="*{globalSeqNo}">
+      </div>
+      <div>
+        <label>柜员号</label>
+        <input name="tranTellerNo" th:value="*{tranTellerNo}">
+      </div>
+      <div class="span-4">
+        <label>请求报文</label>
+        <textarea name="requestMessage" rows="10" th:text="*{requestMessage}" required></textarea>
+      </div>
+    </div>
+
+    <div class="section-title form-section-title">
+      <div>
+        <div class="eyebrow">Response</div>
+        <h2>响应报文</h2>
+      </div>
+    </div>
+    <div class="filter-grid">
+      <div>
+        <label>响应时间</label>
+        <input name="responseTime" type="number" th:value="*{responseTime}">
+      </div>
+      <div>
+        <label>返回码</label>
+        <input name="returnCode" th:value="*{returnCode}">
+      </div>
+      <div class="span-2">
+        <label>返回信息</label>
+        <input name="returnMsg" th:value="*{returnMsg}">
+      </div>
+      <div class="span-4">
+        <label>响应报文</label>
+        <textarea name="responseMessage" rows="10" th:text="*{responseMessage}"></textarea>
+      </div>
+      <div class="actions span-4">
+        <button class="btn primary" type="submit">保存</button>
+        <a class="btn" href="/messages/flow-logs">取消</a>
+      </div>
+    </div>
+  </form>
+</main>
+</body>
+</html>

@@ -24,9 +24,11 @@ class LayoutTemplateTest {
         assertThat(html).contains("交易级差异");
         assertThat(html).contains("字段级差异");
         assertThat(html).contains("报文查询");
+        assertThat(html).contains("报文录入");
         assertThat(html).contains("/samples/transaction-diffs");
         assertThat(html).contains("/samples/field-diffs");
         assertThat(html).contains("/messages/flow-logs");
+        assertThat(html).contains("/messages/flow-logs/new");
         assertThat(html).contains("交易配置");
         assertThat(html).contains("字段映射");
         assertThat(html).contains("交易导入");
