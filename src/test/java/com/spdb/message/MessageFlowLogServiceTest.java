@@ -33,7 +33,7 @@ class MessageFlowLogServiceTest {
                     txn_code varchar(64) not null,
                     txn_time bigint not null,
                     message_type varchar(32),
-                    request_message bytea,
+                    request_message varchar(4000),
                     global_seq_no varchar(64),
                     tran_teller_no varchar(32)
                 )
@@ -45,7 +45,7 @@ class MessageFlowLogServiceTest {
                     txn_code varchar(64) not null,
                     response_time bigint,
                     message_type varchar(32),
-                    response_message bytea,
+                    response_message varchar(4000),
                     return_code varchar(32),
                     return_msg varchar(512)
                 )
@@ -162,8 +162,8 @@ class MessageFlowLogServiceTest {
         assertThat(request.get("message_type")).isEqualTo("JSON");
         assertThat(request.get("global_seq_no")).isEqualTo("GLOBAL-1");
         assertThat(request.get("tran_teller_no")).isEqualTo("TELLER009");
-        assertThat(new String((byte[]) request.get("request_message"), StandardCharsets.UTF_8))
-                .isEqualTo("{\"amount\":\"88.00\"}");
+        assertThat(request.get("request_message"))
+                .isEqualTo("7B22616D6F756E74223A2238382E3030227D");
 
         Map<String, Object> response = jdbc.getJdbcTemplate().queryForMap(
                 "select * from msg_flow_log_response where trans_id = '0200202606220001'"
@@ -174,8 +174,13 @@ class MessageFlowLogServiceTest {
         assertThat(response.get("message_type")).isEqualTo("JSON");
         assertThat(response.get("return_code")).isEqualTo("000000");
         assertThat(response.get("return_msg")).isEqualTo("交易成功");
-        assertThat(new String((byte[]) response.get("response_message"), StandardCharsets.UTF_8))
-                .isEqualTo("{\"status\":\"OK\"}");
+        assertThat(response.get("response_message"))
+                .isEqualTo("7B22737461747573223A224F4B227D");
+
+        List<MessageFlowLogRow> rows = service.search("0200202606220001");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).requestMessage()).isEqualTo("{\"amount\":\"88.00\"}");
+        assertThat(rows.get(0).responseMessage()).isEqualTo("{\"status\":\"OK\"}");
     }
 
     @Test

@@ -34,7 +34,7 @@ public class MessageFlowLogService {
                 .addValue("txnCode", form.cleanTxnCode())
                 .addValue("txnTime", form.txnTime())
                 .addValue("messageType", form.cleanMessageType())
-                .addValue("requestMessage", form.cleanRequestMessage().getBytes(StandardCharsets.UTF_8))
+                .addValue("requestMessage", encodeForBlob(form.cleanRequestMessage()))
                 .addValue("globalSeqNo", form.cleanGlobalSeqNo())
                 .addValue("tranTellerNo", form.cleanTranTellerNo());
         jdbc.update("""
@@ -56,7 +56,7 @@ public class MessageFlowLogService {
                 .addValue("txnCode", form.cleanTxnCode())
                 .addValue("responseTime", form.responseTime())
                 .addValue("messageType", form.cleanMessageType())
-                .addValue("responseMessage", bytesOrNull(form.cleanResponseMessage()))
+                .addValue("responseMessage", encodeForBlob(form.cleanResponseMessage()))
                 .addValue("returnCode", form.cleanReturnCode())
                 .addValue("returnMsg", form.cleanReturnMsg());
         jdbc.update("""
@@ -188,7 +188,15 @@ public class MessageFlowLogService {
         return bytes;
     }
 
-    private static byte[] bytesOrNull(String value) {
-        return value == null ? null : value.getBytes(StandardCharsets.UTF_8);
+    private static String encodeForBlob(String value) {
+        if (value == null) {
+            return null;
+        }
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        StringBuilder hex = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            hex.append(String.format("%02X", b));
+        }
+        return hex.toString();
     }
 }
