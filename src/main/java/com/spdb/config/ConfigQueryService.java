@@ -17,6 +17,8 @@ import java.util.List;
 
 @Service
 public class ConfigQueryService {
+    private static final String GLOBAL_RECORDING_SWITCH_KEY = "recording.global_switch";
+
     private final TranCatalogRepository tranCatalogRepository;
     private final FieldMappingRepository fieldMappingRepository;
     private final NamedParameterJdbcTemplate jdbc;
@@ -136,9 +138,9 @@ public class ConfigQueryService {
 
     public void saveGlobalRecordingSwitch(String configValue) {
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("configKey", "global_recording_switch")
-                .addValue("configValue", "1".equals(configValue) ? "1" : "0")
-                .addValue("description", "全局录制开关：0=关闭，1=启用");
+                .addValue("configKey", GLOBAL_RECORDING_SWITCH_KEY)
+                .addValue("configValue", "true".equalsIgnoreCase(configValue) ? "true" : "false")
+                .addValue("description", "全局录制开关：false=关闭，true=开启");
         Integer updated = jdbc.update("""
                 update system_config
                 set config_value = :configValue,
@@ -218,9 +220,9 @@ public class ConfigQueryService {
                         from system_config
                         where config_key = :configKey
                         """,
-                new MapSqlParameterSource("configKey", "global_recording_switch"),
+                new MapSqlParameterSource("configKey", GLOBAL_RECORDING_SWITCH_KEY),
                 (rs, i) -> rs.getString("config_value"));
-        return values.isEmpty() ? "0" : values.get(0);
+        return values.isEmpty() ? "false" : values.get(0);
     }
 
     private QueryParts tranWhere(TranSearchCriteria c) {

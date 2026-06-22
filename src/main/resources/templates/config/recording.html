@@ -21,13 +21,13 @@
     <div>
       <label>全局录制开关</label>
       <select name="configValue">
-        <option value="1" th:selected="${globalSwitch == '1'}">启用</option>
-        <option value="0" th:selected="${globalSwitch != '1'}">关闭</option>
+        <option value="true" th:selected="${globalSwitch == 'true'}">启用</option>
+        <option value="false" th:selected="${globalSwitch != 'true'}">关闭</option>
       </select>
     </div>
     <div class="span-2">
       <label>配置表</label>
-      <input value="system_config / config_key=global_recording_switch" readonly>
+      <input value="system_config / config_key=recording.global_switch" readonly>
     </div>
     <div class="actions">
       <button class="btn primary" type="submit">保存全局开关</button>
