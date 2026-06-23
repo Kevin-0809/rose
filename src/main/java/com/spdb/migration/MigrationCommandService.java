@@ -24,6 +24,7 @@ import java.util.Map;
 @Service
 public class MigrationCommandService {
     static final long MAX_SHARD_COUNT = 10_000L;
+    static final int MAX_PARALLELISM = 8;
     private static final int MAX_ERROR_LENGTH = 2000;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -157,8 +158,8 @@ public class MigrationCommandService {
         return updated == 1;
     }
 
-    void markRunning(long commandId) {
-        jdbc.update("""
+    boolean markRunning(long commandId) {
+        int updated = jdbc.update("""
                 update ana_migration_command
                    set status = 'RUNNING',
                        started_time = coalesce(started_time, current_timestamp),
@@ -167,6 +168,7 @@ public class MigrationCommandService {
                        updated_at = current_timestamp
                  where command_id = :commandId and status in ('CREATED','FAILED','CANCELLED')
                 """, new MapSqlParameterSource("commandId", commandId));
+        return updated == 1;
     }
 
     void markShardCompleted(long shardId, long migratedRows, long skippedRows, long droppedRows) {
@@ -185,6 +187,10 @@ public class MigrationCommandService {
                 .addValue("migratedRows", migratedRows)
                 .addValue("skippedRows", skippedRows)
                 .addValue("droppedRows", droppedRows));
+    }
+
+    void markShardCompleted(long shardId, MigrationShardResult result) {
+        markShardCompleted(shardId, result.migratedRows(), result.skippedRows(), result.droppedRows());
     }
 
     void markShardFailed(long shardId, String errorMessage) {
@@ -213,8 +219,8 @@ public class MigrationCommandService {
                 """, new MapSqlParameterSource("commandId", commandId));
     }
 
-    void markCompleted(long commandId) {
-        jdbc.update("""
+    boolean markCompleted(long commandId) {
+        int updated = jdbc.update("""
                 update ana_migration_command
                    set status = 'COMPLETED',
                        ended_time = current_timestamp,
@@ -222,10 +228,11 @@ public class MigrationCommandService {
                        updated_at = current_timestamp
                  where command_id = :commandId and status = 'RUNNING'
                 """, new MapSqlParameterSource("commandId", commandId));
+        return updated == 1;
     }
 
-    void markFailed(long commandId, String errorMessage) {
-        jdbc.update("""
+    boolean markFailed(long commandId, String errorMessage) {
+        int updated = jdbc.update("""
                 update ana_migration_command
                    set status = 'FAILED',
                        ended_time = current_timestamp,
@@ -235,6 +242,7 @@ public class MigrationCommandService {
                 """, new MapSqlParameterSource()
                 .addValue("commandId", commandId)
                 .addValue("errorMessage", abbreviate(errorMessage, MAX_ERROR_LENGTH)));
+        return updated == 1;
     }
 
     void markCancelled(long commandId) {
@@ -277,6 +285,9 @@ public class MigrationCommandService {
         }
         if (form.parallelism() <= 0) {
             throw new IllegalArgumentException("Migration parallelism must be positive");
+        }
+        if (form.parallelism() > MAX_PARALLELISM) {
+            throw new IllegalArgumentException("Migration parallelism must not exceed " + MAX_PARALLELISM);
         }
         shardCount(form);
     }

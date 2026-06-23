@@ -1,6 +1,7 @@
 package com.spdb.sampling;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
@@ -10,7 +11,7 @@ public class SamplingAsyncExecutor implements SamplingTaskLauncher {
     private final ThreadPoolTaskExecutor executor;
 
     public SamplingAsyncExecutor(ObjectProvider<SamplingCommandService> samplingCommandService,
-                                 ThreadPoolTaskExecutor samplingTaskExecutor) {
+                                 @Qualifier("samplingTaskExecutor") ThreadPoolTaskExecutor samplingTaskExecutor) {
         this.samplingCommandService = samplingCommandService;
         this.executor = samplingTaskExecutor;
     }

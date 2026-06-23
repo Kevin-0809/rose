@@ -121,6 +121,9 @@ class MigrationCommandServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 200L, 60L, 0, "demo")))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 200L, 60L, 9, "demo")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("parallelism");
     }
 
     @Test
