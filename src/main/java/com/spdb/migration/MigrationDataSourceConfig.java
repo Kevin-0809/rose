@@ -27,10 +27,13 @@ public class MigrationDataSourceConfig {
     @Bean
     @Primary
     @ConfigurationProperties("spring.datasource.hikari")
-    public HikariDataSource dataSource(@Qualifier("primaryDataSourceProperties") DataSourceProperties properties) {
-        return properties.initializeDataSourceBuilder()
+    public HikariDataSource dataSource(@Qualifier("primaryDataSourceProperties") DataSourceProperties properties,
+                                       @Value("${spring.jpa.properties.hibernate.default_schema:tss}") String targetSchema) {
+        HikariDataSource dataSource = properties.initializeDataSourceBuilder()
                 .type(HikariDataSource.class)
                 .build();
+        dataSource.setSchema(targetSchema(targetSchema));
+        return dataSource;
     }
 
     @Bean

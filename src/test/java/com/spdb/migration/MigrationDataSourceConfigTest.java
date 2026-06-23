@@ -49,7 +49,9 @@ class MigrationDataSourceConfigTest {
 
     @Test
     void unqualifiedJdbcTemplateUsesPrimaryDatasourceAndBxdsIsQualified() {
-        contextRunner.run(context -> {
+        contextRunner
+                .withPropertyValues("spring.jpa.properties.hibernate.default_schema=main_schema")
+                .run(context -> {
             assertThat(context).hasBean("bxdsJdbcTemplate");
             assertThat(context).hasBean("namedParameterJdbcTemplate");
 
@@ -65,7 +67,9 @@ class MigrationDataSourceConfigTest {
             assertThat(jdbcDataSource(primaryJdbcTemplate)).isSameAs(primaryDataSource);
             assertThat(jdbcDataSource(bxdsJdbcTemplate)).isSameAs(bxdsDataSource);
             assertThat(((HikariDataSource) primaryDataSource).getJdbcUrl()).contains("primary");
+            assertThat(((HikariDataSource) primaryDataSource).getSchema()).isEqualTo("main_schema");
             assertThat(((HikariDataSource) bxdsDataSource).getJdbcUrl()).contains("bxds");
+            assertThat(((HikariDataSource) bxdsDataSource).getSchema()).isNull();
         });
     }
 

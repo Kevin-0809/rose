@@ -222,23 +222,38 @@ class MigrationCommandServiceTest {
     }
 
     @Test
-    void resumeDoesNotLaunchWhenStatusDoesNotTransitionToCreated() {
+    void resumeDoesNotLaunchWhenStatusCannotBeResumed() {
         long createdCommandId = service.createCommand(new MigrationCommandForm(100L, 160L, 60L, 2, "created"));
-        long runningCommandId = service.createCommand(new MigrationCommandForm(200L, 260L, 60L, 2, "running"));
         long completedCommandId = service.createCommand(new MigrationCommandForm(300L, 360L, 60L, 2, "completed"));
-        setCommandStatus(runningCommandId, "RUNNING");
         setCommandStatus(completedCommandId, "COMPLETED");
         reset(launcher);
 
         service.resume(createdCommandId);
-        service.resume(runningCommandId);
         service.resume(completedCommandId);
         service.resume(999999L);
 
         verify(launcher, never()).launch(createdCommandId);
-        verify(launcher, never()).launch(runningCommandId);
         verify(launcher, never()).launch(completedCommandId);
         verify(launcher, never()).launch(999999L);
+    }
+
+    @Test
+    void resumeRecoversStaleRunningCommandAndRunningShards() {
+        long commandId = service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "stale running"));
+        Long firstShardId = shardId(commandId, 0);
+        Long secondShardId = shardId(commandId, 1);
+        setCommandStatus(commandId, "RUNNING");
+        setShardStatus(firstShardId, "RUNNING");
+        setShardStatus(secondShardId, "COMPLETED");
+        reset(launcher);
+
+        service.resume(commandId);
+
+        assertThat(service.progress(commandId).status()).isEqualTo("CREATED");
+        assertThat(service.shard(firstShardId).status()).isEqualTo("FAILED");
+        assertThat(service.shard(firstShardId).errorMessage()).contains("stale running shard reset for resume");
+        assertThat(service.shard(secondShardId).status()).isEqualTo("COMPLETED");
+        verify(launcher).launch(commandId);
     }
 
     @Test
@@ -317,6 +332,10 @@ class MigrationCommandServiceTest {
 
     private void setCommandStatus(long commandId, String status) {
         plainJdbc.update("update ana_migration_command set status = ? where command_id = ?", status, commandId);
+    }
+
+    private void setShardStatus(long shardId, String status) {
+        plainJdbc.update("update ana_migration_shard set status = ? where shard_id = ?", status, shardId);
     }
 
     private Long shardId(long commandId, int shardSeq) {

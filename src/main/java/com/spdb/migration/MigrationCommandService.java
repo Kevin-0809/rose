@@ -124,10 +124,11 @@ public class MigrationCommandService {
     }
 
     public void resume(long commandId) {
+        resetStaleRunningShards(commandId);
         int updated = jdbc.update("""
                 update ana_migration_command
                    set status = 'CREATED', error_message = null, ended_time = null, updated_at = current_timestamp
-                 where command_id = :commandId and status in ('FAILED','CANCELLED','CANCEL_REQUESTED')
+                 where command_id = :commandId and status in ('FAILED','CANCELLED','CANCEL_REQUESTED','RUNNING')
                 """, new MapSqlParameterSource("commandId", commandId));
         if (updated == 1) {
             launch(commandId);
@@ -279,6 +280,17 @@ public class MigrationCommandService {
                 where shard_id = :shardId
                 """, new MapSqlParameterSource("shardId", shardId), (rs, i) -> mapShard(rs));
         return shards.isEmpty() ? null : shards.get(0);
+    }
+
+    private void resetStaleRunningShards(long commandId) {
+        jdbc.update("""
+                update ana_migration_shard
+                   set status = 'FAILED',
+                       ended_time = current_timestamp,
+                       error_message = 'stale running shard reset for resume',
+                       updated_at = current_timestamp
+                 where command_id = :commandId and status = 'RUNNING'
+                """, new MapSqlParameterSource("commandId", commandId));
     }
 
     private void validate(MigrationCommandForm form) {
