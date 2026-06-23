@@ -457,6 +457,68 @@ comment on column tss_retcode_comp.remark is '备注';
 comment on column tss_retcode_comp.created_at is '创建时间';
 comment on column tss_retcode_comp.updated_at is '更新时间';
 
+create table if not exists ana_migration_command (
+    command_id bigserial primary key,
+    source_label varchar(64) not null default 'bxds',
+    target_schema varchar(64) not null default 'tss',
+    time_from bigint not null,
+    time_to bigint not null,
+    window_seconds bigint not null,
+    parallelism integer not null default 2,
+    status varchar(32) not null default 'CREATED',
+    total_shard_count bigint not null default 0,
+    completed_shard_count bigint not null default 0,
+    failed_shard_count bigint not null default 0,
+    migrated_rows bigint not null default 0,
+    skipped_rows bigint not null default 0,
+    dropped_rows bigint not null default 0,
+    error_message varchar(2000),
+    remark varchar(1000),
+    created_by varchar(100),
+    created_time timestamp not null default current_timestamp,
+    started_time timestamp,
+    ended_time timestamp,
+    updated_at timestamp not null default current_timestamp
+);
+
+alter table ana_migration_command drop constraint if exists ck_ana_migration_command_status;
+alter table ana_migration_command add constraint ck_ana_migration_command_status
+check (status in ('CREATED','RUNNING','COMPLETED','FAILED','CANCEL_REQUESTED','CANCELLED'));
+
+create table if not exists ana_migration_shard (
+    shard_id bigserial primary key,
+    command_id bigint not null,
+    shard_seq integer not null,
+    time_from bigint not null,
+    time_to bigint not null,
+    status varchar(32) not null default 'PENDING',
+    migrated_rows bigint not null default 0,
+    skipped_rows bigint not null default 0,
+    dropped_rows bigint not null default 0,
+    error_message varchar(2000),
+    attempts integer not null default 0,
+    created_time timestamp not null default current_timestamp,
+    started_time timestamp,
+    ended_time timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_migration_shard_seq unique (command_id, shard_seq)
+);
+
+alter table ana_migration_shard drop constraint if exists ck_ana_migration_shard_status;
+alter table ana_migration_shard add constraint ck_ana_migration_shard_status
+check (status in ('PENDING','RUNNING','COMPLETED','FAILED','SKIPPED'));
+
+comment on table ana_migration_command is '报文日志迁移指令表';
+comment on column ana_migration_command.source_label is '源数据源显示名，固定bxds';
+comment on column ana_migration_command.target_schema is '目标schema，来自主数据源配置';
+comment on table ana_migration_shard is '报文日志迁移分片表';
+
+create index if not exists idx_ana_migration_command_status
+on ana_migration_command(status, created_time desc);
+
+create index if not exists idx_ana_migration_shard_command_status
+on ana_migration_shard(command_id, status, shard_seq);
+
 create index if not exists idx_ana_sample_group_batch_type
 on ana_sample_group(batch_id, sample_type, tran_code, service_code);
 
