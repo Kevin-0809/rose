@@ -1,74 +1,137 @@
 package com.spdb.web;
 
 import com.spdb.migration.MigrationCommandForm;
-import com.spdb.migration.MigrationMockData;
+import com.spdb.migration.MigrationCommandRow;
+import com.spdb.migration.MigrationCommandService;
 import com.spdb.migration.MigrationProgressRow;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ConcurrentModel;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class MigrationControllerTest {
 
     @Test
-    void commandsPageAddsRowsAndFormToModel() {
-        MigrationController controller = new MigrationController();
+    void commandsPageSearchesServiceWithPageParamsAndAddsModelAttributes() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(commandRow(7L)), 1, PageRequestParams.of(2, 50));
+        when(service.search(PageRequestParams.of(2, 50))).thenReturn(result);
+        when(service.sourceLabel()).thenReturn("source_runtime");
+        when(service.targetSchema()).thenReturn("target_runtime");
+        MigrationController controller = new MigrationController(service);
         ConcurrentModel model = new ConcurrentModel();
 
-        String view = controller.commandsPage(model);
+        String view = controller.commandsPage(2, 50, model);
 
         assertThat(view).isEqualTo("migration/commands");
         assertThat(model.getAttribute("active")).isEqualTo("migration");
-        assertThat(model.getAttribute("commands")).isEqualTo(MigrationMockData.commandRows());
+        assertThat(model.getAttribute("result")).isSameAs(result);
         assertThat(model.getAttribute("form")).isEqualTo(MigrationCommandForm.empty());
+        assertThat(model.getAttribute("sourceLabel")).isEqualTo("source_runtime");
+        assertThat(model.getAttribute("targetSchema")).isEqualTo("target_runtime");
+        verify(service).search(PageRequestParams.of(2, 50));
     }
 
     @Test
-    void createCommandRedirectsToRunningExample() {
-        MigrationController controller = new MigrationController();
-
-        String view = controller.createCommand(MigrationCommandForm.empty());
-
-        assertThat(view).isEqualTo("redirect:/migration/commands/2");
-    }
-
-    @Test
-    void progressPageAddsProgressToModel() {
-        MigrationController controller = new MigrationController();
+    void commandsPageUsesRuntimeLabelsEvenWhenRowsAreEmpty() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
+        when(service.search(PageRequestParams.of(null, null))).thenReturn(result);
+        when(service.sourceLabel()).thenReturn("empty_source");
+        when(service.targetSchema()).thenReturn("empty_target");
+        MigrationController controller = new MigrationController(service);
         ConcurrentModel model = new ConcurrentModel();
 
-        String view = controller.progressPage(2L, model);
+        controller.commandsPage(null, null, model);
+
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(model.getAttribute("sourceLabel")).isEqualTo("empty_source");
+        assertThat(model.getAttribute("targetSchema")).isEqualTo("empty_target");
+    }
+
+    @Test
+    void createCommandRedirectsToCreatedId() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationCommandForm form = MigrationCommandForm.empty();
+        when(service.createCommand(form)).thenReturn(42L);
+        MigrationController controller = new MigrationController(service);
+
+        String view = controller.createCommand(form);
+
+        assertThat(view).isEqualTo("redirect:/migration/commands/42");
+        verify(service).createCommand(form);
+    }
+
+    @Test
+    void progressPageAddsServiceProgressToModel() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationProgressRow progress = progressRow(42L, "RUNNING");
+        when(service.progress(42L)).thenReturn(progress);
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.progressPage(42L, model);
 
         assertThat(view).isEqualTo("migration/progress");
         assertThat(model.getAttribute("active")).isEqualTo("migration");
-        assertThat(model.getAttribute("progress")).isEqualTo(MigrationMockData.progress(2L));
+        assertThat(model.getAttribute("progress")).isSameAs(progress);
+        verify(service).progress(42L);
     }
 
     @Test
-    void progressJsonReturnsRunningProgress() {
-        MigrationController controller = new MigrationController();
+    void progressJsonReturnsServiceProgress() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationProgressRow progress = progressRow(42L, "RUNNING");
+        when(service.progress(42L)).thenReturn(progress);
+        MigrationController controller = new MigrationController(service);
 
-        MigrationProgressRow result = controller.progressJson(2L);
+        MigrationProgressRow result = controller.progressJson(42L);
 
-        assertThat(result).isEqualTo(MigrationMockData.progress(2L));
+        assertThat(result).isSameAs(progress);
         assertThat(result.status()).isEqualTo("RUNNING");
+        verify(service).progress(42L);
     }
 
     @Test
-    void cancelRedirectsToProgressPage() {
-        MigrationController controller = new MigrationController();
+    void cancelRequestsServiceCancelAndRedirectsToProgressPage() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationController controller = new MigrationController(service);
 
-        String view = controller.cancel(2L);
+        String view = controller.cancel(42L);
 
-        assertThat(view).isEqualTo("redirect:/migration/commands/2");
+        assertThat(view).isEqualTo("redirect:/migration/commands/42");
+        verify(service).requestCancel(42L);
     }
 
     @Test
-    void resumeRedirectsToProgressPage() {
-        MigrationController controller = new MigrationController();
+    void resumeCallsServiceAndRedirectsToProgressPage() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationController controller = new MigrationController(service);
 
         String view = controller.resume(5L);
 
         assertThat(view).isEqualTo("redirect:/migration/commands/5");
+        verify(service).resume(5L);
+    }
+
+    private static MigrationCommandRow commandRow(long id) {
+        return new MigrationCommandRow(
+                id, "source", "target", "RUNNING", 1L, 2L, 3600L, 2,
+                10L, 4L, 0L, 100L, 2L, 1L, "10s",
+                null, null, null, null, "remark"
+        );
+    }
+
+    private static MigrationProgressRow progressRow(long id, String status) {
+        return new MigrationProgressRow(
+                id, "source", "target", status, 1L, 2L, 3600L, 2,
+                10L, 4L, 0L, 100L, 2L, 1L, 10L,
+                null, null, null, List.of()
+        );
     }
 }

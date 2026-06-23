@@ -84,6 +84,14 @@ public class MigrationCommandService {
         return PagedResult.of(rows, total, effectivePage);
     }
 
+    public String sourceLabel() {
+        return runtimeProperties.sourceLabel();
+    }
+
+    public String targetSchema() {
+        return runtimeProperties.targetSchema();
+    }
+
     public MigrationProgressRow progress(long commandId) {
         MigrationCommandRow command = command(commandId);
         if (command == null) {

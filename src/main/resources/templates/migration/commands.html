@@ -13,7 +13,7 @@
     <div>
       <div class="eyebrow">Message Flow Migration</div>
       <h1>数据迁移</h1>
-      <p class="muted">将 bxds schema 的报文日志配对迁移至 tss schema，支持分片并行与进度跟踪。</p>
+      <p class="muted" th:text="'将 ' + ${sourceLabel} + ' 数据源的报文日志配对迁移至 ' + ${targetSchema} + ' schema，支持分片并行与进度跟踪。'">将源数据源的报文日志配对迁移至目标 schema，支持分片并行与进度跟踪。</p>
     </div>
   </div>
 
@@ -23,11 +23,11 @@
   <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}">
     <div>
       <label>源 schema</label>
-      <input value="bxds" readonly class="muted-input">
+      <input th:value="${sourceLabel}" readonly class="muted-input">
     </div>
     <div>
       <label>目标 schema</label>
-      <input value="tss" readonly class="muted-input">
+      <input th:value="${targetSchema}" readonly class="muted-input">
     </div>
     <div>
       <label>响应时间起点</label>
@@ -65,7 +65,7 @@
       </tr>
       </thead>
       <tbody>
-      <tr th:each="row : ${commands}">
+      <tr th:each="row : ${result.rows()}">
         <td th:text="${row.commandId}"></td>
         <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
         <td><span th:text="${row.progressText()}"></span></td>
@@ -80,6 +80,9 @@
       </tr>
       </tbody>
     </table>
+    <form method="get">
+      <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+    </form>
   </section>
 </main>
 </body>
