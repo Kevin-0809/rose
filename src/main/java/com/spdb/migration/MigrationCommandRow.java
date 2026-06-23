@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 public record MigrationCommandRow(
         long commandId,
+        String sourceLabel,
+        String targetSchema,
         String status,
         long timeFrom,
         long timeTo,
