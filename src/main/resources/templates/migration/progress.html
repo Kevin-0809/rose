@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>迁移进度</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Migration Progress</div>
+      <h1>迁移进度</h1>
+      <p class="muted" th:if="${progress}" th:text="'指令 #' + ${progress.commandId} + ' / 状态：' + ${progress.status}"></p>
+    </div>
+    <div class="actions" th:if="${progress}">
+      <form th:if="${progress.status == 'RUNNING'}" method="post" th:action="@{/migration/commands/{id}/cancel(id=${progress.commandId})}" style="display:inline">
+        <button class="btn yellow" type="submit">取消</button>
+      </form>
+      <form th:if="${progress.status == 'CANCELLED' or progress.status == 'FAILED'}" method="post" th:action="@{/migration/commands/{id}/resume(id=${progress.commandId})}" style="display:inline">
+        <button class="btn primary" type="submit">续传</button>
+      </form>
+      <a class="btn" href="/migration/commands">返回列表</a>
+    </div>
+  </div>
+
+  <section class="panel" th:unless="${progress}">
+    <p class="muted">未找到该迁移指令。</p>
+  </section>
+
+  <section th:if="${progress}">
+    <div class="cards">
+      <div class="card"><div class="label">状态</div><div class="value"><span class="tag" th:classappend="${progress.status == 'COMPLETED' or progress.status == 'CANCELLED'} ? 'green' : (${progress.status == 'FAILED' or progress.status == 'RUNNING'} ? 'yellow' : '')" th:text="${progress.status}"></span></div></div>
+      <div class="card"><div class="label">进度</div><div class="value" th:text="${progress.completedShardCount} + '/' + ${progress.totalShardCount}"></div></div>
+      <div class="card"><div class="label">已迁移交易笔数</div><div class="value" th:text="${progress.migratedRows}"></div></div>
+      <div class="card"><div class="label">丢弃交易数</div><div class="value" th:text="${progress.droppedRows}"></div></div>
+      <div class="card"><div class="label">跳过数</div><div class="value" th:text="${progress.skippedRows}"></div></div>
+      <div class="card"><div class="label">失败分片数</div><div class="value" th:text="${progress.failedShardCount}"></div></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <div class="section-title"><div><div class="eyebrow">Progress</div><h2>完成度</h2></div></div>
+      <div class="progress-bar" style="background:rgba(97,128,165,.18);border-radius:6px;overflow:hidden;height:24px">
+        <div id="progress-fill" style="height:100%;background:linear-gradient(90deg,#38bdf8,#4ade80);transition:width .6s" th:styleappend="${progress.totalShardCount == 0} ? 'width:0%' : 'width:' + ${progress.completedShardCount * 100 / progress.totalShardCount} + '%'"></div>
+      </div>
+    </div>
+
+    <section class="panel table-wrap" style="margin-top:16px">
+      <div class="section-title"><div><div class="eyebrow">Shards</div><h2>分片明细</h2></div></div>
+      <table class="command-table">
+        <thead>
+        <tr>
+          <th>序号</th><th>响应时间窗口</th><th>状态</th><th>迁移笔数</th>
+          <th>丢弃数</th><th>跳过数</th><th>尝试次数</th><th>耗时(秒)</th><th>错误信息</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="shard : ${progress.shards}">
+          <td th:text="${shard.shardSeq}"></td>
+          <td th:text="${shard.timeFrom} + ' → ' + ${shard.timeTo}"></td>
+          <td><span class="tag" th:classappend="${shard.status == 'COMPLETED' or shard.status == 'SKIPPED'} ? 'green' : (${shard.status == 'FAILED' or shard.status == 'RUNNING'} ? 'yellow' : '')" th:text="${shard.status}"></span></td>
+          <td th:text="${shard.migratedRows}"></td>
+          <td th:text="${shard.droppedRows}"></td>
+          <td th:text="${shard.skippedRows}"></td>
+          <td th:text="${shard.attempts}"></td>
+          <td th:text="${shard.durationSeconds}"></td>
+          <td th:text="${shard.errorMessage}"></td>
+        </tr>
+        </tbody>
+      </table>
+    </section>
+  </section>
+</main>
+<script th:if="${progress and (progress.status == 'RUNNING' or progress.status == 'CANCEL_REQUESTED')}" th:inline="javascript">
+  /*<![CDATA[*/
+  const commandId = /*[[${progress.commandId}]]*/ 0;
+  let timer = null;
+  function pollProgress() {
+    fetch('/migration/commands/' + commandId + '/progress')
+      .then(r => r.json())
+      .then(data => {
+        if (!data) { return; }
+        if (data.status !== 'RUNNING' && data.status !== 'CANCEL_REQUESTED') {
+          location.reload();
+          return;
+        }
+        timer = setTimeout(pollProgress, 3000);
+      })
+      .catch(() => { timer = setTimeout(pollProgress, 5000); });
+  }
+  timer = setTimeout(pollProgress, 3000);
+  /*]]>*/
+</script>
+</body>
+</html>
