@@ -31,6 +31,9 @@
   </section>
 
   <section th:if="${progress}">
+    <div id="progress-error" class="panel" style="display:none;margin-top:16px">
+      <p class="muted">进度获取失败，请刷新</p>
+    </div>
     <div class="cards">
       <div class="card"><div class="label">状态</div><div class="value"><span class="tag" th:classappend="${progress.status == 'COMPLETED' or progress.status == 'CANCELLED'} ? 'green' : (${progress.status == 'FAILED' or progress.status == 'RUNNING'} ? 'yellow' : '')" th:text="${progress.status}"></span></div></div>
       <div class="card"><div class="label">进度</div><div class="value" th:text="${progress.completedShardCount} + '/' + ${progress.totalShardCount}"></div></div>
@@ -77,18 +80,35 @@
   /*<![CDATA[*/
   const commandId = /*[[${progress.commandId}]]*/ 0;
   let timer = null;
+  let retryCount = 0;
+  const maxRetries = 5;
+  function showProgressError() {
+    const el = document.getElementById('progress-error');
+    if (el) { el.style.display = ''; }
+  }
   function pollProgress() {
     fetch('/migration/commands/' + commandId + '/progress')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) { throw new Error(r.status); }
+        return r.json();
+      })
       .then(data => {
-        if (!data) { return; }
+        if (!data) { throw new Error('empty response'); }
+        retryCount = 0;
         if (data.status !== 'RUNNING' && data.status !== 'CANCEL_REQUESTED') {
           location.reload();
           return;
         }
         timer = setTimeout(pollProgress, 3000);
       })
-      .catch(() => { timer = setTimeout(pollProgress, 5000); });
+      .catch(() => {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          showProgressError();
+          return;
+        }
+        timer = setTimeout(pollProgress, 5000);
+      });
   }
   timer = setTimeout(pollProgress, 3000);
   /*]]>*/
