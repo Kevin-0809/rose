@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据迁移</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Message Flow Migration</div>
+      <h1>数据迁移</h1>
+      <p class="muted">将 bxds schema 的报文日志配对迁移至 tss schema，支持分片并行与进度跟踪。</p>
+    </div>
+  </div>
+
+  <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}">
+    <div class="section-title"><div><div class="eyebrow">Source</div><h2>创建迁移指令</h2></div></div>
+    <div class="filter-grid">
+      <div><label>源 schema</label><input value="bxds" readonly></div>
+      <div><label>目标 schema</label><input value="tss" readonly></div>
+      <div><label>响应时间起点</label><input name="timeFrom" type="number" th:value="*{timeFrom}" placeholder="1719100000" required></div>
+      <div><label>响应时间终点</label><input name="timeTo" type="number" th:value="*{timeTo}" placeholder="1719186400" required></div>
+      <div><label>窗口大小(秒)</label><input name="windowSeconds" type="number" th:value="*{windowSeconds}" min="60" max="86400" required></div>
+      <div><label>并行度</label><input name="parallelism" type="number" th:value="*{parallelism}" min="1" max="8" required></div>
+      <div class="span-2"><label>备注</label><input name="remark" th:value="*{remark}"></div>
+      <div class="actions"><button class="btn primary" type="submit">创建迁移</button></div>
+    </div>
+  </form>
+
+  <section class="panel table-wrap">
+    <div class="section-title"><div><div class="eyebrow">History</div><h2>迁移指令列表</h2></div></div>
+    <table class="command-table">
+      <thead>
+      <tr>
+        <th>指令ID</th><th>状态</th><th>进度</th><th>已迁移交易笔数</th>
+        <th>丢弃数</th><th>跳过数</th><th>耗时</th><th>创建时间</th><th>操作</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr th:each="row : ${commands}">
+        <td th:text="${row.commandId}"></td>
+        <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
+        <td><span th:text="${row.completedShardCount} + '/' + ${row.totalShardCount}"></span></td>
+        <td th:text="${row.migratedRows}"></td>
+        <td th:text="${row.droppedRows}"></td>
+        <td th:text="${row.skippedRows}"></td>
+        <td th:text="${row.durationText}"></td>
+        <td th:text="${row.createdTime}"></td>
+        <td>
+          <a class="btn" th:href="@{/migration/commands/{id}(id=${row.commandId})}">进度</a>
+        </td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
