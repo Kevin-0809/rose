@@ -31,6 +31,19 @@ class MigrationMockDataTest {
     }
 
     @Test
+    void commandAndProgressRowsExposeCompletionPercentageText() {
+        MigrationCommandRow command = MigrationMockData.commandRows().stream()
+                .filter(row -> row.commandId() == 2L)
+                .findFirst()
+                .orElseThrow();
+        MigrationProgressRow progress = MigrationMockData.progress(2L);
+
+        assertThat(command.progressText()).isEqualTo("15/24 (62%)");
+        assertThat(progress.progressText()).isEqualTo("15/24 (62%)");
+        assertThat(progress.completionPercent()).isEqualTo(62);
+    }
+
+    @Test
     void progressForCompletedCommandHasOnlyCompletedOrSkippedShards() {
         MigrationProgressRow progress = MigrationMockData.progress(3L);
 

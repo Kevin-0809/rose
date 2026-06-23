@@ -1096,3 +1096,17 @@ tbody tr:hover {
     flex-wrap: wrap;
   }
 }
+
+.muted-input {
+  color: var(--text-muted) !important;
+  background: rgba(7, 16, 29, 0.4) !important;
+  cursor: default;
+}
+
+.panel.form-grid {
+  padding: 18px 20px 4px;
+  margin-bottom: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}

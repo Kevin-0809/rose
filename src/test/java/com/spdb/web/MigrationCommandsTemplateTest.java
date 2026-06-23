@@ -26,5 +26,6 @@ class MigrationCommandsTemplateTest {
         assertThat(html).contains("已迁移交易笔数");
         assertThat(html).contains("丢弃数");
         assertThat(html).contains("跳过数");
+        assertThat(html).contains("progressText()");
     }
 }

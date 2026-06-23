@@ -21,4 +21,15 @@ public record MigrationProgressRow(
         LocalDateTime endedTime,
         String errorMessage,
         List<MigrationShardRow> shards
-) {}
+) {
+    public int completionPercent() {
+        if (totalShardCount <= 0) {
+            return 0;
+        }
+        return (int) (completedShardCount * 100 / totalShardCount);
+    }
+
+    public String progressText() {
+        return completedShardCount + "/" + totalShardCount + " (" + completionPercent() + "%)";
+    }
+}
