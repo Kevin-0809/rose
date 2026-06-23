@@ -29,6 +29,7 @@ class MigrationCommandsTemplateTest {
         assertThat(html).contains("progressText()");
         assertThat(html).contains("${result.rows()}");
         assertThat(html).contains("fragments/layout :: pager(${result})");
+        assertThat(html).contains("源数据源");
         assertThat(html).contains("${sourceLabel}");
         assertThat(html).contains("${targetSchema}");
         assertThat(html).contains("th:text=\"'将 ' + ${sourceLabel}");
