@@ -33,6 +33,8 @@ class LayoutTemplateTest {
         assertThat(html).contains("字段映射");
         assertThat(html).contains("交易导入");
         assertThat(html).contains("录制配置");
+        assertThat(html).contains("数据迁移");
+        assertThat(html).contains("/migration/commands");
     }
 
     @Test
