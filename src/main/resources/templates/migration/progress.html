@@ -76,7 +76,7 @@
     </section>
   </section>
 </main>
-<script th:if="${progress and (progress.status == 'RUNNING' or progress.status == 'CANCEL_REQUESTED')}" th:inline="javascript">
+<script th:if="${progress != null and (progress.status == 'RUNNING' or progress.status == 'CANCEL_REQUESTED')}" th:inline="javascript">
   /*<![CDATA[*/
   const commandId = /*[[${progress.commandId}]]*/ 0;
   let timer = null;
