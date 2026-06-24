@@ -35,9 +35,15 @@ public class MigrationController {
     }
 
     @PostMapping("/migration/commands")
-    public String createCommand(@ModelAttribute MigrationCommandForm form) {
-        long createdId = migrationCommandService.createCommand(form);
-        return "redirect:/migration/commands/" + createdId;
+    public String createCommand(@ModelAttribute MigrationCommandForm form, Model model) {
+        try {
+            long createdId = migrationCommandService.createCommand(form);
+            return "redirect:/migration/commands/" + createdId;
+        } catch (IllegalArgumentException ex) {
+            addCommandsPageModel(model, form);
+            model.addAttribute("error", ex.getMessage());
+            return "migration/commands";
+        }
     }
 
     @GetMapping("/migration/commands/{id}")
@@ -63,5 +69,13 @@ public class MigrationController {
     public String resume(@PathVariable long id) {
         migrationCommandService.resume(id);
         return "redirect:/migration/commands/" + id;
+    }
+
+    private void addCommandsPageModel(Model model, MigrationCommandForm form) {
+        model.addAttribute("active", "migration");
+        model.addAttribute("result", migrationCommandService.search(PageRequestParams.of(null, null)));
+        model.addAttribute("form", form);
+        model.addAttribute("sourceLabel", migrationCommandService.sourceLabel());
+        model.addAttribute("targetSchema", migrationCommandService.targetSchema());
     }
 }

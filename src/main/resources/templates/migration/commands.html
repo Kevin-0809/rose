@@ -20,6 +20,7 @@
   <div class="section-title">
     <div><div class="eyebrow">Create</div><h2>创建迁移指令</h2></div>
   </div>
+  <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
   <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}">
     <div>
       <label>源数据源</label>

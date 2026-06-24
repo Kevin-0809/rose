@@ -60,10 +60,35 @@ class MigrationControllerTest {
         MigrationCommandForm form = MigrationCommandForm.empty();
         when(service.createCommand(form)).thenReturn(42L);
         MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
 
-        String view = controller.createCommand(form);
+        String view = controller.createCommand(form, model);
 
         assertThat(view).isEqualTo("redirect:/migration/commands/42");
+        verify(service).createCommand(form);
+    }
+
+    @Test
+    void createCommandReturnsFormWithErrorWhenValidationFails() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationCommandForm form = MigrationCommandForm.empty();
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
+        when(service.createCommand(form)).thenThrow(new IllegalArgumentException("响应时间终点必须大于响应时间起点"));
+        when(service.search(PageRequestParams.of(null, null))).thenReturn(result);
+        when(service.sourceLabel()).thenReturn("bxds");
+        when(service.targetSchema()).thenReturn("tss");
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.createCommand(form, model);
+
+        assertThat(view).isEqualTo("migration/commands");
+        assertThat(model.getAttribute("active")).isEqualTo("migration");
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(model.getAttribute("form")).isSameAs(form);
+        assertThat(model.getAttribute("sourceLabel")).isEqualTo("bxds");
+        assertThat(model.getAttribute("targetSchema")).isEqualTo("tss");
+        assertThat(model.getAttribute("error")).isEqualTo("响应时间终点必须大于响应时间起点");
         verify(service).createCommand(form);
     }
 

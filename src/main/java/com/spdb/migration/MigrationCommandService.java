@@ -295,19 +295,19 @@ public class MigrationCommandService {
 
     private void validate(MigrationCommandForm form) {
         if (form == null) {
-            throw new IllegalArgumentException("Migration command form is required");
+            throw new IllegalArgumentException("迁移指令参数不能为空");
         }
         if (form.timeFrom() < 0 || form.timeTo() <= form.timeFrom()) {
-            throw new IllegalArgumentException("Migration time range is invalid");
+            throw new IllegalArgumentException("响应时间终点必须大于响应时间起点");
         }
         if (form.windowSeconds() <= 0) {
-            throw new IllegalArgumentException("Migration window seconds must be positive");
+            throw new IllegalArgumentException("分片窗口大小必须大于0");
         }
         if (form.parallelism() <= 0) {
-            throw new IllegalArgumentException("Migration parallelism must be positive");
+            throw new IllegalArgumentException("并行度必须大于0");
         }
         if (form.parallelism() > MAX_PARALLELISM) {
-            throw new IllegalArgumentException("Migration parallelism must not exceed " + MAX_PARALLELISM);
+            throw new IllegalArgumentException("并行度不能超过 " + MAX_PARALLELISM);
         }
         shardCount(form);
     }

@@ -123,7 +123,7 @@ class MigrationCommandServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 200L, 60L, 9, "demo")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("parallelism");
+                .hasMessageContaining("并行度");
     }
 
     @Test
