@@ -124,11 +124,11 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runCompletesRunnableShardsAndAggregatesCounters() {
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 250L, 50L, 2, "complete"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 250_000L, 50L, 2, "complete"));
         List<Long> shardIds = shardIds(commandId);
-        when(shardRunner.run(shardIds.get(0), 100L, 150L, 1000)).thenReturn(new MigrationShardResult(10L, 1L, 0L));
-        when(shardRunner.run(shardIds.get(1), 150L, 200L, 1000)).thenReturn(new MigrationShardResult(20L, 2L, 1L));
-        when(shardRunner.run(shardIds.get(2), 200L, 250L, 1000)).thenReturn(new MigrationShardResult(30L, 3L, 2L));
+        when(shardRunner.run(shardIds.get(0), 100_000L, 150_000L, 1000)).thenReturn(new MigrationShardResult(10L, 1L, 0L));
+        when(shardRunner.run(shardIds.get(1), 150_000L, 200_000L, 1000)).thenReturn(new MigrationShardResult(20L, 2L, 1L));
+        when(shardRunner.run(shardIds.get(2), 200_000L, 250_000L, 1000)).thenReturn(new MigrationShardResult(30L, 3L, 2L));
 
         batchRunner.run(commandId);
 
@@ -145,7 +145,7 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runMarksCancelRequestedCommandCancelledWithoutRunningShards() {
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 200L, 50L, 2, "cancel"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 200_000L, 50L, 2, "cancel"));
         commandService.requestCancel(commandId);
 
         batchRunner.run(commandId);
@@ -158,7 +158,7 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runMarksCancelledWhenCancelArrivesBeforeMarkRunning() {
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "cancel before running"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "cancel before running"));
         MigrationCommandService service = new CancelBeforeMarkRunningService();
         MigrationBatchRunner runner = new MigrationBatchRunner(service, shardRunner, executor);
 
@@ -172,12 +172,12 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runStopsSchedulingNewShardsWhenCancelIsRequested() {
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 250L, 50L, 1, "cancel during run"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 250_000L, 50L, 1, "cancel during run"));
         List<Long> shardIds = shardIds(commandId);
         doAnswer(invocation -> {
             commandService.requestCancel(commandId);
             return new MigrationShardResult(10L, 0L, 0L);
-        }).when(shardRunner).run(shardIds.get(0), 100L, 150L, 1000);
+        }).when(shardRunner).run(shardIds.get(0), 100_000L, 150_000L, 1000);
 
         batchRunner.run(commandId);
 
@@ -186,16 +186,16 @@ class MigrationBatchRunnerTest {
         assertThat(progress.completedShardCount()).isEqualTo(1L);
         assertThat(progress.shards()).extracting(MigrationShardRow::status)
                 .containsExactly("COMPLETED", "PENDING", "PENDING");
-        verify(shardRunner, never()).run(shardIds.get(1), 150L, 200L, 1000);
-        verify(shardRunner, never()).run(shardIds.get(2), 200L, 250L, 1000);
+        verify(shardRunner, never()).run(shardIds.get(1), 150_000L, 200_000L, 1000);
+        verify(shardRunner, never()).run(shardIds.get(2), 200_000L, 250_000L, 1000);
     }
 
     @Test
     void runMarksCommandFailedWhenAnyShardFails() {
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 200L, 50L, 2, "failure"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 200_000L, 50L, 2, "failure"));
         List<Long> shardIds = shardIds(commandId);
-        when(shardRunner.run(shardIds.get(0), 100L, 150L, 1000)).thenReturn(new MigrationShardResult(10L, 0L, 0L));
-        when(shardRunner.run(shardIds.get(1), 150L, 200L, 1000)).thenThrow(new IllegalStateException("source unavailable"));
+        when(shardRunner.run(shardIds.get(0), 100_000L, 150_000L, 1000)).thenReturn(new MigrationShardResult(10L, 0L, 0L));
+        when(shardRunner.run(shardIds.get(1), 150_000L, 200_000L, 1000)).thenThrow(new IllegalStateException("source unavailable"));
 
         batchRunner.run(commandId);
 
@@ -214,9 +214,9 @@ class MigrationBatchRunnerTest {
     void finishMarksCancelledWhenCancelArrivesBeforeCompletedTransition() {
         MigrationCommandService service = new CancelBeforeMarkCompletedService();
         MigrationBatchRunner runner = new MigrationBatchRunner(service, shardRunner, executor);
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "cancel before complete"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "cancel before complete"));
         List<Long> shardIds = shardIds(commandId);
-        when(shardRunner.run(shardIds.get(0), 100L, 150L, 1000)).thenReturn(new MigrationShardResult(10L, 0L, 0L));
+        when(shardRunner.run(shardIds.get(0), 100_000L, 150_000L, 1000)).thenReturn(new MigrationShardResult(10L, 0L, 0L));
 
         runner.run(commandId);
 
@@ -230,9 +230,9 @@ class MigrationBatchRunnerTest {
     void finishMarksCancelledWhenCancelArrivesBeforeFailedTransition() {
         MigrationCommandService service = new CancelBeforeMarkFailedService();
         MigrationBatchRunner runner = new MigrationBatchRunner(service, shardRunner, executor);
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "cancel before fail"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "cancel before fail"));
         List<Long> shardIds = shardIds(commandId);
-        when(shardRunner.run(shardIds.get(0), 100L, 150L, 1000)).thenThrow(new IllegalStateException("source unavailable"));
+        when(shardRunner.run(shardIds.get(0), 100_000L, 150_000L, 1000)).thenThrow(new IllegalStateException("source unavailable"));
 
         runner.run(commandId);
 
@@ -265,9 +265,9 @@ class MigrationBatchRunnerTest {
                     ThreadPoolTaskExecutor.class
             );
             Qualifier shardExecutorQualifier = batchConstructor.getParameters()[2].getAnnotation(Qualifier.class);
-            long commandId = commandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "executor split"));
+            long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "executor split"));
             List<Long> shardIds = shardIds(commandId);
-            when(shardRunner.run(shardIds.get(0), 100L, 150L, 1000)).thenAnswer(invocation -> {
+            when(shardRunner.run(shardIds.get(0), 100_000L, 150_000L, 1000)).thenAnswer(invocation -> {
                 threadNames.add(Thread.currentThread().getName());
                 return new MigrationShardResult(1L, 0L, 0L);
             });
@@ -285,7 +285,7 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runDoesNotScheduleShardsWhenCommandCannotTransitionToRunning() {
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "stale"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "stale"));
         plainJdbc.update("update ana_migration_command set status = 'RUNNING' where command_id = ?", commandId);
 
         batchRunner.run(commandId);
@@ -301,12 +301,12 @@ class MigrationBatchRunnerTest {
         ThreadPoolTaskExecutor shardExecutor = executor("test-migration-queued-", 1, 1, 16);
         try {
             MigrationBatchRunner runner = new MigrationBatchRunner(commandService, shardRunner, shardExecutor);
-            long commandId = commandService.createCommand(new MigrationCommandForm(100L, 200L, 50L, 2, "queued cancel"));
+            long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 200_000L, 50L, 2, "queued cancel"));
             List<Long> shardIds = shardIds(commandId);
             doAnswer(invocation -> {
                 commandService.requestCancel(commandId);
                 return new MigrationShardResult(10L, 0L, 0L);
-            }).when(shardRunner).run(shardIds.get(0), 100L, 150L, 1000);
+            }).when(shardRunner).run(shardIds.get(0), 100_000L, 150_000L, 1000);
 
             runner.run(commandId);
 
@@ -314,7 +314,7 @@ class MigrationBatchRunnerTest {
             assertThat(progress.status()).isEqualTo("CANCELLED");
             assertThat(progress.shards()).extracting(MigrationShardRow::status)
                     .containsExactly("COMPLETED", "PENDING");
-            verify(shardRunner, never()).run(shardIds.get(1), 150L, 200L, 1000);
+            verify(shardRunner, never()).run(shardIds.get(1), 150_000L, 200_000L, 1000);
         } finally {
             shardExecutor.shutdown();
         }
@@ -328,7 +328,7 @@ class MigrationBatchRunnerTest {
             throw new RejectedExecutionException("queue full");
         }).when(rejectingExecutor).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
         MigrationBatchRunner runner = new MigrationBatchRunner(commandService, shardRunner, rejectingExecutor);
-        long commandId = commandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "reject"));
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "reject"));
 
         runner.run(commandId);
 
@@ -357,7 +357,7 @@ class MigrationBatchRunnerTest {
             }
         };
         MigrationBatchRunner runner = new MigrationBatchRunner(racingCommandService, shardRunner, rejectingExecutor);
-        long commandId = racingCommandService.createCommand(new MigrationCommandForm(100L, 150L, 50L, 1, "cancel failure race"));
+        long commandId = racingCommandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "cancel failure race"));
 
         runner.run(commandId);
 

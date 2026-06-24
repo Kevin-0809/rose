@@ -97,15 +97,15 @@ class MigrationCommandServiceTest {
 
     @Test
     void createCommandSplitsHalfOpenWindowsAndLaunches() {
-        long commandId = service.createCommand(new MigrationCommandForm(100L, 250L, 60L, 2, "demo"));
+        long commandId = service.createCommand(new MigrationCommandForm(100_000L, 250_000L, 60L, 2, "demo"));
 
         assertThat(commandId).isPositive();
         assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_shard where command_id = " + commandId, Long.class))
                 .isEqualTo(3L);
         assertThat(plainJdbc.queryForList("select time_from from ana_migration_shard where command_id = " + commandId + " order by shard_seq", Long.class))
-                .containsExactly(100L, 160L, 220L);
+                .containsExactly(100_000L, 160_000L, 220_000L);
         assertThat(plainJdbc.queryForList("select time_to from ana_migration_shard where command_id = " + commandId + " order by shard_seq", Long.class))
-                .containsExactly(160L, 220L, 250L);
+                .containsExactly(160_000L, 220_000L, 250_000L);
         verify(launcher).launch(commandId);
     }
 
@@ -113,24 +113,24 @@ class MigrationCommandServiceTest {
     void createCommandRejectsInvalidForms() {
         assertThatThrownBy(() -> service.createCommand(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(200L, 200L, 60L, 2, "demo")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(200_000L, 200_000L, 60L, 2, "demo")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(200L, 199L, 60L, 2, "demo")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(200_000L, 199_000L, 60L, 2, "demo")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 200L, 0L, 2, "demo")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 0L, 2, "demo")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 200L, 60L, 0, "demo")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 60L, 0, "demo")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 200L, 60L, 9, "demo")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 60L, 9, "demo")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("并行度");
     }
 
     @Test
     void createCommandRollsBackCommandWhenShardInsertFails() {
-        plainJdbc.execute("alter table ana_migration_shard add constraint ck_test_shard_time_to check (time_to < 200)");
+        plainJdbc.execute("alter table ana_migration_shard add constraint ck_test_shard_time_to check (time_to < 200000)");
 
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "rollback")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 220_000L, 60L, 2, "rollback")))
                 .isInstanceOf(RuntimeException.class);
 
         assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_command", Long.class))
@@ -142,7 +142,7 @@ class MigrationCommandServiceTest {
 
     @Test
     void createCommandRejectsExcessiveAndOverflowingShardRangesBeforeInsert() {
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(0L, 10_001L, 1L, 2, "too many")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(0L, 10_001_000L, 1L, 2, "too many")))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(0L, Long.MAX_VALUE, Long.MAX_VALUE - 1L, 2, "overflow count")))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -156,8 +156,8 @@ class MigrationCommandServiceTest {
 
     @Test
     void searchReturnsCommandRowsAndPageMetadata() {
-        long firstCommandId = service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "first"));
-        long secondCommandId = service.createCommand(new MigrationCommandForm(300L, 420L, 60L, 4, "second"));
+        long firstCommandId = service.createCommand(new MigrationCommandForm(100_000L, 220_000L, 60L, 2, "first"));
+        long secondCommandId = service.createCommand(new MigrationCommandForm(300_000L, 420_000L, 60L, 4, "second"));
 
         PagedResult<MigrationCommandRow> result = service.search(PageRequestParams.of(1, 20));
 
@@ -181,8 +181,8 @@ class MigrationCommandServiceTest {
     @Test
     void searchClampsOutOfRangePageBeforeQueryingRows() {
         for (int i = 0; i < 21; i++) {
-            long timeFrom = 100L + (i * 100L);
-            service.createCommand(new MigrationCommandForm(timeFrom, timeFrom + 60L, 60L, 2, "command-" + i));
+            long timeFrom = 100_000L + (i * 100_000L);
+            service.createCommand(new MigrationCommandForm(timeFrom, timeFrom + 60_000L, 60L, 2, "command-" + i));
         }
 
         PagedResult<MigrationCommandRow> result = service.search(PageRequestParams.of(999, 20));
@@ -197,7 +197,7 @@ class MigrationCommandServiceTest {
 
     @Test
     void progressReturnsCommandAndShardRows() {
-        long commandId = service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "demo"));
+        long commandId = service.createCommand(new MigrationCommandForm(100_000L, 220_000L, 60L, 2, "demo"));
 
         MigrationProgressRow progress = service.progress(commandId);
 
@@ -210,7 +210,7 @@ class MigrationCommandServiceTest {
 
     @Test
     void cancelAndResumeUpdateCommandStatus() {
-        long commandId = service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "demo"));
+        long commandId = service.createCommand(new MigrationCommandForm(100_000L, 220_000L, 60L, 2, "demo"));
         reset(launcher);
 
         service.requestCancel(commandId);
@@ -223,8 +223,8 @@ class MigrationCommandServiceTest {
 
     @Test
     void resumeDoesNotLaunchWhenStatusCannotBeResumed() {
-        long createdCommandId = service.createCommand(new MigrationCommandForm(100L, 160L, 60L, 2, "created"));
-        long completedCommandId = service.createCommand(new MigrationCommandForm(300L, 360L, 60L, 2, "completed"));
+        long createdCommandId = service.createCommand(new MigrationCommandForm(100_000L, 160_000L, 60L, 2, "created"));
+        long completedCommandId = service.createCommand(new MigrationCommandForm(300_000L, 360_000L, 60L, 2, "completed"));
         setCommandStatus(completedCommandId, "COMPLETED");
         reset(launcher);
 
@@ -239,7 +239,7 @@ class MigrationCommandServiceTest {
 
     @Test
     void resumeRecoversStaleRunningCommandAndRunningShards() {
-        long commandId = service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "stale running"));
+        long commandId = service.createCommand(new MigrationCommandForm(100_000L, 220_000L, 60L, 2, "stale running"));
         Long firstShardId = shardId(commandId, 0);
         Long secondShardId = shardId(commandId, 1);
         setCommandStatus(commandId, "RUNNING");
@@ -258,7 +258,7 @@ class MigrationCommandServiceTest {
 
     @Test
     void terminalCommandHelpersUseStatusGuards() {
-        long completedCommandId = service.createCommand(new MigrationCommandForm(100L, 160L, 60L, 2, "complete"));
+        long completedCommandId = service.createCommand(new MigrationCommandForm(100_000L, 160_000L, 60L, 2, "complete"));
         reset(launcher);
 
         service.markCompleted(completedCommandId);
@@ -272,7 +272,7 @@ class MigrationCommandServiceTest {
         service.markCancelled(completedCommandId);
         assertThat(service.progress(completedCommandId).status()).isEqualTo("COMPLETED");
 
-        long failedCommandId = service.createCommand(new MigrationCommandForm(200L, 260L, 60L, 2, "fail"));
+        long failedCommandId = service.createCommand(new MigrationCommandForm(200_000L, 260_000L, 60L, 2, "fail"));
         service.markRunning(failedCommandId);
         service.markFailed(failedCommandId, "failed");
         assertThat(service.progress(failedCommandId).status()).isEqualTo("FAILED");
@@ -281,11 +281,11 @@ class MigrationCommandServiceTest {
         service.markCancelled(failedCommandId);
         assertThat(service.progress(failedCommandId).status()).isEqualTo("FAILED");
 
-        long createdCommandId = service.createCommand(new MigrationCommandForm(300L, 360L, 60L, 2, "created"));
+        long createdCommandId = service.createCommand(new MigrationCommandForm(300_000L, 360_000L, 60L, 2, "created"));
         service.markCancelled(createdCommandId);
         assertThat(service.progress(createdCommandId).status()).isEqualTo("CANCELLED");
 
-        long cancelRequestedCommandId = service.createCommand(new MigrationCommandForm(400L, 460L, 60L, 2, "cancel"));
+        long cancelRequestedCommandId = service.createCommand(new MigrationCommandForm(400_000L, 460_000L, 60L, 2, "cancel"));
         service.requestCancel(cancelRequestedCommandId);
         service.markCancelled(cancelRequestedCommandId);
         assertThat(service.progress(cancelRequestedCommandId).status()).isEqualTo("CANCELLED");
@@ -293,7 +293,7 @@ class MigrationCommandServiceTest {
 
     @Test
     void runnerFacingHelpersUpdateShardAndCommandState() {
-        long commandId = service.createCommand(new MigrationCommandForm(100L, 220L, 60L, 2, "demo"));
+        long commandId = service.createCommand(new MigrationCommandForm(100_000L, 220_000L, 60L, 2, "demo"));
         reset(launcher);
         Long firstShardId = shardId(commandId, 0);
         Long secondShardId = shardId(commandId, 1);

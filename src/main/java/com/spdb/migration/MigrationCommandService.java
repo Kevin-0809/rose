@@ -25,6 +25,7 @@ import java.util.Map;
 public class MigrationCommandService {
     static final long MAX_SHARD_COUNT = 10_000L;
     static final int MAX_PARALLELISM = 8;
+    private static final long MILLIS_PER_SECOND = 1000L;
     private static final int MAX_ERROR_LENGTH = 2000;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -324,27 +325,37 @@ public class MigrationCommandService {
     }
 
     private long shardCount(MigrationCommandForm form) {
+        long windowMillis = windowMillis(form.windowSeconds());
         long range = form.timeTo() - form.timeFrom();
-        if (range - 1 > Long.MAX_VALUE - form.windowSeconds()) {
+        if (range - 1 > Long.MAX_VALUE - windowMillis) {
             throw new IllegalArgumentException("Migration shard count exceeds supported range");
         }
-        if (Long.MAX_VALUE - form.timeFrom() < form.windowSeconds()) {
+        if (Long.MAX_VALUE - form.timeFrom() < windowMillis) {
             throw new IllegalArgumentException("Migration shard window exceeds supported range");
         }
-        long shardCount = ((range - 1) / form.windowSeconds()) + 1;
+        long shardCount = ((range - 1) / windowMillis) + 1;
         if (shardCount > MAX_SHARD_COUNT) {
             throw new IllegalArgumentException("Migration shard count exceeds maximum " + MAX_SHARD_COUNT);
         }
         return shardCount;
     }
 
+    private long windowMillis(long windowSeconds) {
+        try {
+            return Math.multiplyExact(windowSeconds, MILLIS_PER_SECOND);
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException("Migration shard window exceeds supported range", ex);
+        }
+    }
+
     private void insertShards(long commandId, MigrationCommandForm form, long totalShardCount) {
         List<MapSqlParameterSource> shards = new ArrayList<>();
+        long windowMillis = windowMillis(form.windowSeconds());
         long currentFrom = form.timeFrom();
         int shardSeq = 0;
         while (shardSeq < totalShardCount) {
             long remaining = form.timeTo() - currentFrom;
-            long currentTo = remaining <= form.windowSeconds() ? form.timeTo() : Math.addExact(currentFrom, form.windowSeconds());
+            long currentTo = remaining <= windowMillis ? form.timeTo() : Math.addExact(currentFrom, windowMillis);
             shards.add(new MapSqlParameterSource()
                     .addValue("commandId", commandId)
                     .addValue("shardSeq", shardSeq++)

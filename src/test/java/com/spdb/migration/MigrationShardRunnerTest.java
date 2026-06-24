@@ -15,6 +15,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -68,7 +69,7 @@ class MigrationShardRunnerTest {
         assertThat(request.get("txn_code")).isEqualTo("PAY001");
         assertThat(request.get("txn_time")).isEqualTo(1000L);
         assertThat(new String((byte[]) request.get("request_message"), StandardCharsets.UTF_8))
-                .isEqualTo("request-TXN-1");
+                .isEqualTo("726571756573742D54584E2D31");
 
         Map<String, Object> response = targetJdbc.queryForMap("""
                 select *
@@ -79,7 +80,7 @@ class MigrationShardRunnerTest {
         assertThat(response.get("txn_code")).isEqualTo("PAY001");
         assertThat(response.get("response_time")).isEqualTo(1010L);
         assertThat(new String((byte[]) response.get("response_message"), StandardCharsets.UTF_8))
-                .isEqualTo("response-TXN-1");
+                .isEqualTo("726573706F6E73652D54584E2D31");
     }
 
     @Test
@@ -195,6 +196,40 @@ class MigrationShardRunnerTest {
 
         assertThat(fetchSizes).contains(2);
         assertThat(autoCommitValues).containsExactly(false, true);
+    }
+
+    @Test
+    void targetBlobColumnsAreBoundAsHexText() {
+        DriverManagerDataSource rawSourceDataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:migration_shard_blob_source;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        DriverManagerDataSource rawTargetDataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:migration_shard_blob_target;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        List<Object> boundValues = new ArrayList<>();
+        DataSource recordingTargetDataSource = recordingTargetDataSource(rawTargetDataSource, boundValues);
+        sourceJdbc = new JdbcTemplate(rawSourceDataSource);
+        targetJdbc = new JdbcTemplate(rawTargetDataSource);
+        runner = new MigrationShardRunner(
+                new NamedParameterJdbcTemplate(rawSourceDataSource),
+                new NamedParameterJdbcTemplate(recordingTargetDataSource),
+                new JdbcTransactionManager(recordingTargetDataSource)
+        );
+        createSchema(sourceJdbc);
+        createSchema(targetJdbc);
+        insertSourcePair("10.0.0.15", "TXN-BLOB", "PAY015", 1000L, 1100L);
+
+        runner.run(4L, 1000L, 2000L, 100);
+
+        assertThat(boundValues).doesNotHaveAnyElementsOfTypes(byte[].class);
+        assertThat(boundValues).contains(
+                "726571756573742D54584E2D424C4F42",
+                "726573706F6E73652D54584E2D424C4F42"
+        );
     }
 
     @Test
@@ -371,6 +406,20 @@ class MigrationShardRunnerTest {
         );
     }
 
+    private DataSource recordingTargetDataSource(DataSource delegate, List<Object> boundValues) {
+        return (DataSource) Proxy.newProxyInstance(
+                DataSource.class.getClassLoader(),
+                new Class<?>[]{DataSource.class},
+                (proxy, method, args) -> {
+                    Object result = method.invoke(delegate, args);
+                    if (result instanceof Connection connection) {
+                        return recordingTargetConnection(connection, boundValues);
+                    }
+                    return result;
+                }
+        );
+    }
+
     private Connection recordingConnection(Connection delegate,
                                            List<Integer> fetchSizes,
                                            List<Boolean> autoCommitValues) {
@@ -391,12 +440,35 @@ class MigrationShardRunnerTest {
     }
 
     private PreparedStatement recordingPreparedStatement(PreparedStatement delegate, List<Integer> fetchSizes) {
+        return recordingPreparedStatement(delegate, fetchSizes, null);
+    }
+
+    private Connection recordingTargetConnection(Connection delegate, List<Object> boundValues) {
+        return (Connection) Proxy.newProxyInstance(
+                Connection.class.getClassLoader(),
+                new Class<?>[]{Connection.class},
+                (proxy, method, args) -> {
+                    Object result = method.invoke(delegate, args);
+                    if (result instanceof PreparedStatement statement) {
+                        return recordingPreparedStatement(statement, null, boundValues);
+                    }
+                    return result;
+                }
+        );
+    }
+
+    private PreparedStatement recordingPreparedStatement(PreparedStatement delegate,
+                                                         List<Integer> fetchSizes,
+                                                         List<Object> boundValues) {
         return (PreparedStatement) Proxy.newProxyInstance(
                 PreparedStatement.class.getClassLoader(),
                 new Class<?>[]{PreparedStatement.class},
                 (proxy, method, args) -> {
-                    if ("setFetchSize".equals(method.getName())) {
+                    if ("setFetchSize".equals(method.getName()) && fetchSizes != null) {
                         fetchSizes.add((Integer) args[0]);
+                    } else if (method.getName().startsWith("set") && args != null && args.length >= 2 && boundValues != null) {
+                        Object value = args[1];
+                        boundValues.add(value instanceof byte[] bytes ? Arrays.copyOf(bytes, bytes.length) : value);
                     }
                     try {
                         return method.invoke(delegate, args);

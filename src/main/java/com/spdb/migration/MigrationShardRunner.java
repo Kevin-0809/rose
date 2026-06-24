@@ -309,7 +309,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long txnTime,
             String messageType,
-            byte[] requestMessage,
+            String requestMessage,
             String globalSeqNo,
             String tranTellerNo
     ) {
@@ -320,7 +320,7 @@ public class MigrationShardRunner {
                     row.requestTxnCode(),
                     row.txnTime(),
                     row.requestMessageType(),
-                    row.requestMessage(),
+                    encodeBlobText(row.requestMessage()),
                     row.globalSeqNo(),
                     row.tranTellerNo()
             );
@@ -333,7 +333,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long responseTime,
             String messageType,
-            byte[] responseMessage,
+            String responseMessage,
             String returnCode,
             String returnMsg
     ) {
@@ -344,10 +344,22 @@ public class MigrationShardRunner {
                     row.responseTxnCode(),
                     row.responseTime(),
                     row.responseMessageType(),
-                    row.responseMessage(),
+                    encodeBlobText(row.responseMessage()),
                     row.returnCode(),
                     row.returnMsg()
             );
         }
+    }
+
+    private static String encodeBlobText(byte[] bytes) {
+        if (bytes == null) {
+            return null;
+        }
+        StringBuilder hex = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            hex.append(Character.toUpperCase(Character.forDigit((b >>> 4) & 0xF, 16)));
+            hex.append(Character.toUpperCase(Character.forDigit(b & 0xF, 16)));
+        }
+        return hex.toString();
     }
 }
