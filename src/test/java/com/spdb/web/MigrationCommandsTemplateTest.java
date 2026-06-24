@@ -19,6 +19,12 @@ class MigrationCommandsTemplateTest {
         assertThat(html).contains("创建迁移指令");
         assertThat(html).contains("name=\"timeFrom\"");
         assertThat(html).contains("name=\"timeTo\"");
+        assertThat(html).contains("type=\"datetime-local\"");
+        assertThat(html).contains("id=\"timeFromPicker\"");
+        assertThat(html).contains("id=\"timeToPicker\"");
+        assertThat(html).contains("type=\"hidden\" name=\"timeFrom\"");
+        assertThat(html).contains("type=\"hidden\" name=\"timeTo\"");
+        assertThat(html).contains("Math.floor(new Date");
         assertThat(html).contains("name=\"windowSeconds\"");
         assertThat(html).contains("name=\"parallelism\"");
         assertThat(html).contains("action=\"/migration/commands\"");

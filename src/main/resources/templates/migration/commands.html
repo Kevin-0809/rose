@@ -21,7 +21,7 @@
     <div><div class="eyebrow">Create</div><h2>创建迁移指令</h2></div>
   </div>
   <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
-  <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}">
+  <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}" id="migrationCommandForm">
     <div>
       <label>源数据源</label>
       <input th:value="${sourceLabel}" readonly class="muted-input">
@@ -32,11 +32,13 @@
     </div>
     <div>
       <label>响应时间起点</label>
-      <input name="timeFrom" type="number" th:value="*{timeFrom}" placeholder="如 1719100000" required>
+      <input id="timeFromPicker" type="datetime-local" required>
+      <input type="hidden" name="timeFrom" th:value="*{timeFrom}">
     </div>
     <div>
       <label>响应时间终点</label>
-      <input name="timeTo" type="number" th:value="*{timeTo}" placeholder="如 1719186400" required>
+      <input id="timeToPicker" type="datetime-local" required>
+      <input type="hidden" name="timeTo" th:value="*{timeTo}">
     </div>
     <div>
       <label>分片窗口大小(秒)</label>
@@ -86,5 +88,32 @@
     </form>
   </section>
 </main>
+<script>
+  (() => {
+    const form = document.getElementById('migrationCommandForm');
+    const fromPicker = document.getElementById('timeFromPicker');
+    const toPicker = document.getElementById('timeToPicker');
+    const fromValue = form.querySelector('input[name="timeFrom"]');
+    const toValue = form.querySelector('input[name="timeTo"]');
+
+    const toDateTimeLocal = (epochSeconds) => {
+      const seconds = Number(epochSeconds);
+      if (!Number.isFinite(seconds) || seconds <= 0) return '';
+      const date = new Date(seconds * 1000);
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    };
+
+    const toEpochSeconds = (input) => Math.floor(new Date(input.value).getTime() / 1000);
+
+    fromPicker.value = toDateTimeLocal(fromValue.value);
+    toPicker.value = toDateTimeLocal(toValue.value);
+
+    form.addEventListener('submit', () => {
+      fromValue.value = toEpochSeconds(fromPicker);
+      toValue.value = toEpochSeconds(toPicker);
+    });
+  })();
+</script>
 </body>
 </html>
