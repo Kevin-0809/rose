@@ -65,12 +65,37 @@
     </div>
   </form>
 
+  <section class="panel timestamp-converter">
+    <div class="section-title"><div><div class="eyebrow">Tools</div><h2>时间戳转换</h2></div></div>
+    <div class="converter-grid">
+      <div class="converter-block">
+        <label>日期时间转 long</label>
+        <div class="datetime-millis-field">
+          <input id="timestampConverterPicker" type="text" placeholder="选择日期时间" autocomplete="off">
+          <input id="timestampConverterMillis" class="millis-input" type="text" inputmode="numeric" pattern="[0-9]{1,3}" maxlength="3" aria-label="转换毫秒" placeholder="000" value="000">
+        </div>
+        <div class="converter-result-row">
+          <button class="btn" type="button" id="dateToLongButton">转换</button>
+          <input id="dateToLongResult" readonly placeholder="毫秒时间戳 long">
+        </div>
+      </div>
+      <div class="converter-block">
+        <label>long 转日期时间</label>
+        <input id="longToDateInput" type="text" inputmode="numeric" placeholder="输入毫秒时间戳 long">
+        <div class="converter-result-row">
+          <button class="btn" type="button" id="longToDateButton">转换</button>
+          <input id="longToDateResult" readonly placeholder="yyyy-MM-dd HH:mm:ss.SSS">
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="panel table-wrap">
     <div class="section-title"><div><div class="eyebrow">History</div><h2>迁移指令列表</h2></div></div>
     <table class="command-table">
       <thead>
       <tr>
-        <th>指令ID</th><th>状态</th><th>进度</th><th>已迁移交易笔数</th>
+        <th>指令ID</th><th>状态</th><th>进度</th><th>起始时间</th><th>结束时间</th><th>已迁移交易笔数</th>
         <th>丢弃数</th><th>跳过数</th><th>耗时</th><th>创建时间</th><th>操作</th>
       </tr>
       </thead>
@@ -79,6 +104,8 @@
         <td th:text="${row.commandId}"></td>
         <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
         <td><span th:text="${row.progressText()}"></span></td>
+        <td th:text="${row.timeFrom}"></td>
+        <td th:text="${row.timeTo}"></td>
         <td th:text="${row.migratedRows}"></td>
         <td th:text="${row.droppedRows}"></td>
         <td th:text="${row.skippedRows}"></td>
@@ -104,6 +131,13 @@
     const toPicker = document.getElementById('timeToPicker');
     const fromMillis = document.getElementById('timeFromMillis');
     const toMillis = document.getElementById('timeToMillis');
+    const converterPicker = document.getElementById('timestampConverterPicker');
+    const converterMillis = document.getElementById('timestampConverterMillis');
+    const dateToLongButton = document.getElementById('dateToLongButton');
+    const dateToLongResult = document.getElementById('dateToLongResult');
+    const longToDateInput = document.getElementById('longToDateInput');
+    const longToDateButton = document.getElementById('longToDateButton');
+    const longToDateResult = document.getElementById('longToDateResult');
     const fromValue = form.querySelector('input[name="timeFrom"]');
     const toValue = form.querySelector('input[name="timeTo"]');
     const pickerOptions = {
@@ -136,6 +170,20 @@
       return date.getTime() - date.getMilliseconds() + normalizeMillis(millisInput);
     };
 
+    const pad = (value, length) => String(value).padStart(length, '0');
+
+    const formatDateTimeWithMillis = (epochMillis) => {
+      const date = new Date(epochMillis);
+      const year = date.getFullYear();
+      const month = pad(date.getMonth() + 1, 2);
+      const day = pad(date.getDate(), 2);
+      const hours = pad(date.getHours(), 2);
+      const minutes = pad(date.getMinutes(), 2);
+      const seconds = pad(date.getSeconds(), 2);
+      const millis = pad(date.getMilliseconds(), 3);
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`;
+    };
+
     const fromInstance = flatpickr(fromPicker, {
       ...pickerOptions,
       defaultDate: toInitialDate(fromValue.value)
@@ -144,10 +192,32 @@
       ...pickerOptions,
       defaultDate: toInitialDate(toValue.value)
     });
+    const converterInstance = flatpickr(converterPicker, {
+      ...pickerOptions,
+      defaultDate: new Date()
+    });
     setInitialMillis(fromMillis, fromValue.value);
     setInitialMillis(toMillis, toValue.value);
     fromMillis.addEventListener('blur', () => normalizeMillis(fromMillis));
     toMillis.addEventListener('blur', () => normalizeMillis(toMillis));
+    converterMillis.addEventListener('blur', () => normalizeMillis(converterMillis));
+
+    dateToLongButton.addEventListener('click', () => {
+      if (!converterInstance.selectedDates[0]) {
+        dateToLongResult.value = '';
+        return;
+      }
+      dateToLongResult.value = String(toEpochMillis(converterInstance, converterMillis));
+    });
+
+    longToDateButton.addEventListener('click', () => {
+      const epochMillis = Number(longToDateInput.value);
+      if (!Number.isFinite(epochMillis)) {
+        longToDateResult.value = '';
+        return;
+      }
+      longToDateResult.value = formatDateTimeWithMillis(epochMillis);
+    });
 
     form.addEventListener('submit', () => {
       fromValue.value = toEpochMillis(fromInstance, fromMillis);
