@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>数据迁移</title>
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css">
 </head>
 <body>
 <main class="shell layout-frame">
@@ -13,38 +14,98 @@
     <div>
       <div class="eyebrow">Message Flow Migration</div>
       <h1>数据迁移</h1>
-      <p class="muted">将 bxds schema 的报文日志配对迁移至 tss schema，支持分片并行与进度跟踪。</p>
+      <p class="muted" th:text="'将 ' + ${sourceLabel} + ' 数据源的报文日志配对迁移至 ' + ${targetSchema} + ' schema，支持分片并行与进度跟踪。'">将源数据源的报文日志配对迁移至目标 schema，支持分片并行与进度跟踪。</p>
     </div>
   </div>
 
-  <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}">
-    <div class="section-title"><div><div class="eyebrow">Source</div><h2>创建迁移指令</h2></div></div>
-    <div class="filter-grid">
-      <div><label>源 schema</label><input value="bxds" readonly></div>
-      <div><label>目标 schema</label><input value="tss" readonly></div>
-      <div><label>响应时间起点</label><input name="timeFrom" type="number" th:value="*{timeFrom}" placeholder="1719100000" required></div>
-      <div><label>响应时间终点</label><input name="timeTo" type="number" th:value="*{timeTo}" placeholder="1719186400" required></div>
-      <div><label>窗口大小(秒)</label><input name="windowSeconds" type="number" th:value="*{windowSeconds}" min="60" max="86400" required></div>
-      <div><label>并行度</label><input name="parallelism" type="number" th:value="*{parallelism}" min="1" max="8" required></div>
-      <div class="span-2"><label>备注</label><input name="remark" th:value="*{remark}"></div>
-      <div class="actions"><button class="btn primary" type="submit">创建迁移</button></div>
+  <div class="section-title">
+    <div><div class="eyebrow">Create</div><h2>创建迁移指令</h2></div>
+  </div>
+  <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
+  <form class="panel form-grid" method="post" action="/migration/commands" th:object="${form}" id="migrationCommandForm">
+    <div>
+      <label>源数据源</label>
+      <input th:value="${sourceLabel}" readonly class="muted-input">
+    </div>
+    <div>
+      <label>目标 schema</label>
+      <input th:value="${targetSchema}" readonly class="muted-input">
+    </div>
+    <div>
+      <label>响应时间起点</label>
+      <div class="datetime-millis-field">
+        <input id="timeFromPicker" type="text" placeholder="选择开始日期时间" autocomplete="off" required>
+        <input id="timeFromMillis" class="millis-input" type="text" inputmode="numeric" pattern="[0-9]{1,3}" maxlength="3" aria-label="起点毫秒" placeholder="000" required>
+      </div>
+      <input type="hidden" name="timeFrom" th:value="*{timeFrom}">
+    </div>
+    <div>
+      <label>响应时间终点</label>
+      <div class="datetime-millis-field">
+        <input id="timeToPicker" type="text" placeholder="选择结束日期时间" autocomplete="off" required>
+        <input id="timeToMillis" class="millis-input" type="text" inputmode="numeric" pattern="[0-9]{1,3}" maxlength="3" aria-label="终点毫秒" placeholder="000" required>
+      </div>
+      <input type="hidden" name="timeTo" th:value="*{timeTo}">
+    </div>
+    <div>
+      <label>分片窗口大小(秒)</label>
+      <input name="windowSeconds" type="number" th:value="*{windowSeconds}" min="60" max="86400" placeholder="默认 3600" required>
+    </div>
+    <div>
+      <label>并行度</label>
+      <input name="parallelism" type="number" th:value="*{parallelism}" min="1" max="8" placeholder="1-8" required>
+    </div>
+    <div class="span-2">
+      <label>备注</label>
+      <input name="remark" th:value="*{remark}" placeholder="可选，记录本次迁移用途">
+    </div>
+    <div class="span-2 actions">
+      <button class="btn primary" type="submit">创建迁移</button>
+      <span class="muted" style="font-size:12px;align-self:center">指令创建后异步执行，可在进度页查看</span>
     </div>
   </form>
+
+  <section class="panel timestamp-converter">
+    <div class="section-title"><div><div class="eyebrow">Tools</div><h2>时间戳转换</h2></div></div>
+    <div class="converter-grid">
+      <div class="converter-block">
+        <label>日期时间转 long</label>
+        <div class="datetime-millis-field">
+          <input id="timestampConverterPicker" type="text" placeholder="选择日期时间" autocomplete="off">
+          <input id="timestampConverterMillis" class="millis-input" type="text" inputmode="numeric" pattern="[0-9]{1,3}" maxlength="3" aria-label="转换毫秒" placeholder="000" value="000">
+        </div>
+        <div class="converter-result-row">
+          <button class="btn" type="button" id="dateToLongButton">转换</button>
+          <input id="dateToLongResult" readonly placeholder="毫秒时间戳 long">
+        </div>
+      </div>
+      <div class="converter-block">
+        <label>long 转日期时间</label>
+        <input id="longToDateInput" type="text" inputmode="numeric" placeholder="输入毫秒时间戳 long">
+        <div class="converter-result-row">
+          <button class="btn" type="button" id="longToDateButton">转换</button>
+          <input id="longToDateResult" readonly placeholder="yyyy-MM-dd HH:mm:ss.SSS">
+        </div>
+      </div>
+    </div>
+  </section>
 
   <section class="panel table-wrap">
     <div class="section-title"><div><div class="eyebrow">History</div><h2>迁移指令列表</h2></div></div>
     <table class="command-table">
       <thead>
       <tr>
-        <th>指令ID</th><th>状态</th><th>进度</th><th>已迁移交易笔数</th>
+        <th>指令ID</th><th>状态</th><th>进度</th><th>起始时间</th><th>结束时间</th><th>已迁移交易笔数</th>
         <th>丢弃数</th><th>跳过数</th><th>耗时</th><th>创建时间</th><th>操作</th>
       </tr>
       </thead>
       <tbody>
-      <tr th:each="row : ${commands}">
+      <tr th:each="row : ${result.rows()}">
         <td th:text="${row.commandId}"></td>
         <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
-        <td><span th:text="${row.completedShardCount} + '/' + ${row.totalShardCount}"></span></td>
+        <td><span th:text="${row.progressText()}"></span></td>
+        <td th:text="${row.timeFrom}"></td>
+        <td th:text="${row.timeTo}"></td>
         <td th:text="${row.migratedRows}"></td>
         <td th:text="${row.droppedRows}"></td>
         <td th:text="${row.skippedRows}"></td>
@@ -56,7 +117,113 @@
       </tr>
       </tbody>
     </table>
+    <form method="get">
+      <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+    </form>
   </section>
 </main>
+<script src="/vendor/flatpickr/flatpickr.min.js"></script>
+<script src="/vendor/flatpickr/l10n/zh.js"></script>
+<script>
+  (() => {
+    const form = document.getElementById('migrationCommandForm');
+    const fromPicker = document.getElementById('timeFromPicker');
+    const toPicker = document.getElementById('timeToPicker');
+    const fromMillis = document.getElementById('timeFromMillis');
+    const toMillis = document.getElementById('timeToMillis');
+    const converterPicker = document.getElementById('timestampConverterPicker');
+    const converterMillis = document.getElementById('timestampConverterMillis');
+    const dateToLongButton = document.getElementById('dateToLongButton');
+    const dateToLongResult = document.getElementById('dateToLongResult');
+    const longToDateInput = document.getElementById('longToDateInput');
+    const longToDateButton = document.getElementById('longToDateButton');
+    const longToDateResult = document.getElementById('longToDateResult');
+    const fromValue = form.querySelector('input[name="timeFrom"]');
+    const toValue = form.querySelector('input[name="timeTo"]');
+    const pickerOptions = {
+      enableTime: true,
+      enableSeconds: true,
+      time_24hr: true,
+      dateFormat: 'Y-m-d H:i:S',
+      locale: flatpickr.l10ns.zh
+    };
+
+    const toInitialDate = (epochMillis) => {
+      const millis = Number(epochMillis);
+      return Number.isFinite(millis) && millis > 0 ? new Date(millis) : null;
+    };
+
+    const setInitialMillis = (input, epochMillis) => {
+      const millis = Number(epochMillis);
+      input.value = Number.isFinite(millis) && millis > 0 ? String(millis % 1000).padStart(3, '0') : '000';
+    };
+
+    const normalizeMillis = (input) => {
+      const millis = Number(input.value);
+      const normalized = Number.isInteger(millis) && millis >= 0 && millis <= 999 ? millis : 0;
+      input.value = String(normalized).padStart(3, '0');
+      return normalized;
+    };
+
+    const toEpochMillis = (instance, millisInput) => {
+      const date = instance.selectedDates[0];
+      return date.getTime() - date.getMilliseconds() + normalizeMillis(millisInput);
+    };
+
+    const pad = (value, length) => String(value).padStart(length, '0');
+
+    const formatDateTimeWithMillis = (epochMillis) => {
+      const date = new Date(epochMillis);
+      const year = date.getFullYear();
+      const month = pad(date.getMonth() + 1, 2);
+      const day = pad(date.getDate(), 2);
+      const hours = pad(date.getHours(), 2);
+      const minutes = pad(date.getMinutes(), 2);
+      const seconds = pad(date.getSeconds(), 2);
+      const millis = pad(date.getMilliseconds(), 3);
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`;
+    };
+
+    const fromInstance = flatpickr(fromPicker, {
+      ...pickerOptions,
+      defaultDate: toInitialDate(fromValue.value)
+    });
+    const toInstance = flatpickr(toPicker, {
+      ...pickerOptions,
+      defaultDate: toInitialDate(toValue.value)
+    });
+    const converterInstance = flatpickr(converterPicker, {
+      ...pickerOptions,
+      defaultDate: new Date()
+    });
+    setInitialMillis(fromMillis, fromValue.value);
+    setInitialMillis(toMillis, toValue.value);
+    fromMillis.addEventListener('blur', () => normalizeMillis(fromMillis));
+    toMillis.addEventListener('blur', () => normalizeMillis(toMillis));
+    converterMillis.addEventListener('blur', () => normalizeMillis(converterMillis));
+
+    dateToLongButton.addEventListener('click', () => {
+      if (!converterInstance.selectedDates[0]) {
+        dateToLongResult.value = '';
+        return;
+      }
+      dateToLongResult.value = String(toEpochMillis(converterInstance, converterMillis));
+    });
+
+    longToDateButton.addEventListener('click', () => {
+      const epochMillis = Number(longToDateInput.value);
+      if (!Number.isFinite(epochMillis)) {
+        longToDateResult.value = '';
+        return;
+      }
+      longToDateResult.value = formatDateTimeWithMillis(epochMillis);
+    });
+
+    form.addEventListener('submit', () => {
+      fromValue.value = toEpochMillis(fromInstance, fromMillis);
+      toValue.value = toEpochMillis(toInstance, toMillis);
+    });
+  })();
+</script>
 </body>
 </html>

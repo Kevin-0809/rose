@@ -72,6 +72,17 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlContainsMigrationStateTables() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"));
+
+        assertThat(ddl).contains("create table if not exists ana_migration_command");
+        assertThat(ddl).contains("create table if not exists ana_migration_shard");
+        assertThat(ddl).contains("ck_ana_migration_command_status");
+        assertThat(ddl).contains("ck_ana_migration_shard_status");
+        assertThat(ddl).contains("idx_ana_migration_shard_command_status");
+    }
+
+    @Test
     void retcodeComparisonTableHasChineseCommentsAndSeedData() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
         String ddlLower = ddl.toLowerCase();

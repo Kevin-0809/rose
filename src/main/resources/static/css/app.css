@@ -1096,3 +1096,55 @@ tbody tr:hover {
     flex-wrap: wrap;
   }
 }
+
+.muted-input {
+  color: var(--text-muted) !important;
+  background: rgba(7, 16, 29, 0.4) !important;
+  cursor: default;
+}
+
+.datetime-millis-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  gap: 6px;
+}
+
+.datetime-millis-field .millis-input {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel.form-grid {
+  padding: 18px 20px 4px;
+  margin-bottom: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.timestamp-converter {
+  margin-bottom: 22px;
+}
+
+.converter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.converter-block {
+  display: grid;
+  gap: 10px;
+}
+
+.converter-result-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .converter-grid {
+    grid-template-columns: 1fr;
+  }
+}

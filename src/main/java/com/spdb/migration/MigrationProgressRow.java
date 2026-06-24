@@ -5,6 +5,8 @@ import java.util.List;
 
 public record MigrationProgressRow(
         long commandId,
+        String sourceLabel,
+        String targetSchema,
         String status,
         long timeFrom,
         long timeTo,
@@ -21,4 +23,15 @@ public record MigrationProgressRow(
         LocalDateTime endedTime,
         String errorMessage,
         List<MigrationShardRow> shards
-) {}
+) {
+    public int completionPercent() {
+        if (totalShardCount <= 0) {
+            return 0;
+        }
+        return (int) (completedShardCount * 100 / totalShardCount);
+    }
+
+    public String progressText() {
+        return completedShardCount + "/" + totalShardCount + " (" + completionPercent() + "%)";
+    }
+}

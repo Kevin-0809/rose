@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 public record MigrationCommandRow(
         long commandId,
+        String sourceLabel,
+        String targetSchema,
         String status,
         long timeFrom,
         long timeTo,
@@ -21,4 +23,15 @@ public record MigrationCommandRow(
         LocalDateTime endedTime,
         String errorMessage,
         String remark
-) {}
+) {
+    public int completionPercent() {
+        if (totalShardCount <= 0) {
+            return 0;
+        }
+        return (int) (completedShardCount * 100 / totalShardCount);
+    }
+
+    public String progressText() {
+        return completedShardCount + "/" + totalShardCount + " (" + completionPercent() + "%)";
+    }
+}

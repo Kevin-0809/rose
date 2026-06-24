@@ -9,21 +9,21 @@ public final class MigrationMockData {
 
     public static List<MigrationCommandRow> commandRows() {
         return List.of(
-                new MigrationCommandRow(1L, "CREATED", 1719100000L, 1719186400L, 3600L, 2,
+                new MigrationCommandRow(1L, "bxds", "tss", "CREATED", 1719100000L, 1719186400L, 3600L, 2,
                         24L, 0L, 0L, 0L, 0L, 0L, "-",
                         LocalDateTime.of(2026, 6, 23, 15, 0), null, null, null, "首批迁移"),
-                new MigrationCommandRow(2L, "RUNNING", 1719100000L, 1719186400L, 3600L, 4,
+                new MigrationCommandRow(2L, "bxds", "tss", "RUNNING", 1719100000L, 1719186400L, 3600L, 4,
                         24L, 15L, 1L, 89300000L, 1200L, 350L, "30分20秒",
                         LocalDateTime.of(2026, 6, 23, 14, 30), LocalDateTime.of(2026, 6, 23, 14, 30), null, null, "并行4"),
-                new MigrationCommandRow(3L, "COMPLETED", 1719000000L, 1719086400L, 3600L, 4,
+                new MigrationCommandRow(3L, "bxds", "tss", "COMPLETED", 1719000000L, 1719086400L, 3600L, 4,
                         24L, 24L, 0L, 120000000L, 5000L, 800L, "1时12分",
                         LocalDateTime.of(2026, 6, 22, 10, 0), LocalDateTime.of(2026, 6, 22, 10, 0),
                         LocalDateTime.of(2026, 6, 22, 11, 12), null, "完成"),
-                new MigrationCommandRow(4L, "FAILED", 1718900000L, 1718986400L, 3600L, 2,
+                new MigrationCommandRow(4L, "bxds", "tss", "FAILED", 1718900000L, 1718986400L, 3600L, 2,
                         24L, 18L, 6L, 45000000L, 200L, 120L, "45分",
                         LocalDateTime.of(2026, 6, 21, 9, 0), LocalDateTime.of(2026, 6, 21, 9, 0),
                         LocalDateTime.of(2026, 6, 21, 9, 45), "3个分片执行超时", "失败批次"),
-                new MigrationCommandRow(5L, "CANCELLED", 1718800000L, 1718886400L, 3600L, 2,
+                new MigrationCommandRow(5L, "bxds", "tss", "CANCELLED", 1718800000L, 1718886400L, 3600L, 2,
                         24L, 10L, 0L, 20000000L, 100L, 50L, "20分",
                         LocalDateTime.of(2026, 6, 20, 8, 0), LocalDateTime.of(2026, 6, 20, 8, 0),
                         LocalDateTime.of(2026, 6, 20, 8, 20), null, "用户取消")
@@ -50,33 +50,33 @@ public final class MigrationMockData {
     }
 
     private static MigrationProgressRow createdProgress() {
-        return new MigrationProgressRow(1L, "CREATED", 1719100000L, 1719186400L, 3600L, 2,
+        return new MigrationProgressRow(1L, "bxds", "tss", "CREATED", 1719100000L, 1719186400L, 3600L, 2,
                 24L, 0L, 0L, 0L, 0L, 0L, null,
                 null, null, null, List.of());
     }
 
     private static MigrationProgressRow runningProgress() {
-        return new MigrationProgressRow(2L, "RUNNING", 1719100000L, 1719186400L, 3600L, 4,
+        return new MigrationProgressRow(2L, "bxds", "tss", "RUNNING", 1719100000L, 1719186400L, 3600L, 4,
                 24L, 15L, 1L, 89300000L, 1200L, 350L, 1820L,
                 LocalDateTime.of(2026, 6, 23, 14, 30), null, null, runningShards());
     }
 
     private static MigrationProgressRow completedProgress() {
-        return new MigrationProgressRow(3L, "COMPLETED", 1719000000L, 1719086400L, 3600L, 4,
+        return new MigrationProgressRow(3L, "bxds", "tss", "COMPLETED", 1719000000L, 1719086400L, 3600L, 4,
                 24L, 24L, 0L, 120000000L, 5000L, 800L, 4320L,
                 LocalDateTime.of(2026, 6, 22, 10, 0), LocalDateTime.of(2026, 6, 22, 11, 12), null,
                 completedShards());
     }
 
     private static MigrationProgressRow failedProgress() {
-        return new MigrationProgressRow(4L, "FAILED", 1718900000L, 1718986400L, 3600L, 2,
+        return new MigrationProgressRow(4L, "bxds", "tss", "FAILED", 1718900000L, 1718986400L, 3600L, 2,
                 24L, 18L, 6L, 45000000L, 200L, 120L, 2700L,
                 LocalDateTime.of(2026, 6, 21, 9, 0), LocalDateTime.of(2026, 6, 21, 9, 45),
                 "3个分片执行超时", failedShards());
     }
 
     private static MigrationProgressRow cancelledProgress() {
-        return new MigrationProgressRow(5L, "CANCELLED", 1718800000L, 1718886400L, 3600L, 2,
+        return new MigrationProgressRow(5L, "bxds", "tss", "CANCELLED", 1718800000L, 1718886400L, 3600L, 2,
                 24L, 10L, 0L, 20000000L, 100L, 50L, 1200L,
                 LocalDateTime.of(2026, 6, 20, 8, 0), LocalDateTime.of(2026, 6, 20, 8, 20),
                 null, cancelledShards());

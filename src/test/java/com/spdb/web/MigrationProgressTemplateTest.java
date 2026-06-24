@@ -18,6 +18,8 @@ class MigrationProgressTemplateTest {
         assertThat(html).contains("fragments/layout :: topbar");
         assertThat(html).contains("迁移进度");
         assertThat(html).contains("progress-bar");
+        assertThat(html).contains("progressText()");
+        assertThat(html).contains("completionPercent()");
         assertThat(html).contains("已迁移交易笔数");
         assertThat(html).contains("丢弃交易数");
         assertThat(html).contains("失败分片数");
