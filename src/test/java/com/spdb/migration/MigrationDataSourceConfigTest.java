@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import javax.sql.DataSource;
+import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,6 +46,19 @@ class MigrationDataSourceConfigTest {
         MigrationDataSourceConfig config = new MigrationDataSourceConfig();
 
         assertThat(config.sourceLabel()).isEqualTo("bxds");
+    }
+
+    @Test
+    void applicationDefaultsPointBxdsToAdpTestDatabase() throws Exception {
+        Properties properties = new Properties();
+        properties.load(getClass().getResourceAsStream("/application.properties"));
+
+        assertThat(properties.getProperty("rose.datasource.bxds.url"))
+                .isEqualTo("${BXDS_DATASOURCE_URL:jdbc:postgresql://localhost:15432/postgres}");
+        assertThat(properties.getProperty("rose.datasource.bxds.username"))
+                .isEqualTo("${BXDS_DATASOURCE_USERNAME:adp}");
+        assertThat(properties.getProperty("rose.datasource.bxds.password"))
+                .isEqualTo("${BXDS_DATASOURCE_PASSWORD:OpenGauss@123}");
     }
 
     @Test
