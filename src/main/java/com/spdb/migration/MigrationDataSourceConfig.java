@@ -2,20 +2,19 @@ package com.spdb.migration;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
 
 @Configuration
 public class MigrationDataSourceConfig {
-    static final String SOURCE_LABEL = "bxds";
+    static final String SOURCE_DATA_SOURCE = "bxds";
+    static final String TARGET_DATA_SOURCE = "primary";
 
     @Bean
     @Primary
@@ -27,13 +26,10 @@ public class MigrationDataSourceConfig {
     @Bean
     @Primary
     @ConfigurationProperties("spring.datasource.hikari")
-    public HikariDataSource dataSource(@Qualifier("primaryDataSourceProperties") DataSourceProperties properties,
-                                       @Value("${spring.jpa.properties.hibernate.default_schema:tss}") String targetSchema) {
-        HikariDataSource dataSource = properties.initializeDataSourceBuilder()
+    public HikariDataSource dataSource(@Qualifier("primaryDataSourceProperties") DataSourceProperties properties) {
+        return properties.initializeDataSourceBuilder()
                 .type(HikariDataSource.class)
                 .build();
-        dataSource.setSchema(targetSchema(targetSchema));
-        return dataSource;
     }
 
     @Bean
@@ -62,16 +58,15 @@ public class MigrationDataSourceConfig {
     }
 
     @Bean
-    public MigrationRuntimeProperties migrationRuntimeProperties(
-            @Value("${spring.jpa.properties.hibernate.default_schema:tss}") String targetSchema) {
-        return new MigrationRuntimeProperties(sourceLabel(), targetSchema(targetSchema));
+    public MigrationRuntimeProperties migrationRuntimeProperties() {
+        return new MigrationRuntimeProperties(sourceDataSourceName(), targetDataSourceName());
     }
 
-    String sourceLabel() {
-        return SOURCE_LABEL;
+    String sourceDataSourceName() {
+        return SOURCE_DATA_SOURCE;
     }
 
-    String targetSchema(String targetSchema) {
-        return StringUtils.hasText(targetSchema) ? targetSchema.trim() : "tss";
+    String targetDataSourceName() {
+        return TARGET_DATA_SOURCE;
     }
 }

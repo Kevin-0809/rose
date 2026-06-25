@@ -33,19 +33,11 @@ class MigrationDataSourceConfigTest {
             );
 
     @Test
-    void targetSchemaDefaultsToTssWhenBlank() {
+    void primaryDataSourceDoesNotBindSchema() {
         MigrationDataSourceConfig config = new MigrationDataSourceConfig();
 
-        assertThat(config.targetSchema(null)).isEqualTo("tss");
-        assertThat(config.targetSchema("")).isEqualTo("tss");
-        assertThat(config.targetSchema(" main_schema ")).isEqualTo("main_schema");
-    }
-
-    @Test
-    void sourceLabelIsBxds() {
-        MigrationDataSourceConfig config = new MigrationDataSourceConfig();
-
-        assertThat(config.sourceLabel()).isEqualTo("bxds");
+        assertThat(config.sourceDataSourceName()).isEqualTo("bxds");
+        assertThat(config.targetDataSourceName()).isEqualTo("primary");
     }
 
     @Test
@@ -59,12 +51,12 @@ class MigrationDataSourceConfigTest {
                 .isEqualTo("${BXDS_DATASOURCE_USERNAME:adp}");
         assertThat(properties.getProperty("rose.datasource.bxds.password"))
                 .isEqualTo("${BXDS_DATASOURCE_PASSWORD:OpenGauss@123}");
+        assertThat(properties).doesNotContainKey("spring.jpa.properties.hibernate.default_schema");
     }
 
     @Test
     void unqualifiedJdbcTemplateUsesPrimaryDatasourceAndBxdsIsQualified() {
         contextRunner
-                .withPropertyValues("spring.jpa.properties.hibernate.default_schema=main_schema")
                 .run(context -> {
             assertThat(context).hasBean("bxdsJdbcTemplate");
             assertThat(context).hasBean("namedParameterJdbcTemplate");
@@ -81,7 +73,7 @@ class MigrationDataSourceConfigTest {
             assertThat(jdbcDataSource(primaryJdbcTemplate)).isSameAs(primaryDataSource);
             assertThat(jdbcDataSource(bxdsJdbcTemplate)).isSameAs(bxdsDataSource);
             assertThat(((HikariDataSource) primaryDataSource).getJdbcUrl()).contains("primary");
-            assertThat(((HikariDataSource) primaryDataSource).getSchema()).isEqualTo("main_schema");
+            assertThat(((HikariDataSource) primaryDataSource).getSchema()).isNull();
             assertThat(((HikariDataSource) bxdsDataSource).getJdbcUrl()).contains("bxds");
             assertThat(((HikariDataSource) bxdsDataSource).getSchema()).isNull();
         });

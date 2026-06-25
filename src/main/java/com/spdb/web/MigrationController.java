@@ -29,8 +29,8 @@ public class MigrationController {
         model.addAttribute("active", "migration");
         model.addAttribute("result", migrationCommandService.search(params));
         model.addAttribute("form", MigrationCommandForm.empty());
-        model.addAttribute("sourceLabel", migrationCommandService.sourceLabel());
-        model.addAttribute("targetSchema", migrationCommandService.targetSchema());
+        model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
+        model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());
         return "migration/commands";
     }
 
@@ -75,7 +75,7 @@ public class MigrationController {
         model.addAttribute("active", "migration");
         model.addAttribute("result", migrationCommandService.search(PageRequestParams.of(null, null)));
         model.addAttribute("form", form);
-        model.addAttribute("sourceLabel", migrationCommandService.sourceLabel());
-        model.addAttribute("targetSchema", migrationCommandService.targetSchema());
+        model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
+        model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());
     }
 }

@@ -459,8 +459,8 @@ comment on column tss_retcode_comp.updated_at is '更新时间';
 
 create table if not exists ana_migration_command (
     command_id bigserial primary key,
-    source_label varchar(64) not null default 'bxds',
-    target_schema varchar(64) not null default 'tss',
+    source_data_source varchar(64) not null default 'bxds',
+    target_data_source varchar(64) not null default 'primary',
     time_from bigint not null,
     time_to bigint not null,
     window_seconds bigint not null,
@@ -481,6 +481,10 @@ create table if not exists ana_migration_command (
     updated_at timestamp not null default current_timestamp
 );
 
+alter table ana_migration_command
+add column if not exists source_data_source varchar(64) not null default 'bxds';
+alter table ana_migration_command
+add column if not exists target_data_source varchar(64) not null default 'primary';
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_status;
 alter table ana_migration_command add constraint ck_ana_migration_command_status
 check (status in ('CREATED','RUNNING','COMPLETED','FAILED','CANCEL_REQUESTED','CANCELLED'));
@@ -509,8 +513,8 @@ alter table ana_migration_shard add constraint ck_ana_migration_shard_status
 check (status in ('PENDING','RUNNING','COMPLETED','FAILED','SKIPPED'));
 
 comment on table ana_migration_command is '报文日志迁移指令表';
-comment on column ana_migration_command.source_label is '源数据源显示名，固定bxds';
-comment on column ana_migration_command.target_schema is '目标schema，来自主数据源配置';
+comment on column ana_migration_command.source_data_source is '源数据源标识，固定bxds';
+comment on column ana_migration_command.target_data_source is '目标数据源标识，固定主数据源';
 comment on table ana_migration_shard is '报文日志迁移分片表';
 
 create index if not exists idx_ana_migration_command_status

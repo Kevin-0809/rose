@@ -5,8 +5,8 @@ import java.util.List;
 
 public record MigrationProgressRow(
         long commandId,
-        String sourceLabel,
-        String targetSchema,
+        String sourceDataSource,
+        String targetDataSource,
         String status,
         long timeFrom,
         long timeTo,

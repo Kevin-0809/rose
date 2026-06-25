@@ -76,10 +76,16 @@ class DatabaseScriptLayoutTest {
         String ddl = Files.readString(Path.of("db/ddl.sql"));
 
         assertThat(ddl).contains("create table if not exists ana_migration_command");
+        assertThat(ddl).contains("source_data_source varchar(64) not null default 'bxds'");
+        assertThat(ddl).contains("target_data_source varchar(64) not null default 'primary'");
+        assertThat(ddl).contains("add column if not exists source_data_source varchar(64) not null default 'bxds'");
+        assertThat(ddl).contains("add column if not exists target_data_source varchar(64) not null default 'primary'");
         assertThat(ddl).contains("create table if not exists ana_migration_shard");
         assertThat(ddl).contains("ck_ana_migration_command_status");
         assertThat(ddl).contains("ck_ana_migration_shard_status");
         assertThat(ddl).contains("idx_ana_migration_shard_command_status");
+        assertThat(ddl).doesNotContain("target_schema varchar");
+        assertThat(ddl).doesNotContain("comment on column ana_migration_command.target_schema");
     }
 
     @Test

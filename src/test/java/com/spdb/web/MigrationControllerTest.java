@@ -21,8 +21,8 @@ class MigrationControllerTest {
         MigrationCommandService service = mock(MigrationCommandService.class);
         PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(commandRow(7L)), 1, PageRequestParams.of(2, 50));
         when(service.search(PageRequestParams.of(2, 50))).thenReturn(result);
-        when(service.sourceLabel()).thenReturn("source_runtime");
-        when(service.targetSchema()).thenReturn("target_runtime");
+        when(service.sourceDataSource()).thenReturn("source_runtime");
+        when(service.targetDataSource()).thenReturn("target_runtime");
         MigrationController controller = new MigrationController(service);
         ConcurrentModel model = new ConcurrentModel();
 
@@ -32,8 +32,8 @@ class MigrationControllerTest {
         assertThat(model.getAttribute("active")).isEqualTo("migration");
         assertThat(model.getAttribute("result")).isSameAs(result);
         assertThat(model.getAttribute("form")).isEqualTo(MigrationCommandForm.empty());
-        assertThat(model.getAttribute("sourceLabel")).isEqualTo("source_runtime");
-        assertThat(model.getAttribute("targetSchema")).isEqualTo("target_runtime");
+        assertThat(model.getAttribute("sourceDataSource")).isEqualTo("source_runtime");
+        assertThat(model.getAttribute("targetDataSource")).isEqualTo("target_runtime");
         verify(service).search(PageRequestParams.of(2, 50));
     }
 
@@ -42,16 +42,16 @@ class MigrationControllerTest {
         MigrationCommandService service = mock(MigrationCommandService.class);
         PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
         when(service.search(PageRequestParams.of(null, null))).thenReturn(result);
-        when(service.sourceLabel()).thenReturn("empty_source");
-        when(service.targetSchema()).thenReturn("empty_target");
+        when(service.sourceDataSource()).thenReturn("empty_source");
+        when(service.targetDataSource()).thenReturn("empty_target");
         MigrationController controller = new MigrationController(service);
         ConcurrentModel model = new ConcurrentModel();
 
         controller.commandsPage(null, null, model);
 
         assertThat(model.getAttribute("result")).isSameAs(result);
-        assertThat(model.getAttribute("sourceLabel")).isEqualTo("empty_source");
-        assertThat(model.getAttribute("targetSchema")).isEqualTo("empty_target");
+        assertThat(model.getAttribute("sourceDataSource")).isEqualTo("empty_source");
+        assertThat(model.getAttribute("targetDataSource")).isEqualTo("empty_target");
     }
 
     @Test
@@ -75,8 +75,8 @@ class MigrationControllerTest {
         PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
         when(service.createCommand(form)).thenThrow(new IllegalArgumentException("响应时间终点必须大于响应时间起点"));
         when(service.search(PageRequestParams.of(null, null))).thenReturn(result);
-        when(service.sourceLabel()).thenReturn("bxds");
-        when(service.targetSchema()).thenReturn("tss");
+        when(service.sourceDataSource()).thenReturn("bxds");
+        when(service.targetDataSource()).thenReturn("primary");
         MigrationController controller = new MigrationController(service);
         ConcurrentModel model = new ConcurrentModel();
 
@@ -86,8 +86,8 @@ class MigrationControllerTest {
         assertThat(model.getAttribute("active")).isEqualTo("migration");
         assertThat(model.getAttribute("result")).isSameAs(result);
         assertThat(model.getAttribute("form")).isSameAs(form);
-        assertThat(model.getAttribute("sourceLabel")).isEqualTo("bxds");
-        assertThat(model.getAttribute("targetSchema")).isEqualTo("tss");
+        assertThat(model.getAttribute("sourceDataSource")).isEqualTo("bxds");
+        assertThat(model.getAttribute("targetDataSource")).isEqualTo("primary");
         assertThat(model.getAttribute("error")).isEqualTo("响应时间终点必须大于响应时间起点");
         verify(service).createCommand(form);
     }

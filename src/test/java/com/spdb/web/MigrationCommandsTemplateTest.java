@@ -65,13 +65,16 @@ class MigrationCommandsTemplateTest {
         assertThat(html).contains("${result.rows()}");
         assertThat(html).contains("fragments/layout :: pager(${result})");
         assertThat(html).contains("源数据源");
-        assertThat(html).contains("${sourceLabel}");
-        assertThat(html).contains("${targetSchema}");
-        assertThat(html).contains("th:text=\"'将 ' + ${sourceLabel}");
+        assertThat(html).contains("目标数据源");
+        assertThat(html).contains("${sourceDataSource}");
+        assertThat(html).contains("${targetDataSource}");
+        assertThat(html).contains("th:text=\"'将 ' + ${sourceDataSource}");
         assertThat(html).doesNotContain("${commands}");
         assertThat(html).doesNotContain("value=\"bxds\"");
         assertThat(html).doesNotContain("value=\"tss\"");
         assertThat(html).doesNotContain("将 bxds schema");
         assertThat(html).doesNotContain("至 tss schema");
+        assertThat(html).doesNotContain("targetSchema");
+        assertThat(html).doesNotContain("目标 schema");
     }
 }

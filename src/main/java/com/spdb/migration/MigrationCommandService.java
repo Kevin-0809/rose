@@ -50,10 +50,10 @@ public class MigrationCommandService {
             KeyHolder keyHolder = new GeneratedKeyHolder();
             jdbc.update("""
                     insert into ana_migration_command (
-                        source_label, target_schema, time_from, time_to, window_seconds, parallelism,
+                        source_data_source, target_data_source, time_from, time_to, window_seconds, parallelism,
                         status, total_shard_count, remark, created_by
                     ) values (
-                        :sourceLabel, :targetSchema, :timeFrom, :timeTo, :windowSeconds, :parallelism,
+                        :sourceDataSource, :targetDataSource, :timeFrom, :timeTo, :windowSeconds, :parallelism,
                         'CREATED', :totalShardCount, :remark, '系统'
                     )
                     """, params(form).addValue("totalShardCount", totalShardCount), keyHolder, new String[]{"command_id"});
@@ -85,12 +85,12 @@ public class MigrationCommandService {
         return PagedResult.of(rows, total, effectivePage);
     }
 
-    public String sourceLabel() {
-        return runtimeProperties.sourceLabel();
+    public String sourceDataSource() {
+        return runtimeProperties.sourceDataSource();
     }
 
-    public String targetSchema() {
-        return runtimeProperties.targetSchema();
+    public String targetDataSource() {
+        return runtimeProperties.targetDataSource();
     }
 
     public MigrationProgressRow progress(long commandId) {
@@ -105,7 +105,7 @@ public class MigrationCommandService {
                 order by shard_seq
                 """, new MapSqlParameterSource("commandId", commandId), (rs, i) -> mapShard(rs));
         return new MigrationProgressRow(
-                command.commandId(), command.sourceLabel(), command.targetSchema(), command.status(),
+                command.commandId(), command.sourceDataSource(), command.targetDataSource(), command.status(),
                 command.timeFrom(), command.timeTo(), command.windowSeconds(), command.parallelism(),
                 command.totalShardCount(), command.completedShardCount(), command.failedShardCount(),
                 command.migratedRows(), command.skippedRows(), command.droppedRows(),
@@ -315,8 +315,8 @@ public class MigrationCommandService {
 
     private MapSqlParameterSource params(MigrationCommandForm form) {
         return new MapSqlParameterSource()
-                .addValue("sourceLabel", runtimeProperties.sourceLabel())
-                .addValue("targetSchema", runtimeProperties.targetSchema())
+                .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
+                .addValue("targetDataSource", runtimeProperties.targetDataSource())
                 .addValue("timeFrom", form.timeFrom())
                 .addValue("timeTo", form.timeTo())
                 .addValue("windowSeconds", form.windowSeconds())
@@ -389,8 +389,8 @@ public class MigrationCommandService {
         LocalDateTime endedTime = localDateTime(rs.getTimestamp("ended_time"));
         return new MigrationCommandRow(
                 rs.getLong("command_id"),
-                rs.getString("source_label"),
-                rs.getString("target_schema"),
+                rs.getString("source_data_source"),
+                rs.getString("target_data_source"),
                 rs.getString("status"),
                 rs.getLong("time_from"),
                 rs.getLong("time_to"),
