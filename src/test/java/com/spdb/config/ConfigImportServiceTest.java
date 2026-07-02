@@ -181,6 +181,29 @@ class ConfigImportServiceTest {
         assertThat(owners).containsExactly("");
     }
 
+    @Test
+    void importsParsedSheetsWithMetadataFromTransactionListEntries() throws Exception {
+        try (var workbook = ConfigWorkbookParserTest.a825Workbook()) {
+            ConfigImportBatchResult result = service.importParsedWorkbooks(
+                    List.of(workbook),
+                    List.of(new TransactionListEntry("A825", "存款", "张三/李四"))
+            );
+
+            assertThat(result.tranInserted()).isEqualTo(1);
+            assertThat(result.fieldInserted()).isEqualTo(4);
+            String moduleName = jdbc.queryForObject("""
+                    select module_name from ana_tran_catalog
+                    where tran_code = :tranCode and service_code = :serviceCode
+                    """, params(), String.class);
+            String owner = jdbc.queryForObject("""
+                    select owner from ana_tran_catalog
+                    where tran_code = :tranCode and service_code = :serviceCode
+                    """, params(), String.class);
+            assertThat(moduleName).isEqualTo("存款");
+            assertThat(owner).isEqualTo("张三/李四");
+        }
+    }
+
     private MapSqlParameterSource params() {
         return new MapSqlParameterSource()
                 .addValue("tranCode", "A825")

@@ -34,6 +34,7 @@ public record IssueCandidate(
                                            String messageType,
                                            String destTrcd,
                                            String compResult,
+                                           String configStatus,
                                            String semanticSignature,
                                            String semanticSignatureHash,
                                            List<SampleDetailFieldDraft> fields) {
@@ -52,7 +53,7 @@ public record IssueCandidate(
                 messageType,
                 destTrcd,
                 compResult,
-                "CONFIGURED",
+                configStatus,
                 mappingStatus,
                 semanticSignature,
                 semanticSignatureHash,

@@ -368,6 +368,80 @@ comment on column ana_sampling_candidate.field_index is '字段序号';
 comment on column ana_sampling_candidate.owner is '责任人';
 comment on column ana_sampling_candidate.created_at is '创建时间';
 
+create table if not exists ana_tran_diff_result (
+    result_id bigserial primary key,
+    batch_id varchar(64) not null,
+    orig_cdate varchar(8) not null,
+    tran_code varchar(32) not null,
+    service_code varchar(200) not null,
+    message_type varchar(32),
+    sample_tran_seq_no varchar(64),
+    orig_error_code varchar(64),
+    orig_error_desc varchar(500),
+    dest_error_code varchar(64),
+    dest_error_desc varchar(500),
+    owner varchar(100),
+    affected_tran_count bigint not null default 0,
+    created_at timestamp not null default current_timestamp
+);
+
+comment on table ana_tran_diff_result is '交易级差异页面结果表';
+comment on column ana_tran_diff_result.result_id is '结果ID';
+comment on column ana_tran_diff_result.batch_id is '采样批次号';
+comment on column ana_tran_diff_result.orig_cdate is '业务日期';
+comment on column ana_tran_diff_result.tran_code is '交易码';
+comment on column ana_tran_diff_result.service_code is '服务码';
+comment on column ana_tran_diff_result.message_type is '报文类型';
+comment on column ana_tran_diff_result.sample_tran_seq_no is '样例流水号';
+comment on column ana_tran_diff_result.orig_error_code is '528响应码';
+comment on column ana_tran_diff_result.orig_error_desc is '528响应描述';
+comment on column ana_tran_diff_result.dest_error_code is 'CCBS响应码';
+comment on column ana_tran_diff_result.dest_error_desc is 'CCBS响应描述';
+comment on column ana_tran_diff_result.owner is '责任人';
+comment on column ana_tran_diff_result.affected_tran_count is '影响交易笔数';
+comment on column ana_tran_diff_result.created_at is '创建时间';
+
+create table if not exists ana_field_diff_result (
+    result_id bigserial primary key,
+    batch_id varchar(64) not null,
+    orig_cdate varchar(8) not null,
+    tran_code varchar(32) not null,
+    service_code varchar(200) not null,
+    message_type varchar(32),
+    message_types varchar(200),
+    sop_field_name varchar(200),
+    soap_field_name varchar(200),
+    bizjson_field_name varchar(200),
+    field_cn_name varchar(200),
+    mapping_status varchar(32) not null default 'MAPPED',
+    sample_tran_seq_no varchar(64),
+    orig_field_value varchar(2000),
+    dest_field_value varchar(2000),
+    owner varchar(100),
+    affected_tran_count bigint not null default 0,
+    created_at timestamp not null default current_timestamp
+);
+
+comment on table ana_field_diff_result is '字段级差异页面结果表';
+comment on column ana_field_diff_result.result_id is '结果ID';
+comment on column ana_field_diff_result.batch_id is '采样批次号';
+comment on column ana_field_diff_result.orig_cdate is '业务日期';
+comment on column ana_field_diff_result.tran_code is '交易码';
+comment on column ana_field_diff_result.service_code is '服务码';
+comment on column ana_field_diff_result.message_type is '主报文类型';
+comment on column ana_field_diff_result.message_types is '涉及报文类型集合';
+comment on column ana_field_diff_result.sop_field_name is 'SOP字段名';
+comment on column ana_field_diff_result.soap_field_name is 'SOAP字段名';
+comment on column ana_field_diff_result.bizjson_field_name is 'BizJSON字段名';
+comment on column ana_field_diff_result.field_cn_name is '字段中文名';
+comment on column ana_field_diff_result.mapping_status is '映射状态，MAPPED、UNMAPPED或MIXED';
+comment on column ana_field_diff_result.sample_tran_seq_no is '样例流水号';
+comment on column ana_field_diff_result.orig_field_value is '528字段值';
+comment on column ana_field_diff_result.dest_field_value is 'CCBS字段值';
+comment on column ana_field_diff_result.owner is '责任人';
+comment on column ana_field_diff_result.affected_tran_count is '影响交易笔数';
+comment on column ana_field_diff_result.created_at is '创建时间';
+
 create table if not exists ana_sampling_summary (
     summary_id bigserial primary key,
     batch_id varchar(64) not null,
@@ -562,6 +636,18 @@ on ana_sampling_command(status, created_time desc);
 create index if not exists idx_ana_sampling_summary_date
 on ana_sampling_summary(orig_cdate desc, created_at desc);
 
+create index if not exists idx_ana_tran_diff_result_query
+on ana_tran_diff_result(batch_id, orig_cdate, tran_code, service_code, message_type, owner);
+
+create index if not exists idx_ana_tran_diff_result_sample
+on ana_tran_diff_result(batch_id, sample_tran_seq_no);
+
+create index if not exists idx_ana_field_diff_result_query
+on ana_field_diff_result(batch_id, orig_cdate, tran_code, service_code, message_type, mapping_status, owner);
+
+create index if not exists idx_ana_field_diff_result_sample
+on ana_field_diff_result(batch_id, sample_tran_seq_no);
+
 create index if not exists idx_ana_sampling_candidate_batch_group
 on ana_sampling_candidate(batch_id, sample_type, tran_code, service_code, sop_field_name);
 
@@ -648,8 +734,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_txn_code
 create index if not exists idx_tss_field_comp_sampling_diff
 on tss_field_comp(orig_cdate, comp_result, orig_field_name, mesg_seq, conv_index, conv_cindex, dest_field_name);
 
+create index if not exists idx_tss_field_comp_sampling_stream
+on tss_field_comp(orig_cdate, comp_result, mesg_seq, field_index);
+
 create index if not exists idx_tss_tran_comp_sampling_join
 on tss_tran_comp(orig_cdate, mesg_seq, conv_index, conv_cindex, comp_result, dest_trcd);
+
+create index if not exists idx_tss_retcode_comp_sampling_join
+on tss_retcode_comp(orig_cdate, mesg_seq);
 
 create index if not exists idx_ana_tran_catalog_service
 on ana_tran_catalog(service_code);

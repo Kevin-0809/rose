@@ -87,7 +87,7 @@ public class SampleController {
                 semanticFieldName, owner, tranSeqNo
         );
         model.addAttribute("criteria", criteria);
-        model.addAttribute("result", sampleQueryService.details(criteria, params));
+        model.addAttribute("result", sampleQueryService.fieldDiffs(criteria, params));
         model.addAttribute("active", "field-diffs");
         return "samples/field-diffs";
     }

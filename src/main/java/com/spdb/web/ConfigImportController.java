@@ -3,6 +3,8 @@ package com.spdb.web;
 import com.spdb.config.ConfigImportBatchResult;
 import com.spdb.config.ConfigImportFile;
 import com.spdb.config.ConfigImportService;
+import com.spdb.config.TransactionListImportResult;
+import com.spdb.config.TransactionListImportService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.StringUtils;
@@ -20,14 +22,38 @@ import java.util.List;
 @Controller
 public class ConfigImportController {
     private final ConfigImportService importService;
+    private final TransactionListImportService listImportService;
 
-    public ConfigImportController(ConfigImportService importService) {
+    public ConfigImportController(ConfigImportService importService,
+                                  TransactionListImportService listImportService) {
         this.importService = importService;
+        this.listImportService = listImportService;
     }
 
     @GetMapping("/config/import")
     public String page(Model model) {
         prepare(model);
+        return "config/import";
+    }
+
+    @PostMapping("/config/import/list")
+    public String importList(@RequestParam("listFile") MultipartFile listFile,
+                             Model model) throws IOException {
+        prepare(model);
+        if (listFile == null || listFile.isEmpty()) {
+            model.addAttribute("errorMessage", "请选择金融业务交易信息登记表Excel文件");
+            return "config/import";
+        }
+        ConfigImportFile tempFile = new ConfigImportFile(copyToTempFile(listFile), listFile.getOriginalFilename());
+        try {
+            TransactionListImportResult result = listImportService.importList(tempFile.path());
+            model.addAttribute("listResult", result);
+            model.addAttribute("batchResult", result.importResult());
+        } catch (RuntimeException | IOException ex) {
+            model.addAttribute("errorMessage", ex.getMessage());
+        } finally {
+            deleteTempFiles(List.of(tempFile));
+        }
         return "config/import";
     }
 

@@ -82,8 +82,15 @@ class JdbcSamplingSourceReaderTest {
     void sourceQueriesIgnoreConversationIndexes() {
         assertThat(JdbcSamplingSourceReader.TRAN_FACT_SQL.toLowerCase()).doesNotContain("conv_index");
         assertThat(JdbcSamplingSourceReader.TRAN_FACT_SQL.toLowerCase()).doesNotContain("conv_cindex");
-        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).doesNotContain("conv_index");
-        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).doesNotContain("conv_cindex");
+        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).doesNotContain("f.conv_index");
+        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).doesNotContain("f.conv_cindex");
+    }
+
+    @Test
+    void fieldAndReturnCodeStreamsJoinTranFactsWithoutLoadingAllTransactions() {
+        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).contains("join tss_tran_comp");
+        assertThat(JdbcSamplingSourceReader.FIELD_DIFF_SQL.toLowerCase()).contains("t.comp_result = '4'");
+        assertThat(JdbcSamplingSourceReader.RETURN_CODE_SQL.toLowerCase()).contains("join tss_tran_comp");
     }
 
     @Test
@@ -122,13 +129,46 @@ class JdbcSamplingSourceReaderTest {
                  field_file_flag, orig_field_name, orig_field_value, dest_field_name, dest_field_value, comp_result)
                 values
                 ('A', '20260611', 'Svc&sop', 1, 1, null, 2, null, 'Second', '2', 'Second', '3', '0'),
-                ('A', '20260611', 'Svc&sop', 1, 1, null, 1, null, 'First', '1', 'First', '2', '0')
+                ('A', '20260611', 'Svc&sop', 1, 1, null, 1, null, 'First', '1', 'First', '2', '0'),
+                ('B', '20260611', 'Svc&sop', 1, 1, null, 1, null, 'Skipped', '1', 'Skipped', '2', '0')
+                """);
+        jdbc.update("""
+                insert into tss_tran_comp
+                (mesg_seq, orig_cdate, conv_index, conv_cindex, comp_date, dest_trcd, orig_tran_res, dest_tran_res, comp_result)
+                values
+                ('A', '20260611', 1, 1, '20260611', 'Svc&sop', '2', '2', '4'),
+                ('B', '20260611', 1, 1, '20260611', 'Svc&sop', '2', '2', '1')
                 """);
         List<FieldDiff> diffs = new ArrayList<>();
 
         reader.readFieldDiffs("20260611", diffs::add);
 
         assertThat(diffs).extracting(FieldDiff::rawFieldName).containsExactly("First", "Second");
+    }
+
+    @Test
+    void readsReturnCodesWithConfiguredTransactionContext() {
+        var jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+        jdbc.update("""
+                insert into tss_tran_comp
+                (mesg_seq, orig_cdate, conv_index, conv_cindex, comp_date, dest_trcd, orig_tran_res, dest_tran_res, comp_result)
+                values
+                ('A', '20260611', 1, 1, '20260611', 'Svc&bizjson', '2', '2', '8')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp
+                (mesg_seq, service_code, orig_cdate, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc)
+                values
+                ('A', 'Svc&bizjson', '20260611', 'E1', '原错误', 'E2', '目标错误')
+                """);
+        List<ReturnCodeDiff> diffs = new ArrayList<>();
+
+        reader.readReturnCodes("20260611", diffs::add);
+
+        assertThat(diffs).hasSize(1);
+        assertThat(diffs.get(0).destTrcd()).isEqualTo("Svc&bizjson");
+        assertThat(diffs.get(0).serviceCode()).isEqualTo("Svc");
+        assertThat(diffs.get(0).messageType()).isEqualTo("bizjson");
     }
 
     private String javaSource(String fileName) {

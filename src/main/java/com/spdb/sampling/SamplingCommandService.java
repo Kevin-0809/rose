@@ -175,8 +175,8 @@ public class SamplingCommandService {
                        ended_time = current_timestamp,
                        total_tran_count = coalesce((select total_tran_count from ana_sampling_summary where batch_id = c.batch_id), 0),
                        field_diff_count = coalesce((select issue_field_count from ana_sampling_summary where batch_id = c.batch_id), 0),
-                       sample_group_count = coalesce((select count(*) from ana_sample_group where batch_id = c.batch_id), 0),
-                       sample_detail_count = coalesce((select count(*) from ana_sample_detail where batch_id = c.batch_id), 0)
+                       sample_group_count = coalesce((select sample_group_count from ana_sampling_summary where batch_id = c.batch_id), 0),
+                       sample_detail_count = coalesce((select sample_detail_count from ana_sampling_summary where batch_id = c.batch_id), 0)
                  where c.batch_id = :batchId
                 """, new MapSqlParameterSource().addValue("batchId", batchId));
     }

@@ -83,16 +83,13 @@ class SampleExcelExportServiceTest {
     }
 
     @Test
-    void streamsFieldDiffExportAsOneSheetWithSampleAndFieldColumns() throws Exception {
+    void streamsFieldDiffExportAsHorizontalReviewSheet() throws Exception {
         SampleExcelExportService service = new SampleExcelExportService();
         SampleQueryService queryService = mock(SampleQueryService.class);
-        SampleFieldDiffExportRow row = new SampleFieldDiffExportRow(
-                1L, 1001L, 2L, "B20260609", "20260609", "FIELD_DIFF", 1,
-                "CONFIGURED", "S001&bizjson", "S001", "bizjson", "A001", "4",
-                "HUOBDH,FAB251", "CurrencyId,FcyCollCrspBnkLkg",
-                "CurrencyId,FcyCollCrspBnkLkg", "币种,联动信息", "SEQ001", "张三",
-                12L, 2, null, null, null, null, "字段取值不一致", "tss_field_comp",
-                "SEQ001", "CurrencyId", "currency_id", "币种", "111", "222", "MAPPED", 1
+        SampleFieldDiffRow row = new SampleFieldDiffRow(
+                "20260609", "B20260609", "A001", "S001", "bizjson",
+                "HUOBDH", "CurrencyId", "CurrencyId", "币种", "MAPPED",
+                "SEQ001", "111", "222", "张三", 12L
         );
         doAnswer(invocation -> {
             SampleFieldDiffExportConsumer consumer = invocation.getArgument(1);
@@ -109,26 +106,22 @@ class SampleExcelExportServiceTest {
             assertThat(sheet).isNotNull();
             assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("字段级差异合并导出");
             Row header = sheet.getRow(1);
-            assertThat(header.getCell(6).getStringCellValue()).isEqualTo("流水号");
-            assertThat(header.getCell(7).getStringCellValue()).isEqualTo("SOP字段名");
-            assertThat(header.getCell(10).getStringCellValue()).isEqualTo("字段中文名");
-            assertThat(header.getCell(11).getStringCellValue()).isEqualTo("字段数");
-            assertThat(header.getCell(12).getStringCellValue()).isEqualTo("原字段名");
-            assertThat(header.getCell(13).getStringCellValue()).isEqualTo("标准字段名");
-            assertThat(header.getCell(15).getStringCellValue()).isEqualTo("528字段值");
-            assertThat(header.getCell(16).getStringCellValue()).isEqualTo("CCBS字段值");
-            assertThat(header.getCell(19).getStringCellValue()).isEqualTo("数量");
-            assertThat(header.getCell(20).getStringCellValue()).isEqualTo("来源表");
-            assertThat(header.getCell(21).getStringCellValue()).isEqualTo("责任人");
-            assertThat(header.getLastCellNum()).isEqualTo((short) 22);
-            assertThat(rowText(header)).doesNotContain("原因", "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述");
-            assertThat(sheet.getRow(2).getCell(6).getStringCellValue()).isEqualTo("SEQ001");
-            assertThat(sheet.getRow(2).getCell(7).getStringCellValue()).isEqualTo("HUOBDH,FAB251");
-            assertThat(sheet.getRow(2).getCell(12).getStringCellValue()).isEqualTo("CurrencyId");
-            assertThat(sheet.getRow(2).getCell(13).getStringCellValue()).isEqualTo("currency_id");
-            assertThat(sheet.getRow(2).getCell(15).getStringCellValue()).isEqualTo("111");
-            assertThat(sheet.getRow(2).getCell(16).getStringCellValue()).isEqualTo("222");
-            assertThat(sheet.getRow(2).getCell(21).getStringCellValue()).isEqualTo("张三");
+            assertThat(rowText(header)).isEqualTo("业务日期,批次号,交易码,服务码,报文类型,SOP字段名,SOAP字段名,BizJSON字段名,字段中文名,映射状态,样例流水号,528值,CCBS值,责任人,影响交易笔数,审核人,是否修复,差异分类,差异说明");
+            assertThat(header.getLastCellNum()).isEqualTo((short) 19);
+            assertThat(rowText(header)).doesNotContain("原字段名", "标准字段名", "字段序号", "字段数", "来源表");
+            assertThat(sheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("20260609");
+            assertThat(sheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("B20260609");
+            assertThat(sheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("HUOBDH");
+            assertThat(sheet.getRow(2).getCell(9).getStringCellValue()).isEqualTo("已映射");
+            assertThat(sheet.getRow(2).getCell(10).getStringCellValue()).isEqualTo("SEQ001");
+            assertThat(sheet.getRow(2).getCell(11).getStringCellValue()).isEqualTo("111");
+            assertThat(sheet.getRow(2).getCell(12).getStringCellValue()).isEqualTo("222");
+            assertThat(sheet.getRow(2).getCell(13).getStringCellValue()).isEqualTo("张三");
+            assertThat(sheet.getRow(2).getCell(14).getNumericCellValue()).isEqualTo(12);
+            assertThat(sheet.getRow(2).getCell(15).getStringCellValue()).isEmpty();
+            assertThat(sheet.getRow(2).getCell(16).getStringCellValue()).isEqualTo("否");
+            assertThat(sheet.getRow(2).getCell(17).getStringCellValue()).isEmpty();
+            assertThat(sheet.getRow(2).getCell(18).getStringCellValue()).isEmpty();
             assertThat(sheet.getPaneInformation().isFreezePane()).isTrue();
         }
     }

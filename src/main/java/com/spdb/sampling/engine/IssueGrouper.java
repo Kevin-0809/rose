@@ -10,18 +10,25 @@ import java.util.TreeSet;
 
 public class IssueGrouper {
     private final int maxSamplesPerGroup;
+    private final Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
     public IssueGrouper(int maxSamplesPerGroup) {
         this.maxSamplesPerGroup = maxSamplesPerGroup;
     }
 
     public List<SampleGroupDraft> group(List<IssueCandidate> candidates) {
-        Map<String, MutableGroup> groups = new LinkedHashMap<>();
         candidates.stream()
                 .sorted(Comparator.comparing(IssueCandidate::sourceKey))
-                .forEach(candidate -> groups
-                        .computeIfAbsent(groupKey(candidate), key -> new MutableGroup(key, candidate))
-                        .add(candidate, maxSamplesPerGroup));
+                .forEach(this::add);
+        return groups();
+    }
+
+    public void add(IssueCandidate candidate) {
+        groups.computeIfAbsent(groupKey(candidate), key -> new MutableGroup(key, candidate))
+                .add(candidate, maxSamplesPerGroup);
+    }
+
+    public List<SampleGroupDraft> groups() {
         return groups.values().stream()
                 .map(MutableGroup::toDraft)
                 .toList();

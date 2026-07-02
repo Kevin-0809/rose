@@ -27,6 +27,14 @@
     </form>
   </div>
 
+  <div class="panel form-grid">
+    <form class="span-4 form-grid" method="post" action="/config/import/list" enctype="multipart/form-data">
+      <div class="span-2"><label>金融业务交易信息登记表</label><input type="file" name="listFile" accept=".xlsx,.xls" required></div>
+      <div class="span-2"><label>读取规则</label><input readonly class="muted-input" value="D列防腐528交易码，A列业务领域，H/I列负责人"></div>
+      <div class="actions"><button class="btn primary" type="submit">清单导入</button></div>
+    </form>
+  </div>
+
   <section class="panel" th:if="${errorMessage}">
     <p class="muted" th:text="${errorMessage}"></p>
   </section>
@@ -36,6 +44,22 @@
     <div class="card"><div class="label">交易更新</div><div class="value" th:text="${batchResult.tranUpdated()}">0</div></div>
     <div class="card"><div class="label">字段新增</div><div class="value" th:text="${batchResult.fieldInserted()}">0</div></div>
     <div class="card"><div class="label">字段更新</div><div class="value" th:text="${batchResult.fieldUpdated()}">0</div></div>
+  </section>
+
+  <section class="cards" th:if="${listResult}">
+    <div class="card"><div class="label">清单交易数</div><div class="value" th:text="${listResult.totalCount()}">0</div></div>
+    <div class="card"><div class="label">请求批次</div><div class="value" th:text="${listResult.requestBatchCount()}">0</div></div>
+    <div class="card"><div class="label">成功批次</div><div class="value" th:text="${listResult.successBatchCount()}">0</div></div>
+    <div class="card"><div class="label">失败批次</div><div class="value" th:text="${listResult.failureBatchCount()}">0</div></div>
+  </section>
+
+  <section class="panel table-wrap" th:if="${listResult != null and !listResult.failures().isEmpty()}">
+    <table>
+      <thead><tr><th>失败批次</th></tr></thead>
+      <tbody>
+      <tr th:each="failure : ${listResult.failures()}"><td th:text="${failure}"></td></tr>
+      </tbody>
+    </table>
   </section>
 </main>
 </body>

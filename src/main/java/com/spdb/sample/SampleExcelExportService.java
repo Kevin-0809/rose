@@ -48,14 +48,13 @@ public class SampleExcelExportService {
     private static final int[] DETAIL_FIELD_WIDTHS = {18, 24, 12, 28, 24, 18, 28, 28, 16, 10};
 
     private static final String[] FIELD_DIFF_EXPORT_HEADERS = {
-            "业务日期", "类型", "配置状态", "交易码", "服务码", "报文类型",
-            "流水号", "SOP字段名", "SOAP字段名", "BizJSON字段名", "字段中文名",
-            "字段数", "原字段名", "标准字段名", "字段中文名(明细)", "528字段值",
-            "CCBS字段值", "映射状态", "字段序号", "数量", "来源表", "责任人"
+            "业务日期", "批次号", "交易码", "服务码", "报文类型",
+            "SOP字段名", "SOAP字段名", "BizJSON字段名", "字段中文名", "映射状态",
+            "样例流水号", "528值", "CCBS值", "责任人", "影响交易笔数",
+            "审核人", "是否修复", "差异分类", "差异说明"
     };
     private static final int[] FIELD_DIFF_EXPORT_WIDTHS = {
-            12, 16, 16, 12, 28, 12, 24, 24, 24, 28, 18, 10, 14,
-            24, 18, 28, 28, 16, 10, 12, 18, 14
+            12, 22, 12, 28, 12, 24, 24, 28, 18, 16, 24, 28, 28, 14, 14, 14, 12, 14, 32
     };
     private static final String[] SERVICE_REPORT_HEADERS = {
             "业务日期", "批次", "交易码", "服务码", "交易名称", "责任人",
@@ -306,31 +305,41 @@ public class SampleExcelExportService {
         write(excelRow, col, row.fieldIndex(), styles.number());
     }
 
-    private void writeFieldDiffExportRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleFieldDiffExportRow row) {
+    private void writeFieldDiffExportRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleFieldDiffRow row) {
         Row excelRow = sheet.createRow(rowIndex);
         int col = 0;
         write(excelRow, col++, row.origCdate(), styles.body());
-        write(excelRow, col++, row.sampleType(), styles.body());
-        write(excelRow, col++, row.configStatus(), styles.body());
+        write(excelRow, col++, row.batchId(), styles.body());
         write(excelRow, col++, row.tranCode(), styles.body());
         write(excelRow, col++, row.serviceCode(), styles.body());
         write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.tranSeqNo(), styles.body());
         write(excelRow, col++, row.sopFieldName(), styles.body());
         write(excelRow, col++, row.soapFieldName(), styles.body());
         write(excelRow, col++, row.bizjsonFieldName(), styles.body());
         write(excelRow, col++, row.fieldCnName(), styles.body());
-        write(excelRow, col++, row.fieldCount(), styles.number());
-        write(excelRow, col++, row.rawFieldName(), styles.body());
-        write(excelRow, col++, row.stdFieldName(), styles.body());
-        write(excelRow, col++, row.detailFieldCnName(), styles.body());
+        write(excelRow, col++, mappingStatusText(row.mappingStatus()), styles.body());
+        write(excelRow, col++, row.sampleTranSeqNo(), styles.body());
         write(excelRow, col++, row.origFieldValue(), styles.body());
         write(excelRow, col++, row.destFieldValue(), styles.body());
-        write(excelRow, col++, row.mappingStatus(), styles.body());
-        write(excelRow, col++, row.fieldIndex(), styles.number());
-        write(excelRow, col++, row.affectedCount(), styles.number());
-        write(excelRow, col++, row.sourceTable(), styles.body());
-        write(excelRow, col, row.owner(), styles.body());
+        write(excelRow, col++, row.owner(), styles.body());
+        write(excelRow, col++, row.affectedTranCount(), styles.number());
+        write(excelRow, col++, "", styles.body());
+        write(excelRow, col++, "否", styles.body());
+        write(excelRow, col++, "", styles.body());
+        write(excelRow, col, "", styles.body());
+    }
+
+    private String mappingStatusText(String mappingStatus) {
+        if ("MAPPED".equals(mappingStatus)) {
+            return "已映射";
+        }
+        if ("UNMAPPED".equals(mappingStatus)) {
+            return "未映射";
+        }
+        if ("MIXED".equals(mappingStatus)) {
+            return "混合";
+        }
+        return mappingStatus;
     }
 
     private void writeServiceReportRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SamplingServiceReportRow row) {

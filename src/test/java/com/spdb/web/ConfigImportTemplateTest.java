@@ -28,5 +28,10 @@ class ConfigImportTemplateTest {
         assertThat(html).doesNotContain("工作表名称");
         assertThat(html).contains("服务名称编号和服务操作名称拼接");
         assertThat(html).contains("确认导入");
+        assertThat(html).contains("/config/import/list");
+        assertThat(html).contains("name=\"listFile\"");
+        assertThat(html).contains("清单导入");
+        assertThat(html).contains("金融业务交易信息登记表");
+        assertThat(html).contains("防腐528交易码");
     }
 }

@@ -4,11 +4,15 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.poi.ss.usermodel.Workbook;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class ConfigImportService {
@@ -63,6 +67,52 @@ public class ConfigImportService {
             }
         }
         return new ConfigImportBatchResult(tranInserted, tranUpdated, fieldInserted, fieldUpdated, fieldSkipped, results);
+    }
+
+    @Transactional
+    public ConfigImportBatchResult importParsedWorkbooks(List<Workbook> workbooks, List<TransactionListEntry> entries) {
+        Map<String, TransactionListEntry> entryByTranCode = entries.stream()
+                .collect(Collectors.toMap(TransactionListEntry::tranCode, Function.identity(), (first, ignored) -> first));
+        List<ConfigImportResult> results = new ArrayList<>();
+        int tranInserted = 0;
+        int tranUpdated = 0;
+        int fieldInserted = 0;
+        int fieldUpdated = 0;
+        int fieldSkipped = 0;
+        for (Workbook workbook : workbooks) {
+            List<ParsedConfigImport> parsedImports = parser.parseAll(workbook, "mapping.xlsx", "", "", "");
+            for (ParsedConfigImport parsed : parsedImports) {
+                TransactionListEntry entry = entryByTranCode.get(parsed.tran().tranCode());
+                if (entry == null) {
+                    fieldSkipped += parsed.fields().size();
+                    continue;
+                }
+                ConfigImportResult result = importParsed(withEntryMetadata(parsed, entry));
+                results.add(result);
+                tranInserted += result.tranInserted();
+                tranUpdated += result.tranUpdated();
+                fieldInserted += result.fieldInserted();
+                fieldUpdated += result.fieldUpdated();
+                fieldSkipped += result.fieldSkipped();
+            }
+        }
+        return new ConfigImportBatchResult(tranInserted, tranUpdated, fieldInserted, fieldUpdated, fieldSkipped, results);
+    }
+
+    private ParsedConfigImport withEntryMetadata(ParsedConfigImport parsed, TransactionListEntry entry) {
+        ParsedTranImport tran = parsed.tran();
+        return new ParsedConfigImport(
+                new ParsedTranImport(
+                        tran.tranCode(),
+                        tran.serviceCode(),
+                        tran.tranName(),
+                        entry.moduleName(),
+                        entry.owner(),
+                        tran.remark()
+                ),
+                parsed.fields(),
+                parsed.warnings()
+        );
     }
 
     private ConfigImportResult importParsed(ParsedConfigImport parsed) {

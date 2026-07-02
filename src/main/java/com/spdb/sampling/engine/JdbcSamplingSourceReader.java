@@ -22,20 +22,27 @@ public class JdbcSamplingSourceReader implements SamplingSourceReader {
             """;
 
     public static final String RETURN_CODE_SQL = """
-            select mesg_seq, service_code, orig_cdate, orig_error_code, orig_error_desc,
-                   dest_error_code, dest_error_desc
-            from tss_retcode_comp
-            where orig_cdate = ?
-            order by mesg_seq
+            select r.mesg_seq, coalesce(t.dest_trcd, r.service_code) as service_code, r.orig_cdate,
+                   r.orig_error_code, r.orig_error_desc, r.dest_error_code, r.dest_error_desc
+            from tss_retcode_comp r
+            join tss_tran_comp t
+              on t.orig_cdate = r.orig_cdate
+             and t.mesg_seq = r.mesg_seq
+            where r.orig_cdate = ?
+            order by r.mesg_seq
             """;
 
     public static final String FIELD_DIFF_SQL = """
-            select mesg_seq, orig_cdate, dest_trcd, field_index,
-                   orig_field_name, orig_field_value, dest_field_name, dest_field_value
-            from tss_field_comp
-            where orig_cdate = ?
-              and comp_result = '0'
-            order by mesg_seq, field_index
+            select f.mesg_seq, f.orig_cdate, coalesce(t.dest_trcd, f.dest_trcd) as dest_trcd,
+                   f.field_index, f.orig_field_name, f.orig_field_value, f.dest_field_name, f.dest_field_value
+            from tss_field_comp f
+            join tss_tran_comp t
+              on t.orig_cdate = f.orig_cdate
+             and t.mesg_seq = f.mesg_seq
+             and t.comp_result = '4'
+            where f.orig_cdate = ?
+              and f.comp_result = '0'
+            order by f.mesg_seq, f.field_index
             """;
 
     private final JdbcTemplate jdbc;

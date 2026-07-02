@@ -4,9 +4,13 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class SamplingAsyncExecutor implements SamplingTaskLauncher {
+    private static final Logger log = LoggerFactory.getLogger(SamplingAsyncExecutor.class);
+
     private final ObjectProvider<SamplingCommandService> samplingCommandService;
     private final ThreadPoolTaskExecutor executor;
 
@@ -32,7 +36,12 @@ public class SamplingAsyncExecutor implements SamplingTaskLauncher {
             commandService.runSamplingBatch(batchId);
             commandService.markCompleted(batchId);
         } catch (Exception e) {
-            commandService.markFailed(batchId, e.getMessage());
+            log.error("采样批次执行失败，batchId={}", batchId, e);
+            try {
+                commandService.markFailed(batchId, e.getMessage());
+            } catch (Exception markFailedException) {
+                log.error("采样批次失败状态回写失败，batchId={}，原始异常={}", batchId, e.toString(), markFailedException);
+            }
         }
     }
 }

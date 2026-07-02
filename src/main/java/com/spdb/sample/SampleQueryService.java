@@ -53,13 +53,25 @@ public class SampleQueryService {
     }
 
     public PagedResult<SampleDetailRow> transactionDiffs(SampleSearchCriteria criteria, PageRequestParams page) {
-        QueryParts query = transactionDiffWhere(criteria);
+        QueryParts query = transactionResultWhere(criteria);
         query.params.addValue("limit", page.size()).addValue("offset", page.offset());
-        List<SampleDetailRow> rows = jdbc.query(transactionDiffSelect() + query.where + transactionDiffGroupBy() + """
-                 order by max(d.sample_id) desc
+        List<SampleDetailRow> rows = jdbc.query(transactionResultSelect() + query.where + """
+                 order by r.affected_tran_count desc, r.result_id desc
                  limit :limit offset :offset
                 """, query.params, (rs, i) -> mapTransactionDiffRow(rs));
-        long total = groupedCount(query, transactionDiffGroupBy());
+        long total = count("ana_tran_diff_result r", query);
+        return PagedResult.of(rows, total, page);
+    }
+
+    public PagedResult<SampleFieldDiffRow> fieldDiffs(SampleSearchCriteria criteria, PageRequestParams page) {
+        QueryParts query = fieldResultWhere(criteria);
+        query.params.addValue("limit", page.size()).addValue("offset", page.offset());
+        List<SampleFieldDiffRow> rows = jdbc.query(fieldResultSelect() + query.where + """
+                 order by r.affected_tran_count desc, r.tran_code, r.service_code,
+                          coalesce(r.field_cn_name, ''), r.sample_tran_seq_no
+                 limit :limit offset :offset
+                """, query.params, (rs, i) -> mapFieldDiffRow(rs));
+        long total = count("ana_field_diff_result r", query);
         return PagedResult.of(rows, total, page);
     }
 
@@ -78,11 +90,11 @@ public class SampleQueryService {
     }
 
     public void streamTransactionDiffExport(SampleSearchCriteria criteria, SampleDetailConsumer consumer) {
-        QueryParts query = transactionDiffWhere(criteria);
+        QueryParts query = transactionResultWhere(criteria);
         query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
         RowCallbackHandler handler = rs -> consumer.accept(mapTransactionDiffRow(rs));
-        jdbc.query(transactionDiffSelect() + query.where + transactionDiffGroupBy() + """
-                 order by max(d.sample_id) desc
+        jdbc.query(transactionResultSelect() + query.where + """
+                 order by r.affected_tran_count desc, r.result_id desc
                  limit :exportLimit
                 """, query.params, handler);
     }
@@ -111,11 +123,12 @@ public class SampleQueryService {
     }
 
     public void streamFieldDiffExport(SampleSearchCriteria criteria, SampleFieldDiffExportConsumer consumer) {
-        QueryParts query = fieldDiffExportWhere(criteria);
+        QueryParts query = fieldResultWhere(criteria);
         query.params.addValue("exportLimit", MAX_EXPORT_ROWS);
-        RowCallbackHandler handler = rs -> consumer.accept(mapFieldDiffExportRow(rs));
-        jdbc.query(fieldDiffExportSelect() + query.where + """
-                 order by d.sample_id desc, f.field_index, f.field_detail_id
+        RowCallbackHandler handler = rs -> consumer.accept(mapFieldDiffRow(rs));
+        jdbc.query(fieldResultSelect() + query.where + """
+                 order by r.affected_tran_count desc, r.tran_code, r.service_code,
+                          coalesce(r.field_cn_name, ''), r.sample_tran_seq_no
                  limit :exportLimit
                 """, query.params, handler);
     }
@@ -220,45 +233,62 @@ public class SampleQueryService {
                 """;
     }
 
-    private String transactionDiffSelect() {
+    private String transactionResultSelect() {
         return """
                 select
-                       max(d.sample_id) as sample_id,
-                       min(d.group_id) as group_id,
-                       d.batch_id,
-                       d.orig_cdate,
-                       d.sample_type,
-                       min(d.sample_seq_no) as sample_seq_no,
-                       d.config_status,
-                       d.dest_trcd,
-                       d.service_code,
-                       d.message_type,
-                       d.tran_code,
-                       d.comp_result,
+                       r.result_id as sample_id,
+                       cast(0 as bigint) as group_id,
+                       r.batch_id,
+                       r.orig_cdate,
+                       'RETURN_CODE' as sample_type,
+                       1 as sample_seq_no,
+                       'CONFIGURED' as config_status,
+                       case
+                           when length(trim(coalesce(r.message_type, ''))) > 0 then r.service_code || '&' || r.message_type
+                           else r.service_code
+                       end as dest_trcd,
+                       r.service_code,
+                       r.message_type,
+                       r.tran_code,
+                       '8' as comp_result,
                        cast(null as varchar(200)) as sop_field_name,
                        cast(null as varchar(200)) as soap_field_name,
                        cast(null as varchar(200)) as bizjson_field_name,
                        cast(null as varchar(200)) as field_cn_name,
-                       d.tran_seq_no,
-                       d.owner,
-                       count(distinct d.tran_seq_no) as affected_count,
+                       r.sample_tran_seq_no as tran_seq_no,
+                       r.owner,
+                       r.affected_tran_count as affected_count,
                        0 as field_count,
-                       string_agg(distinct d.orig_error_code, ',' order by d.orig_error_code) as orig_error_code,
-                       string_agg(distinct d.orig_error_desc, ',' order by d.orig_error_desc) as orig_error_desc,
-                       string_agg(distinct d.dest_error_code, ',' order by d.dest_error_code) as dest_error_code,
-                       string_agg(distinct d.dest_error_desc, ',' order by d.dest_error_desc) as dest_error_desc,
+                       r.orig_error_code,
+                       r.orig_error_desc,
+                       r.dest_error_code,
+                       r.dest_error_desc,
                        cast(null as varchar(1000)) as reason,
-                       cast(null as varchar(64)) as source_table,
-                       d.tran_seq_no as source_pk
-                from ana_sample_detail d
+                       'tss_retcode_comp' as source_table,
+                       r.sample_tran_seq_no as source_pk
+                from ana_tran_diff_result r
                 """;
     }
 
-    private String transactionDiffGroupBy() {
+    private String fieldResultSelect() {
         return """
-                 group by d.batch_id, d.orig_cdate, d.sample_type, d.config_status,
-                          d.dest_trcd, d.service_code, d.message_type, d.tran_code,
-                          d.comp_result, d.tran_seq_no, d.owner
+                select
+                       r.orig_cdate,
+                       r.batch_id,
+                       r.tran_code,
+                       r.service_code,
+                       r.message_type,
+                       r.sop_field_name,
+                       r.soap_field_name,
+                       r.bizjson_field_name,
+                       r.field_cn_name,
+                       r.mapping_status,
+                       r.sample_tran_seq_no,
+                       r.orig_field_value,
+                       r.dest_field_value,
+                       r.owner,
+                       r.affected_tran_count
+                from ana_field_diff_result r
                 """;
     }
 
@@ -279,49 +309,6 @@ public class SampleQueryService {
                        f.mapping_status,
                        f.field_index
                 from ana_sample_detail_field f
-                """;
-    }
-
-    private String fieldDiffExportSelect() {
-        return """
-                select
-                       d.sample_id,
-                       f.field_detail_id,
-                       d.group_id,
-                       d.batch_id,
-                       d.orig_cdate,
-                       d.sample_type,
-                       d.sample_seq_no,
-                       d.config_status,
-                       d.dest_trcd,
-                       d.service_code,
-                       d.message_type,
-                       d.tran_code,
-                       d.comp_result,
-                       d.sop_field_name,
-                       d.soap_field_name,
-                       d.bizjson_field_name,
-                       d.field_cn_name,
-                       d.tran_seq_no,
-                       d.owner,
-                       d.affected_count,
-                       d.field_count,
-                       d.orig_error_code,
-                       d.orig_error_desc,
-                       d.dest_error_code,
-                       d.dest_error_desc,
-                       d.reason,
-                       d.source_table,
-                       d.source_pk,
-                       f.raw_field_name,
-                       f.std_field_name,
-                       f.field_cn_name as detail_field_cn_name,
-                       f.orig_field_value,
-                       f.dest_field_value,
-                       f.mapping_status,
-                       f.field_index
-                from ana_sample_detail d
-                join ana_sample_detail_field f on f.sample_id = d.sample_id
                 """;
     }
 
@@ -405,43 +392,23 @@ public class SampleQueryService {
         );
     }
 
-    private SampleFieldDiffExportRow mapFieldDiffExportRow(ResultSet rs) throws SQLException {
-        return new SampleFieldDiffExportRow(
-                rs.getLong("sample_id"),
-                rs.getLong("field_detail_id"),
-                rs.getLong("group_id"),
-                rs.getString("batch_id"),
+    private SampleFieldDiffRow mapFieldDiffRow(ResultSet rs) throws SQLException {
+        return new SampleFieldDiffRow(
                 rs.getString("orig_cdate"),
-                rs.getString("sample_type"),
-                rs.getInt("sample_seq_no"),
-                rs.getString("config_status"),
-                rs.getString("dest_trcd"),
+                rs.getString("batch_id"),
+                rs.getString("tran_code"),
                 rs.getString("service_code"),
                 rs.getString("message_type"),
-                rs.getString("tran_code"),
-                rs.getString("comp_result"),
                 rs.getString("sop_field_name"),
                 rs.getString("soap_field_name"),
                 rs.getString("bizjson_field_name"),
                 rs.getString("field_cn_name"),
-                rs.getString("tran_seq_no"),
-                rs.getString("owner"),
-                rs.getLong("affected_count"),
-                rs.getInt("field_count"),
-                rs.getString("orig_error_code"),
-                rs.getString("orig_error_desc"),
-                rs.getString("dest_error_code"),
-                rs.getString("dest_error_desc"),
-                rs.getString("reason"),
-                rs.getString("source_table"),
-                rs.getString("source_pk"),
-                rs.getString("raw_field_name"),
-                rs.getString("std_field_name"),
-                rs.getString("detail_field_cn_name"),
+                rs.getString("mapping_status"),
+                rs.getString("sample_tran_seq_no"),
                 rs.getString("orig_field_value"),
                 rs.getString("dest_field_value"),
-                rs.getString("mapping_status"),
-                rs.getInt("field_index")
+                rs.getString("owner"),
+                rs.getLong("affected_tran_count")
         );
     }
 
@@ -612,18 +579,42 @@ public class SampleQueryService {
                 ) ts
                 left join (
                     select
-                        max(d.batch_id) as batch_id,
-                        d.orig_cdate,
-                        d.service_code,
-                        min(d.tran_code) as tran_code,
-                        min(d.owner) as owner,
-                        count(distinct case when d.sample_type = 'RETURN_CODE' then d.tran_seq_no end) as return_code_issue_count,
-                        count(distinct case when d.sample_type = 'FIELD_DIFF' then d.tran_seq_no end) as field_diff_tran_count,
-                        count(f.field_detail_id) as issue_field_count
-                    from ana_sample_detail d
-                    left join ana_sample_detail_field f on f.sample_id = d.sample_id
+                        max(batch_id) as batch_id,
+                        orig_cdate,
+                        service_code,
+                        min(tran_code) as tran_code,
+                        min(owner) as owner,
+                        sum(return_code_issue_count) as return_code_issue_count,
+                        sum(field_diff_tran_count) as field_diff_tran_count,
+                        sum(issue_field_count) as issue_field_count
+                    from (
+                        select
+                            d.batch_id,
+                            d.orig_cdate,
+                            d.service_code,
+                            d.tran_code,
+                            d.owner,
+                            coalesce(sum(d.affected_tran_count), 0) as return_code_issue_count,
+                            0 as field_diff_tran_count,
+                            0 as issue_field_count
+                        from ana_tran_diff_result d
                 """ + detailWhere + """
-                    group by d.orig_cdate, d.service_code
+                        group by d.batch_id, d.orig_cdate, d.service_code, d.tran_code, d.owner
+                        union all
+                        select
+                            d.batch_id,
+                            d.orig_cdate,
+                            d.service_code,
+                            d.tran_code,
+                            d.owner,
+                            0 as return_code_issue_count,
+                            count(distinct d.sample_tran_seq_no) as field_diff_tran_count,
+                            count(*) as issue_field_count
+                        from ana_field_diff_result d
+                """ + detailWhere + """
+                        group by d.batch_id, d.orig_cdate, d.service_code, d.tran_code, d.owner
+                    ) result_detail
+                    group by orig_cdate, service_code
                 ) ds on ds.orig_cdate = ts.orig_cdate and ds.service_code = ts.service_code
                 left join ana_tran_catalog c on c.service_code = ts.service_code
                 order by ts.total_tran_count desc, ts.service_code
@@ -635,12 +626,6 @@ public class SampleQueryService {
         return total == null ? 0 : total;
     }
 
-    private long groupedCount(QueryParts query, String groupBy) {
-        Long total = jdbc.queryForObject("select count(*) from (select 1 from ana_sample_detail d"
-                + query.where + groupBy + ") grouped_rows", query.params, Long.class);
-        return total == null ? 0 : total;
-    }
-
     private QueryParts groupWhere(SampleSearchCriteria c) {
         return where(c, false);
     }
@@ -649,19 +634,19 @@ public class SampleQueryService {
         return where(c, true);
     }
 
-    private QueryParts transactionDiffWhere(SampleSearchCriteria c) {
-        QueryParts query = detailWhere(c);
+    private QueryParts transactionResultWhere(SampleSearchCriteria c) {
         List<String> clauses = new ArrayList<>();
-        if (StringUtils.hasText(query.where)) {
-            clauses.add(query.where.substring(" where ".length()));
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (c != null) {
+            addEquals(clauses, params, "r.batch_id", "batchId", c.batchId());
+            addEquals(clauses, params, "r.orig_cdate", "origCdate", c.origCdate());
+            addLike(clauses, params, "r.tran_code", "tranCode", c.tranCode());
+            addLike(clauses, params, "r.service_code", "serviceCode", c.serviceCode());
+            addEquals(clauses, params, "r.message_type", "messageType", c.messageType());
+            addLike(clauses, params, "r.owner", "owner", c.owner());
+            addLike(clauses, params, "r.sample_tran_seq_no", "tranSeqNo", c.tranSeqNo());
         }
-        clauses.add("""
-                (length(trim(coalesce(d.orig_error_code, ' '))) > 0
-                 or length(trim(coalesce(d.orig_error_desc, ' '))) > 0
-                 or length(trim(coalesce(d.dest_error_code, ' '))) > 0
-                 or length(trim(coalesce(d.dest_error_desc, ' '))) > 0)
-                """);
-        return new QueryParts(" where " + String.join(" and ", clauses), query.params);
+        return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
     }
 
     private QueryParts detailFieldWhere(SampleSearchCriteria c, Long sampleId) {
@@ -681,21 +666,19 @@ public class SampleQueryService {
         return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
     }
 
-    private QueryParts fieldDiffExportWhere(SampleSearchCriteria c) {
+    private QueryParts fieldResultWhere(SampleSearchCriteria c) {
         List<String> clauses = new ArrayList<>();
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (c != null) {
-            addEquals(clauses, params, "d.batch_id", "batchId", c.batchId());
-            addEquals(clauses, params, "d.orig_cdate", "origCdate", c.origCdate());
-            addEquals(clauses, params, "d.sample_type", "sampleType", c.sampleType());
-            addLike(clauses, params, "d.tran_code", "tranCode", c.tranCode());
-            addLike(clauses, params, "d.service_code", "serviceCode", c.serviceCode());
-            addEquals(clauses, params, "d.message_type", "messageType", c.messageType());
-            addEquals(clauses, params, "d.config_status", "configStatus", c.configStatus());
-            addEquals(clauses, params, "f.mapping_status", "mappingStatus", c.mappingStatus());
-            addLike(clauses, params, "f.std_field_name", "semanticFieldName", c.semanticFieldName());
-            addLike(clauses, params, "d.owner", "owner", c.owner());
-            addLike(clauses, params, "d.tran_seq_no", "tranSeqNo", c.tranSeqNo());
+            addEquals(clauses, params, "r.batch_id", "batchId", c.batchId());
+            addEquals(clauses, params, "r.orig_cdate", "origCdate", c.origCdate());
+            addLike(clauses, params, "r.tran_code", "tranCode", c.tranCode());
+            addLike(clauses, params, "r.service_code", "serviceCode", c.serviceCode());
+            addEquals(clauses, params, "r.message_type", "messageType", c.messageType());
+            addEquals(clauses, params, "r.mapping_status", "mappingStatus", c.mappingStatus());
+            addFieldResultNameLike(clauses, params, c.semanticFieldName());
+            addLike(clauses, params, "r.owner", "owner", c.owner());
+            addLike(clauses, params, "r.sample_tran_seq_no", "tranSeqNo", c.tranSeqNo());
         }
         return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
     }
@@ -744,6 +727,18 @@ public class SampleQueryService {
         if (StringUtils.hasText(value)) {
             clauses.add(column + " like :" + key);
             params.addValue(key, "%" + value.trim() + "%");
+        }
+    }
+
+    private void addFieldResultNameLike(List<String> clauses, MapSqlParameterSource params, String value) {
+        if (StringUtils.hasText(value)) {
+            clauses.add("""
+                    (r.sop_field_name like :semanticFieldName
+                     or r.soap_field_name like :semanticFieldName
+                     or r.bizjson_field_name like :semanticFieldName
+                     or r.field_cn_name like :semanticFieldName)
+                    """);
+            params.addValue("semanticFieldName", "%" + value.trim() + "%");
         }
     }
 

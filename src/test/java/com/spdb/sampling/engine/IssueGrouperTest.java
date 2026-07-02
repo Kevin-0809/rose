@@ -58,6 +58,29 @@ class IssueGrouperTest {
                 .containsExactly("CurrencyId", "FcyCollCrspBnkLkg", "HUOBDH", "FAB251");
     }
 
+    @Test
+    void acceptsCandidatesIncrementallyAndKeepsOnlySampleLimitPerGroup() {
+        IssueGrouper grouper = new IssueGrouper(2);
+        SemanticSignatureBuilder signatureBuilder = new SemanticSignatureBuilder();
+
+        for (int i = 0; i < 5; i++) {
+            grouper.add(fieldCandidate(
+                    "1111111111" + i,
+                    "bizjson",
+                    List.of(field("CurrencyId", "currency_id", "111", "222", 1)),
+                    signatureBuilder
+            ));
+        }
+
+        List<SampleGroupDraft> groups = grouper.groups();
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.get(0).affectedTranCount()).isEqualTo(5);
+        assertThat(groups.get(0).affectedFieldCount()).isEqualTo(5);
+        assertThat(groups.get(0).details()).extracting(SampleDetailDraft::tranSeqNo)
+                .containsExactly("11111111110", "11111111111");
+    }
+
     private IssueCandidate fieldCandidate(String mesgSeq,
                                           String messageType,
                                           List<SampleDetailFieldDraft> fields,
@@ -81,6 +104,7 @@ class IssueGrouperTest {
                 messageType,
                 "S030030014FcyCollCrspBnkLkgQry&" + messageType,
                 "4",
+                "CONFIGURED",
                 signature.signature(),
                 signature.hash(),
                 fields

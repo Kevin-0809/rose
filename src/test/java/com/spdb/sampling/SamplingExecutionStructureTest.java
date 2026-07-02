@@ -32,18 +32,20 @@ class SamplingExecutionStructureTest {
     }
 
     @Test
-    void samplingServiceUsesJavaSemanticComponentsForSampling() throws IOException {
+    void samplingServiceWritesPageResultTablesWithSetBasedSql() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("JdbcSamplingSourceReader");
-        assertThat(source).contains("SamplingConfigSnapshot");
-        assertThat(source).contains("SemanticSignatureBuilder");
-        assertThat(source).contains("IssueGrouper");
-        assertThat(source).contains("ana_sample_detail_field");
-        assertThat(source).doesNotContain("ana_sampling_candidate");
+        assertThat(source).contains("insert into ana_tran_diff_result");
+        assertThat(source).contains("insert into ana_field_diff_result");
+        assertThat(source).contains("from tss_retcode_comp");
+        assertThat(source).contains("from tss_field_comp");
+        assertThat(source).contains("join tss_tran_comp");
+        assertThat(source).doesNotContain("List<IssueCandidate> candidates");
+        assertThat(source).doesNotContain("Map<SourceKey, TranFact> tranFacts");
+        assertThat(source).doesNotContain("IssueGrouper");
+        assertThat(source).doesNotContain("JdbcSamplingSourceReader");
+        assertThat(source).doesNotContain("batchInsertDetailFields");
         assertThat(source).doesNotContain("groupedCandidateCte");
-        assertThat(source).doesNotContain("row_number() over");
-        assertThat(source).doesNotContain("findFieldRows");
     }
 
     @Test
@@ -57,29 +59,27 @@ class SamplingExecutionStructureTest {
     }
 
     @Test
-    void samplingServiceCreatesThreeIssueTypesFromStreamedSources() throws IOException {
+    void samplingServiceUsesRetcodeAndFieldCompAsResultSources() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("readTranFacts");
-        assertThat(source).contains("readReturnCodes");
-        assertThat(source).contains("readFieldDiffs");
-        assertThat(source).contains("\"RETURN_CODE\"");
-        assertThat(source).contains("\"RETURN_CODE\"");
-        assertThat(source).contains("IssueCandidate.fieldDiff");
-        assertThat(source).contains("\"4\".equals(fact.compResult())");
-        assertThat(source).doesNotContain("f.orig_field_name = 'returnCode'");
-        assertThat(source).doesNotContain("f.orig_field_name <> 'returnCode'");
+        assertThat(source).contains("tss_retcode_comp");
+        assertThat(source).contains("tss_field_comp");
+        assertThat(source).contains("tss_tran_comp");
+        assertThat(source).doesNotContain("readReturnCodes");
+        assertThat(source).doesNotContain("readFieldDiffs");
+        assertThat(source).doesNotContain("IssueCandidate.fieldDiff");
     }
 
     @Test
-    void samplingServiceKeysFieldDiffsBySourceKeyInJava() throws IOException {
+    void samplingServiceDoesNotKeyFieldDiffsBySourceKeyInJava() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("Map<SourceKey, TranFact> tranFacts");
-        assertThat(source).contains("tranFacts.get(buffer.key)");
-        assertThat(source).contains("Objects.equals(buffer.key, diff.sourceKey())");
-        assertThat(source).doesNotContain("join tss_tran_comp t");
-        assertThat(source).doesNotContain("from tss_field_comp f");
+        assertThat(source).doesNotContain("Objects.equals(buffer.key, diff.sourceKey())");
+        assertThat(source).doesNotContain("FieldBuffer");
+        assertThat(source).doesNotContain("Map<SourceKey, TranFact> tranFacts");
+        assertThat(source).doesNotContain("List<IssueCandidate> candidates");
+        assertThat(source).doesNotContain("tranFacts.get(buffer.key)");
+        assertThat(source).contains("from tss_field_comp f");
     }
 
     @Test
@@ -87,7 +87,9 @@ class SamplingExecutionStructureTest {
         String source = javaSource("SamplingBatchRunner.java");
         String snapshot = engineSource("SamplingConfigSnapshot.java");
 
-        assertThat(source).contains("config.resolveField(fact.tranCode(), fact.serviceCode(), diff.messageType(), diff.rawFieldName())");
+        assertThat(source).contains("e.message_type = 'sop'");
+        assertThat(source).contains("e.message_type = 'soap'");
+        assertThat(source).contains("e.message_type = 'bizjson'");
         assertThat(snapshot).contains("sopFieldName");
         assertThat(snapshot).contains("soapFieldName");
         assertThat(snapshot).contains("bizjsonFieldName");
@@ -96,16 +98,16 @@ class SamplingExecutionStructureTest {
     }
 
     @Test
-    void samplingServiceWritesTransactionSamplesAndFieldDetails() throws IOException {
+    void samplingServiceWritesPageReadyResultRowsWithoutLegacyDetails() throws IOException {
         String source = javaSource("SamplingBatchRunner.java");
 
-        assertThat(source).contains("private Long insertDetail");
-        assertThat(source).contains("private void insertDetailFields");
-        assertThat(source).contains("field_count");
-        assertThat(source).contains("raw_field_name");
-        assertThat(source).contains("std_field_name");
+        assertThat(source).contains("sample_tran_seq_no");
+        assertThat(source).contains("affected_tran_count");
         assertThat(source).contains("mapping_status");
-        assertThat(source).contains("MAX_SAMPLES_PER_GROUP = 20");
+        assertThat(source).contains("row_number() over");
+        assertThat(source).doesNotContain("private void batchInsertDetails");
+        assertThat(source).doesNotContain("private void batchInsertDetailFields");
+        assertThat(source).doesNotContain("MAX_SAMPLES_PER_GROUP");
         assertThat(source).doesNotContain("case when sample_type = 'RETURN_CODE' then 1 else 10 end");
         assertThat(source).doesNotContain("set group_id = g.group_id");
         assertThat(source).doesNotContain("least(affected_count, 100)");

@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 class SampleQueryServiceTest {
 
     @Test
-    void queriesSemanticGroupSampleTransactionsAndFieldDetails() {
+    void queriesFieldDiffsByTransactionAndFieldDimension() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:sample_query_service;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
                 "sa",
@@ -41,56 +41,52 @@ class SampleQueryServiceTest {
                 "bizjson",
                 "CONFIGURED",
                 "MAPPED",
-                "currency_id",
+                "CurrencyId",
                 null,
                 null
         );
 
-        SampleGroupRow group = service.groups(criteria, PageRequestParams.of(1, 20)).rows().get(0);
-        assertThat(group.origCdate()).isEqualTo("20260611");
-        assertThat(group.semanticFieldNames()).isEqualTo("currency_id,link_info");
-        assertThat(group.messageTypes()).isEqualTo("bizjson,sop");
-        assertThat(group.configStatus()).isEqualTo("CONFIGURED");
-        assertThat(group.mappingStatus()).isEqualTo("MAPPED");
-        assertThat(group.affectedTranCount()).isEqualTo(2L);
-        assertThat(group.affectedFieldCount()).isEqualTo(4L);
-
-        SampleDetailRow detail = service.details(criteria, PageRequestParams.of(1, 20)).rows().get(0);
-        assertThat(detail.sampleId()).isEqualTo(101L);
-        assertThat(detail.tranSeqNo()).isEqualTo("11111111111");
-        assertThat(detail.sopFieldName()).isEqualTo("HUOBDH,FAB251");
-        assertThat(detail.soapFieldName()).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(detail.bizjsonFieldName()).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(detail.fieldCnName()).isEqualTo("币种,联动信息");
-        assertThat(detail.fieldCount()).isEqualTo(2);
-        assertThat(detail.origErrorCode()).isNull();
-        assertThat(detail.destErrorCode()).isNull();
+        var result = service.fieldDiffs(criteria, PageRequestParams.of(1, 20));
+        assertThat(result.total()).isEqualTo(1L);
+        SampleFieldDiffRow row = result.rows().get(0);
+        assertThat(row.origCdate()).isEqualTo("20260611");
+        assertThat(row.batchId()).isEqualTo("BATCH_A825");
+        assertThat(row.tranCode()).isEqualTo("A825");
+        assertThat(row.serviceCode()).isEqualTo("S030030014FcyCollCrspBnkLkgQry");
+        assertThat(row.messageType()).isEqualTo("bizjson");
+        assertThat(row.sopFieldName()).isEqualTo("HUOBDH");
+        assertThat(row.soapFieldName()).isEqualTo("CurrencyId");
+        assertThat(row.bizjsonFieldName()).isEqualTo("CurrencyId");
+        assertThat(row.fieldCnName()).isEqualTo("币种");
+        assertThat(row.mappingStatus()).isEqualTo("MAPPED");
+        assertThat(row.sampleTranSeqNo()).isEqualTo("11111111111");
+        assertThat(row.origFieldValue()).isEqualTo("111");
+        assertThat(row.destFieldValue()).isEqualTo("222");
+        assertThat(row.owner()).isEqualTo("张伟");
+        assertThat(row.affectedTranCount()).isEqualTo(2L);
 
         List<SampleDetailFieldRow> fields = service.detailFields(101L, PageRequestParams.of(1, 20)).rows();
-        assertThat(fields).hasSize(2);
+        assertThat(fields).hasSize(1);
         assertThat(fields)
                 .extracting(SampleDetailFieldRow::rawFieldName)
-                .containsExactly("CurrencyId", "FcyCollCrspBnkLkg");
+                .containsExactly("CurrencyId");
         assertThat(fields)
                 .extracting(SampleDetailFieldRow::stdFieldName)
-                .containsExactly("currency_id", "link_info");
+                .containsExactly("currency_id");
 
-        List<SampleFieldDiffExportRow> exportRows = new java.util.ArrayList<>();
+        List<SampleFieldDiffRow> exportRows = new java.util.ArrayList<>();
         service.streamFieldDiffExport(criteria, exportRows::add);
         assertThat(exportRows).hasSize(1);
-        SampleFieldDiffExportRow exportRow = exportRows.get(0);
-        assertThat(exportRow.sampleId()).isEqualTo(101L);
-        assertThat(exportRow.fieldDetailId()).isEqualTo(1001L);
+        SampleFieldDiffRow exportRow = exportRows.get(0);
         assertThat(exportRow.origCdate()).isEqualTo("20260611");
         assertThat(exportRow.tranCode()).isEqualTo("A825");
         assertThat(exportRow.serviceCode()).isEqualTo("S030030014FcyCollCrspBnkLkgQry");
-        assertThat(exportRow.tranSeqNo()).isEqualTo("11111111111");
-        assertThat(exportRow.sopFieldName()).isEqualTo("HUOBDH,FAB251");
-        assertThat(exportRow.soapFieldName()).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(exportRow.rawFieldName()).isEqualTo("CurrencyId");
-        assertThat(exportRow.stdFieldName()).isEqualTo("currency_id");
+        assertThat(exportRow.sampleTranSeqNo()).isEqualTo("11111111111");
+        assertThat(exportRow.sopFieldName()).isEqualTo("HUOBDH");
+        assertThat(exportRow.soapFieldName()).isEqualTo("CurrencyId");
         assertThat(exportRow.origFieldValue()).isEqualTo("111");
         assertThat(exportRow.destFieldValue()).isEqualTo("222");
+        assertThat(exportRow.affectedTranCount()).isEqualTo(2L);
 
         SampleSearchCriteria unfilteredFieldCriteria = new SampleSearchCriteria(
                 "BATCH_A825",
@@ -105,12 +101,12 @@ class SampleQueryServiceTest {
                 null,
                 null
         );
-        List<SampleFieldDiffExportRow> unfilteredExportRows = new java.util.ArrayList<>();
+        List<SampleFieldDiffRow> unfilteredExportRows = new java.util.ArrayList<>();
         service.streamFieldDiffExport(unfilteredFieldCriteria, unfilteredExportRows::add);
         assertThat(unfilteredExportRows).hasSize(2);
         assertThat(unfilteredExportRows)
-                .extracting(SampleFieldDiffExportRow::rawFieldName)
-                .containsExactly("CurrencyId", "FcyCollCrspBnkLkg");
+                .extracting(SampleFieldDiffRow::fieldCnName)
+                .containsExactly("币种", "联动信息");
     }
 
     @Test
@@ -251,8 +247,7 @@ class SampleQueryServiceTest {
 
         verify(jdbc).query(
                 org.mockito.ArgumentMatchers.argThat(sql ->
-                        sql.contains("from ana_sample_detail d")
-                                && sql.contains("join ana_sample_detail_field f on f.sample_id = d.sample_id")
+                        sql.contains("from ana_field_diff_result r")
                                 && sql.contains("limit :exportLimit")
                 ),
                 org.mockito.ArgumentMatchers.<SqlParameterSource>argThat(params -> exportLimit(params) == 1_000_000),
@@ -270,8 +265,7 @@ class SampleQueryServiceTest {
 
         verify(jdbc).query(
                 org.mockito.ArgumentMatchers.argThat(sql ->
-                        sql.contains("from ana_sample_detail d")
-                                && sql.contains("group by d.batch_id")
+                        sql.contains("from ana_tran_diff_result r")
                                 && sql.contains("limit :exportLimit")
                 ),
                 org.mockito.ArgumentMatchers.<SqlParameterSource>argThat(params -> exportLimit(params) == 1_000_000),
@@ -379,6 +373,28 @@ class SampleQueryServiceTest {
 
     private void createSemanticSampleTables(JdbcTemplate jdbc) {
         jdbc.execute("""
+                create table ana_tran_diff_result (
+                    result_id bigint primary key,
+                    batch_id varchar(64), orig_cdate varchar(8), tran_code varchar(32),
+                    service_code varchar(200), message_type varchar(32), sample_tran_seq_no varchar(64),
+                    orig_error_code varchar(64), orig_error_desc varchar(500),
+                    dest_error_code varchar(64), dest_error_desc varchar(500),
+                    owner varchar(100), affected_tran_count bigint
+                )
+                """);
+        jdbc.execute("""
+                create table ana_field_diff_result (
+                    result_id bigint primary key,
+                    batch_id varchar(64), orig_cdate varchar(8), tran_code varchar(32),
+                    service_code varchar(200), message_type varchar(32), message_types varchar(200),
+                    sop_field_name varchar(200), soap_field_name varchar(200),
+                    bizjson_field_name varchar(200), field_cn_name varchar(200),
+                    mapping_status varchar(32), sample_tran_seq_no varchar(64),
+                    orig_field_value varchar(2000), dest_field_value varchar(2000),
+                    owner varchar(100), affected_tran_count bigint
+                )
+                """);
+        jdbc.execute("""
                 create table ana_sample_group (
                     group_id bigint primary key,
                     batch_id varchar(64), orig_cdate varchar(8), sample_type varchar(32),
@@ -465,35 +481,40 @@ class SampleQueryServiceTest {
                     ('SEQ6', '20260611', 'S002&bizjson', '4')
                 """);
         jdbc.update("""
-                insert into ana_sample_detail (
-                    sample_id, group_id, batch_id, orig_cdate, sample_type, sample_seq_no,
-                    config_status, dest_trcd, service_code, message_type, tran_code,
-                    comp_result, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
-                    tran_seq_no, owner, affected_count, field_count,
-                    orig_error_code, orig_error_desc, dest_error_code, dest_error_desc,
-                    reason, source_table, source_pk
-                ) values
-                    (301, 31, 'BATCH_RPT', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
-                     'S001&bizjson', 'S001', 'bizjson', 'A001', '8',
-                     null, null, null, null, 'SEQ5', '张三', 1, 0,
-                     'E1', '错误1', 'C1', '错误A', '响应码不一致', 'tss_retcode_comp', 'SEQ5'),
-                    (302, 32, 'BATCH_RPT', '20260611', 'FIELD_DIFF', 1, 'CONFIGURED',
-                     'S001&bizjson', 'S001', 'bizjson', 'A001', '4',
-                     'F1,F2', 'F1,F2', 'F1,F2', '字段1,字段2', 'SEQ4', '张三', 1, 2,
-                     null, null, null, null, '字段取值不一致', 'tss_field_comp', 'SEQ4')
+                insert into ana_tran_diff_result (
+                    result_id, batch_id, orig_cdate, tran_code, service_code, message_type,
+                    sample_tran_seq_no, orig_error_code, orig_error_desc, dest_error_code,
+                    dest_error_desc, owner, affected_tran_count
+                ) values (
+                    301, 'BATCH_RPT', '20260611', 'A001', 'S001', 'bizjson',
+                    'SEQ5', 'E1', '错误1', 'C1', '错误A', '张三', 1
+                )
                 """);
         jdbc.update("""
-                insert into ana_sample_detail_field (
-                    field_detail_id, sample_id, group_id, batch_id, mesg_seq, message_type,
-                    raw_field_name, std_field_name, field_cn_name, orig_field_value,
-                    dest_field_value, mapping_status, field_index
+                insert into ana_field_diff_result (
+                    result_id, batch_id, orig_cdate, tran_code, service_code, message_type, message_types,
+                    sop_field_name, soap_field_name, bizjson_field_name, field_cn_name, mapping_status,
+                    sample_tran_seq_no, orig_field_value, dest_field_value, owner, affected_tran_count
                 ) values
-                    (3001, 302, 32, 'BATCH_RPT', 'SEQ4', 'bizjson', 'F1', 'f1', '字段1', '1', '2', 'MAPPED', 1),
-                    (3002, 302, 32, 'BATCH_RPT', 'SEQ4', 'bizjson', 'F2', 'f2', '字段2', 'A', 'B', 'MAPPED', 2)
+                    (302, 'BATCH_RPT', '20260611', 'A001', 'S001', 'bizjson', 'bizjson',
+                     'F1', 'F1', 'F1', '字段1', 'MAPPED', 'SEQ4', '1', '2', '张三', 1),
+                    (303, 'BATCH_RPT', '20260611', 'A001', 'S001', 'bizjson', 'bizjson',
+                     'F2', 'F2', 'F2', '字段2', 'MAPPED', 'SEQ4', 'A', 'B', '张三', 1)
                 """);
     }
 
     private void seedSemanticSampleRows(JdbcTemplate jdbc) {
+        jdbc.update("""
+                insert into ana_field_diff_result (
+                    result_id, batch_id, orig_cdate, tran_code, service_code, message_type, message_types,
+                    sop_field_name, soap_field_name, bizjson_field_name, field_cn_name, mapping_status,
+                    sample_tran_seq_no, orig_field_value, dest_field_value, owner, affected_tran_count
+                ) values
+                    (501, 'BATCH_A825', '20260611', 'A825', 'S030030014FcyCollCrspBnkLkgQry', 'bizjson', 'bizjson,sop',
+                     'HUOBDH', 'CurrencyId', 'CurrencyId', '币种', 'MAPPED', '11111111111', '111', '222', '张伟', 2),
+                    (502, 'BATCH_A825', '20260611', 'A825', 'S030030014FcyCollCrspBnkLkgQry', 'bizjson', 'bizjson',
+                     'FAB251', 'FcyCollCrspBnkLkg', 'FcyCollCrspBnkLkg', '联动信息', 'MAPPED', '11111111111', 'A1/B1', 'A/B', '张伟', 1)
+                """);
         jdbc.update("""
                 insert into ana_sample_group (
                     group_id, batch_id, orig_cdate, sample_type, config_status, mapping_status,
@@ -519,9 +540,23 @@ class SampleQueryServiceTest {
                 ) values (
                     101, 11, 'BATCH_A825', '20260611', 'FIELD_DIFF', 1, 'CONFIGURED',
                     'S030030014FcyCollCrspBnkLkgQry&bizjson', 'S030030014FcyCollCrspBnkLkgQry',
-                    'bizjson', 'A825', '4', 'HUOBDH,FAB251', 'CurrencyId,FcyCollCrspBnkLkg',
-                    'CurrencyId,FcyCollCrspBnkLkg', '币种,联动信息',
-                    '11111111111', '张伟', 2, 2,
+                    'bizjson', 'A825', '4', 'HUOBDH', 'CurrencyId',
+                    'CurrencyId', '币种',
+                    '11111111111', '张伟', 2, 1,
+                    null, null, null, null, null, 'tss_field_comp', '11111111111'
+                ), (
+                    102, 11, 'BATCH_A825', '20260611', 'FIELD_DIFF', 2, 'CONFIGURED',
+                    'S030030014FcyCollCrspBnkLkgQry&bizjson', 'S030030014FcyCollCrspBnkLkgQry',
+                    'bizjson', 'A825', '4', 'HUOBDH', 'CurrencyId',
+                    'CurrencyId', '币种',
+                    '11111111112', '张伟', 2, 1,
+                    null, null, null, null, null, 'tss_field_comp', '11111111112'
+                ), (
+                    103, 11, 'BATCH_A825', '20260611', 'FIELD_DIFF', 3, 'CONFIGURED',
+                    'S030030014FcyCollCrspBnkLkgQry&bizjson', 'S030030014FcyCollCrspBnkLkgQry',
+                    'bizjson', 'A825', '4', 'FAB251', 'FcyCollCrspBnkLkg',
+                    'FcyCollCrspBnkLkg', '联动信息',
+                    '11111111111', '张伟', 1, 1,
                     null, null, null, null, null, 'tss_field_comp', '11111111111'
                 )
                 """);
@@ -533,33 +568,22 @@ class SampleQueryServiceTest {
                 ) values
                     (1001, 101, 11, 'BATCH_A825', '11111111111', 'bizjson',
                      'CurrencyId', 'currency_id', '币种', '111', '222', 'MAPPED', 1),
-                    (1002, 101, 11, 'BATCH_A825', '11111111111', 'bizjson',
-                     'FcyCollCrspBnkLkg', 'link_info', '联动信息', 'A1/B1', 'A/B', 'MAPPED', 2)
+                    (1002, 103, 11, 'BATCH_A825', '11111111111', 'bizjson',
+                     'FcyCollCrspBnkLkg', 'link_info', '联动信息', 'A1/B1', 'A/B', 'MAPPED', 2),
+                    (1003, 102, 11, 'BATCH_A825', '11111111112', 'bizjson',
+                     'CurrencyId', 'currency_id', '币种', '333', '444', 'MAPPED', 1)
                 """);
     }
 
     private void seedDuplicateTransactionDiffRows(JdbcTemplate jdbc) {
         jdbc.update("""
-                insert into ana_sample_detail (
-                    sample_id, group_id, batch_id, orig_cdate, sample_type, sample_seq_no,
-                    config_status, dest_trcd, service_code, message_type, tran_code,
-                    comp_result, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name,
-                    tran_seq_no, owner, affected_count, field_count,
-                    orig_error_code, orig_error_desc, dest_error_code, dest_error_desc,
-                    reason, source_table, source_pk
+                insert into ana_tran_diff_result (
+                    result_id, batch_id, orig_cdate, tran_code, service_code, message_type,
+                    sample_tran_seq_no, orig_error_code, orig_error_desc, dest_error_code,
+                    dest_error_desc, owner, affected_tran_count
                 ) values
-                    (201, 21, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
-                     'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
-                     null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
-                     'E1', '错误1', 'C1', '错误A', '响应码不一致', 'tss_retcode_comp', 'SEQ_DUP'),
-                    (202, 22, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
-                     'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
-                     null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
-                     'E2', '错误2', 'C2', '错误B', '响应码不一致', 'tss_retcode_comp', 'SEQ_DUP'),
-                    (203, 23, 'BATCH_TX', '20260611', 'RETURN_CODE', 1, 'CONFIGURED',
-                     'S001&bizjson', 'S001', 'bizjson', 'A825', '8',
-                     null, null, null, null, 'SEQ_DUP', '张三', 1, 0,
-                     '', '', '', '', '空响应补充行', 'tss_retcode_comp', 'SEQ_DUP')
+                    (201, 'BATCH_TX', '20260611', 'A825', 'S001', 'bizjson',
+                     'SEQ_DUP', 'E1,E2', '错误1,错误2', 'C1,C2', '错误A,错误B', '张三', 1)
                 """);
     }
 

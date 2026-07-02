@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 
 import java.time.LocalDateTime;
@@ -33,7 +32,7 @@ class SamplingBatchRunnerTest {
     }
 
     @Test
-    void semanticFieldDiffGroupsBizjsonAndSopSamplesTogether() {
+    void collectsPageReadyTransactionAndFieldDiffResults() {
         runner.run(command());
 
         Map<String, Object> summary = jdbc.queryForMap("select * from ana_sampling_summary where batch_id = 'BATCH_A825'");
@@ -42,111 +41,168 @@ class SamplingBatchRunnerTest {
         assertThat(summary.get("comp_result_2_count")).isEqualTo(1L);
         assertThat(summary.get("comp_result_4_count")).isEqualTo(2L);
 
-        List<Map<String, Object>> fieldGroups = jdbc.queryForList("""
+        List<Map<String, Object>> fieldRows = jdbc.queryForList("""
                 select *
-                from ana_sample_group
+                from ana_field_diff_result
                 where batch_id = 'BATCH_A825'
-                  and sample_type = 'FIELD_DIFF'
+                order by field_cn_name
                 """);
-        assertThat(fieldGroups).hasSize(1);
-        Map<String, Object> fieldGroup = fieldGroups.get(0);
-        assertThat(fieldGroup.get("semantic_field_names")).isEqualTo("currency_id,link_info");
-        assertThat(fieldGroup.get("message_types")).isEqualTo("bizjson,sop");
-        assertThat(fieldGroup.get("affected_tran_count")).isEqualTo(2L);
-        assertThat(fieldGroup.get("affected_field_count")).isEqualTo(4L);
+        assertThat(fieldRows).hasSize(2);
+        assertThat(fieldRows).extracting(row -> row.get("field_cn_name"))
+                .containsExactly("币种", "联动信息");
+        assertThat(fieldRows).extracting(row -> row.get("message_types"))
+                .containsExactly("bizjson,sop", "bizjson,sop");
+        assertThat(fieldRows).extracting(row -> row.get("affected_tran_count"))
+                .containsExactly(2L, 2L);
+        assertThat(fieldRows.get(0).get("sop_field_name")).isEqualTo("HUOBDH");
+        assertThat(fieldRows.get(0).get("soap_field_name")).isEqualTo("CurrencyId");
+        assertThat(fieldRows.get(0).get("bizjson_field_name")).isEqualTo("CurrencyId");
+        assertThat(fieldRows.get(0).get("sample_tran_seq_no")).isEqualTo("11111111111");
+        assertThat(fieldRows.get(0).get("orig_field_value")).isEqualTo("111");
+        assertThat(fieldRows.get(0).get("dest_field_value")).isEqualTo("222");
 
-        List<String> detailSeqs = jdbc.queryForList("""
-                select tran_seq_no
-                from ana_sample_detail
-                where group_id = ?
-                order by sample_seq_no
-                """, String.class, fieldGroup.get("group_id"));
-        assertThat(detailSeqs).containsExactly("11111111111", "11111111114");
-
-        List<String> rawFieldNames = jdbc.queryForList("""
-                select raw_field_name
-                from ana_sample_detail_field
-                where group_id = ?
-                order by mesg_seq, field_index
-                """, String.class, fieldGroup.get("group_id"));
-        assertThat(rawFieldNames).containsExactly("CurrencyId", "FcyCollCrspBnkLkg", "HUOBDH", "FAB251");
-
-        Long returnCodeGroups = jdbc.queryForObject("""
+        Long tranDiffRows = jdbc.queryForObject("""
                 select count(*)
-                from ana_sample_group
+                from ana_tran_diff_result
                 where batch_id = 'BATCH_A825'
-                  and sample_type = 'RETURN_CODE'
                 """, Long.class);
-        assertThat(returnCodeGroups).isEqualTo(3L);
+        assertThat(tranDiffRows).isEqualTo(1L);
     }
 
     @Test
     void transactionLevelIssuesUseReturnCodeSampleTypeOnly() {
         runner.run(command());
 
-        List<String> sampleTypes = jdbc.queryForList("""
-                select distinct sample_type
-                from ana_sample_group
+        Long returnCodeResults = jdbc.queryForObject("""
+                select count(*)
+                from ana_tran_diff_result
                 where batch_id = 'BATCH_A825'
-                order by sample_type
-                """, String.class);
-        assertThat(sampleTypes).containsExactly("FIELD_DIFF", "RETURN_CODE");
+                """, Long.class);
+        assertThat(returnCodeResults).isEqualTo(1L);
 
-        Long returnCodeGroups = jdbc.queryForObject("""
+        Long oldGroupRows = jdbc.queryForObject("""
                 select count(*)
                 from ana_sample_group
                 where batch_id = 'BATCH_A825'
-                  and sample_type = 'RETURN_CODE'
                 """, Long.class);
-        assertThat(returnCodeGroups).isEqualTo(3L);
+        assertThat(oldGroupRows).isZero();
+    }
 
-        Long tranResultGroups = jdbc.queryForObject("""
-                select count(*)
-                from ana_sample_group
-                where batch_id = 'BATCH_A825'
-                  and sample_type = 'TRAN_RESULT'
-                """, Long.class);
-        assertThat(tranResultGroups).isZero();
+    @Test
+    void transactionDiffResultKeepsEachReturnCodeRowWithoutAggregation() {
+        jdbc.update("""
+                insert into tss_tran_comp
+                (mesg_seq, orig_cdate, conv_index, conv_cindex, comp_date, dest_trcd, orig_tran_res, dest_tran_res, comp_result)
+                values
+                ('33333333331', '20260612', 1, 1, '20260612', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '2', '2', '1'),
+                ('33333333332', '20260612', 1, 1, '20260612', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '2', '2', '1')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp
+                (mesg_seq, service_code, orig_cdate, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc)
+                values
+                ('33333333331', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '20260612',
+                 'ORIG-ERROR-CODE-0000000000000000000000000000001', '原始错误描述1',
+                 'DEST-ERROR-CODE-0000000000000000000000000000001', '目标错误描述1'),
+                ('33333333332', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '20260612',
+                 'ORIG-ERROR-CODE-0000000000000000000000000000002', '原始错误描述2',
+                 'DEST-ERROR-CODE-0000000000000000000000000000002', '目标错误描述2')
+                """);
+
+        runner.run(new SamplingCommandRow(
+                2L,
+                "BATCH_LONG_CODE",
+                "20260612",
+                null,
+                null,
+                null,
+                "RUNNING",
+                null,
+                "0秒",
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                null,
+                null,
+                LocalDateTime.now(),
+                null,
+                null
+        ));
+
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select sample_tran_seq_no, orig_error_code, dest_error_code, affected_tran_count
+                from ana_tran_diff_result
+                where batch_id = 'BATCH_LONG_CODE'
+                order by sample_tran_seq_no
+                """);
+        assertThat(rows).hasSize(2);
+        assertThat(rows).extracting(row -> row.get("sample_tran_seq_no"))
+                .containsExactly("33333333331", "33333333332");
+        assertThat(rows).extracting(row -> row.get("orig_error_code"))
+                .containsExactly(
+                        "ORIG-ERROR-CODE-0000000000000000000000000000001",
+                        "ORIG-ERROR-CODE-0000000000000000000000000000002"
+                );
+        assertThat(rows).extracting(row -> row.get("dest_error_code"))
+                .containsExactly(
+                        "DEST-ERROR-CODE-0000000000000000000000000000001",
+                        "DEST-ERROR-CODE-0000000000000000000000000000002"
+                );
+        assertThat(rows).extracting(row -> row.get("affected_tran_count"))
+                .containsExactly(1L, 1L);
     }
 
     @Test
     void sampleDetailsIncludeMappedFieldDisplayNames() {
         runner.run(command());
 
-        Map<String, Object> bizjson = jdbc.queryForMap("""
+        List<Map<String, Object>> bizjson = jdbc.queryForList("""
                 select sop_field_name, soap_field_name, bizjson_field_name, field_cn_name
-                from ana_sample_detail
+                from ana_field_diff_result
                 where batch_id = 'BATCH_A825'
-                  and tran_seq_no = '11111111111'
+                  and message_types like '%bizjson%'
+                order by field_cn_name
                 """);
-        assertThat(bizjson.get("sop_field_name")).isEqualTo("HUOBDH,FAB251");
-        assertThat(bizjson.get("soap_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(bizjson.get("bizjson_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(bizjson.get("field_cn_name")).isEqualTo("币种,联动信息");
+        assertThat(bizjson).hasSize(2);
+        assertThat(bizjson).extracting(row -> row.get("sop_field_name"))
+                .containsExactlyInAnyOrder("FAB251", "HUOBDH");
+        assertThat(bizjson).extracting(row -> row.get("soap_field_name"))
+                .containsExactlyInAnyOrder("FcyCollCrspBnkLkg", "CurrencyId");
+        assertThat(bizjson).extracting(row -> row.get("bizjson_field_name"))
+                .containsExactlyInAnyOrder("FcyCollCrspBnkLkg", "CurrencyId");
+        assertThat(bizjson).extracting(row -> row.get("field_cn_name"))
+                .containsExactlyInAnyOrder("联动信息", "币种");
 
-        Map<String, Object> sop = jdbc.queryForMap("""
+        List<Map<String, Object>> sop = jdbc.queryForList("""
                 select sop_field_name, soap_field_name, bizjson_field_name, field_cn_name
-                from ana_sample_detail
+                from ana_field_diff_result
                 where batch_id = 'BATCH_A825'
-                  and tran_seq_no = '11111111114'
+                  and message_types like '%sop%'
+                order by field_cn_name
                 """);
-        assertThat(sop.get("sop_field_name")).isEqualTo("HUOBDH,FAB251");
-        assertThat(sop.get("soap_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(sop.get("bizjson_field_name")).isEqualTo("CurrencyId,FcyCollCrspBnkLkg");
-        assertThat(sop.get("field_cn_name")).isEqualTo("币种,联动信息");
-    }
-
-    @Test
-    void extractsGeneratedIdentityWhenDriverReturnsWholeInsertedRow() {
-        GeneratedKeyHolder keyHolder = new GeneratedKeyHolder(List.of(Map.of(
-                "group_id", 9296274L,
-                "batch_id", "SMP20260611-152859-6621",
-                "sample_type", "FIELD_DIFF"
-        )));
-
-        Long key = SamplingBatchRunner.generatedLongKey(keyHolder, "group_id");
-
-        assertThat(key).isEqualTo(9296274L);
+        assertThat(sop).hasSize(2);
+        assertThat(sop).extracting(row -> row.get("sop_field_name"))
+                .containsExactlyInAnyOrder("FAB251", "HUOBDH");
+        assertThat(sop).extracting(row -> row.get("soap_field_name"))
+                .containsExactlyInAnyOrder("FcyCollCrspBnkLkg", "CurrencyId");
+        assertThat(sop).extracting(row -> row.get("bizjson_field_name"))
+                .containsExactlyInAnyOrder("FcyCollCrspBnkLkg", "CurrencyId");
+        assertThat(sop).extracting(row -> row.get("field_cn_name"))
+                .containsExactlyInAnyOrder("联动信息", "币种");
     }
 
     private SamplingCommandRow command() {
@@ -187,6 +243,8 @@ class SamplingBatchRunnerTest {
 
     private void createSchema() {
         jdbc.execute("drop table if exists ana_sampling_summary");
+        jdbc.execute("drop table if exists ana_field_diff_result");
+        jdbc.execute("drop table if exists ana_tran_diff_result");
         jdbc.execute("drop table if exists ana_sample_detail_field");
         jdbc.execute("drop table if exists ana_sample_detail");
         jdbc.execute("drop table if exists ana_sample_group");
@@ -200,6 +258,28 @@ class SamplingBatchRunnerTest {
         jdbc.execute("create table tss_tran_comp (mesg_seq varchar(64), orig_cdate varchar(8), conv_index integer, conv_cindex integer, comp_date varchar(8), dest_trcd varchar(200), orig_tran_res varchar(32), dest_tran_res varchar(32), comp_result varchar(1))");
         jdbc.execute("create table tss_field_comp (mesg_seq varchar(64), orig_cdate varchar(8), dest_trcd varchar(200), conv_index integer, conv_cindex integer, redo_index integer, field_index integer, field_file_flag varchar(32), orig_field_name varchar(200), orig_field_value varchar(2000), dest_field_name varchar(200), dest_field_value varchar(2000), comp_result varchar(1))");
         jdbc.execute("create table tss_retcode_comp (mesg_seq varchar(64), service_code varchar(200), orig_cdate varchar(8), orig_error_code varchar(64), orig_error_desc varchar(500), dest_error_code varchar(64), dest_error_desc varchar(500))");
+        jdbc.execute("""
+                create table ana_tran_diff_result (
+                    result_id bigint generated by default as identity primary key,
+                    batch_id varchar(64), orig_cdate varchar(8), tran_code varchar(32),
+                    service_code varchar(200), message_type varchar(32), sample_tran_seq_no varchar(64),
+                    orig_error_code varchar(64), orig_error_desc varchar(500),
+                    dest_error_code varchar(64), dest_error_desc varchar(500),
+                    owner varchar(100), affected_tran_count bigint
+                )
+                """);
+        jdbc.execute("""
+                create table ana_field_diff_result (
+                    result_id bigint generated by default as identity primary key,
+                    batch_id varchar(64), orig_cdate varchar(8), tran_code varchar(32),
+                    service_code varchar(200), message_type varchar(32), message_types varchar(200),
+                    sop_field_name varchar(200), soap_field_name varchar(200),
+                    bizjson_field_name varchar(200), field_cn_name varchar(200),
+                    mapping_status varchar(32), sample_tran_seq_no varchar(64),
+                    orig_field_value varchar(2000), dest_field_value varchar(2000),
+                    owner varchar(100), affected_tran_count bigint
+                )
+                """);
         jdbc.execute("""
                 create table ana_sample_group (
                     group_id bigint generated by default as identity primary key,

@@ -183,4 +183,16 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("mapping_status varchar(32)");
         assertThat(ddl).contains("idx_ana_sample_detail_field_sample");
     }
+
+    @Test
+    void samplingResultTablesServePagesDirectly() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(ddl).contains("create table if not exists ana_tran_diff_result");
+        assertThat(ddl).contains("create table if not exists ana_field_diff_result");
+        assertThat(ddl).contains("sample_tran_seq_no varchar(64)");
+        assertThat(ddl).contains("affected_tran_count bigint");
+        assertThat(ddl).contains("idx_ana_tran_diff_result_query");
+        assertThat(ddl).contains("idx_ana_field_diff_result_query");
+    }
 }
