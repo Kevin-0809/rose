@@ -1,5 +1,7 @@
 package com.spdb.migration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
@@ -11,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
 
 @Component
 public class MigrationBatchRunner {
+    private static final Logger log = LoggerFactory.getLogger(MigrationBatchRunner.class);
     private static final int FETCH_SIZE = 1000;
 
     private final MigrationCommandService commandService;
@@ -46,6 +49,7 @@ public class MigrationBatchRunner {
             commandService.refreshCommandCounters(commandId);
             finishCommand(commandId);
         } catch (Exception e) {
+            log.error("Migration command execution failed, commandId={}", commandId, e);
             markCommandFailedBestEffort(commandId, e);
         }
     }
@@ -91,6 +95,7 @@ public class MigrationBatchRunner {
             MigrationShardResult result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             commandService.markShardCompleted(shardId, result);
         } catch (Exception e) {
+            log.error("Migration shard execution failed, commandId={}, shardId={}", commandId, shardId, e);
             commandService.markShardFailed(shardId, e.getMessage());
         }
     }
@@ -115,14 +120,18 @@ public class MigrationBatchRunner {
     private void markCommandFailedBestEffort(long commandId, Exception cause) {
         try {
             commandService.refreshCommandCounters(commandId);
-        } catch (Exception ignored) {
+        } catch (Exception refreshException) {
+            log.error("Migration command counter refresh failed after command execution error, commandId={}, originalError={}",
+                    commandId, cause.toString(), refreshException);
         }
         try {
             boolean failed = commandService.markFailed(commandId, cause.getMessage());
             if (!failed && commandService.isCancelRequested(commandId)) {
                 commandService.markCancelled(commandId);
             }
-        } catch (Exception ignored) {
+        } catch (Exception markFailedException) {
+            log.error("Migration command failure status writeback failed, commandId={}, originalError={}",
+                    commandId, cause.toString(), markFailedException);
         }
     }
 }
