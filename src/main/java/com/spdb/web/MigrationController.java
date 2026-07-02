@@ -3,6 +3,7 @@ package com.spdb.web;
 import com.spdb.migration.MigrationCommandForm;
 import com.spdb.migration.MigrationCommandService;
 import com.spdb.migration.MigrationProgressRow;
+import com.spdb.migration.MigrationSqlCommandForm;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,6 +47,31 @@ public class MigrationController {
         }
     }
 
+    @GetMapping("/migration/sql-commands")
+    public String sqlCommandsPage(@RequestParam(required = false) Integer page,
+                                  @RequestParam(required = false) Integer size,
+                                  Model model) {
+        PageRequestParams params = PageRequestParams.of(page, size);
+        model.addAttribute("active", "migration-sql");
+        model.addAttribute("result", migrationCommandService.searchSql(params));
+        model.addAttribute("form", MigrationSqlCommandForm.empty());
+        model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
+        model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());
+        return "migration/sql-commands";
+    }
+
+    @PostMapping("/migration/sql-commands")
+    public String createSqlCommand(@ModelAttribute MigrationSqlCommandForm form, Model model) {
+        try {
+            long createdId = migrationCommandService.createSqlCommand(form);
+            return "redirect:/migration/commands/" + createdId;
+        } catch (IllegalArgumentException ex) {
+            addSqlCommandsPageModel(model, form);
+            model.addAttribute("error", ex.getMessage());
+            return "migration/sql-commands";
+        }
+    }
+
     @GetMapping("/migration/commands/{id}")
     public String progressPage(@PathVariable long id, Model model) {
         model.addAttribute("active", "migration");
@@ -74,6 +100,14 @@ public class MigrationController {
     private void addCommandsPageModel(Model model, MigrationCommandForm form) {
         model.addAttribute("active", "migration");
         model.addAttribute("result", migrationCommandService.search(PageRequestParams.of(null, null)));
+        model.addAttribute("form", form);
+        model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
+        model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());
+    }
+
+    private void addSqlCommandsPageModel(Model model, MigrationSqlCommandForm form) {
+        model.addAttribute("active", "migration-sql");
+        model.addAttribute("result", migrationCommandService.searchSql(PageRequestParams.of(null, null)));
         model.addAttribute("form", form);
         model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
         model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());

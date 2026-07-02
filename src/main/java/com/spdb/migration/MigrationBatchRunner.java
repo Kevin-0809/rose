@@ -45,7 +45,7 @@ public class MigrationBatchRunner {
             return;
         }
         try {
-            runRunnableShards(commandId, Math.max(command.parallelism(), 1));
+            runRunnableShards(command, Math.max(command.parallelism(), 1));
             commandService.refreshCommandCounters(commandId);
             finishCommand(commandId);
         } catch (Exception e) {
@@ -54,7 +54,8 @@ public class MigrationBatchRunner {
         }
     }
 
-    private void runRunnableShards(long commandId, int parallelism) {
+    private void runRunnableShards(MigrationCommandRow command, int parallelism) {
+        long commandId = command.commandId();
         List<Long> shardIds = commandService.runnableShardIds(commandId);
         Deque<CompletableFuture<Void>> inFlight = new ArrayDeque<>();
         for (Long shardId : shardIds) {
@@ -62,7 +63,7 @@ public class MigrationBatchRunner {
             if (commandService.isCancelRequested(commandId)) {
                 break;
             }
-            inFlight.add(CompletableFuture.runAsync(() -> runShard(commandId, shardId), executor));
+            inFlight.add(CompletableFuture.runAsync(() -> runShard(command, shardId), executor));
         }
         joinAll(inFlight);
     }
@@ -79,7 +80,8 @@ public class MigrationBatchRunner {
         }
     }
 
-    private void runShard(long commandId, long shardId) {
+    private void runShard(MigrationCommandRow command, long shardId) {
+        long commandId = command.commandId();
         if (commandService.isCancelRequested(commandId)) {
             return;
         }
@@ -92,7 +94,12 @@ public class MigrationBatchRunner {
             return;
         }
         try {
-            MigrationShardResult result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
+            MigrationShardResult result;
+            if ("SQL".equals(command.commandType())) {
+                result = shardRunner.runSql(shardId, command.responseSql(), FETCH_SIZE);
+            } else {
+                result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
+            }
             commandService.markShardCompleted(shardId, result);
         } catch (Exception e) {
             log.error("Migration shard execution failed, commandId={}, shardId={}", commandId, shardId, e);

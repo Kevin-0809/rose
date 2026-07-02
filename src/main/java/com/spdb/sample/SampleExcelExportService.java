@@ -17,10 +17,14 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class SampleExcelExportService {
+    private final ThreadLocal<Map<TransactionDiffCategory, SheetState>> transactionDiffSheets = new ThreadLocal<>();
+
     private static final String[] GROUP_HEADERS = {
             "业务日期", "类型", "配置状态", "映射状态", "交易码", "服务码", "报文类型",
             "语义字段", "涉及报文", "责任人", "交易数", "字段数", "样本数", "原因"
@@ -160,10 +164,26 @@ public class SampleExcelExportService {
                                   OutputStream outputStream, SheetWriter writer) {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(500)) {
             workbook.setCompressTempFiles(true);
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet(sheetName);
             Styles styles = createStyles(workbook);
-            prepareSheet(sheet, title, headers, widths, styles);
-            writer.write(sheet, styles);
+            org.apache.poi.ss.usermodel.Sheet sheet;
+            if (headers == TRANSACTION_DIFF_HEADERS) {
+                Map<TransactionDiffCategory, SheetState> sheets = new LinkedHashMap<>();
+                for (TransactionDiffCategory category : TransactionDiffCategory.values()) {
+                    org.apache.poi.ss.usermodel.Sheet categorySheet = workbook.createSheet(category.sheetName());
+                    prepareSheet(categorySheet, category.sheetName(), headers, widths, styles);
+                    sheets.put(category, new SheetState(categorySheet));
+                }
+                transactionDiffSheets.set(sheets);
+                sheet = sheets.get(TransactionDiffCategory.ORIG_SUCCESS_DEST_FAIL).sheet();
+            } else {
+                sheet = workbook.createSheet(sheetName);
+                prepareSheet(sheet, title, headers, widths, styles);
+            }
+            try {
+                writer.write(sheet, styles);
+            } finally {
+                transactionDiffSheets.remove();
+            }
             workbook.write(outputStream);
             outputStream.flush();
             workbook.dispose();
@@ -273,6 +293,12 @@ public class SampleExcelExportService {
     }
 
     private void writeTransactionDiffRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailRow row) {
+        Map<TransactionDiffCategory, SheetState> categorySheets = transactionDiffSheets.get();
+        if (categorySheets != null) {
+            SheetState state = categorySheets.get(TransactionDiffCategory.of(row));
+            sheet = state.sheet();
+            rowIndex = state.nextRowIndex();
+        }
         Row excelRow = sheet.createRow(rowIndex);
         int col = 0;
         write(excelRow, col++, row.origCdate(), styles.body());
@@ -400,5 +426,55 @@ public class SampleExcelExportService {
     @FunctionalInterface
     private interface SheetWriter {
         void write(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles);
+    }
+
+    private record SheetState(org.apache.poi.ss.usermodel.Sheet sheet, int[] rowIndex) {
+        SheetState(org.apache.poi.ss.usermodel.Sheet sheet) {
+            this(sheet, new int[]{2});
+        }
+
+        int nextRowIndex() {
+            return rowIndex[0]++;
+        }
+    }
+
+    private enum TransactionDiffCategory {
+        ORIG_SUCCESS_DEST_FAIL("528\u6210\u529fCCBS\u5931\u8d25"),
+        ORIG_FAIL_DEST_SUCCESS("528\u5931\u8d25CCBS\u6210\u529f"),
+        BOTH_SUCCESS("\u4e8c\u8005\u90fd\u6210\u529f"),
+        BOTH_FAIL("\u4e8c\u8005\u90fd\u5931\u8d25");
+
+        private static final String SUCCESS_CODE_ZERO = "000000000000";
+        private static final String SUCCESS_CODE_A = "AAAAAAA";
+
+        private final String sheetName;
+
+        TransactionDiffCategory(String sheetName) {
+            this.sheetName = sheetName;
+        }
+
+        String sheetName() {
+            return sheetName;
+        }
+
+        static TransactionDiffCategory of(SampleDetailRow row) {
+            boolean origSuccess = isSuccess(row.origErrorCode());
+            boolean destSuccess = isSuccess(row.destErrorCode());
+            if (origSuccess && !destSuccess) {
+                return ORIG_SUCCESS_DEST_FAIL;
+            }
+            if (!origSuccess && destSuccess) {
+                return ORIG_FAIL_DEST_SUCCESS;
+            }
+            if (origSuccess) {
+                return BOTH_SUCCESS;
+            }
+            return BOTH_FAIL;
+        }
+
+        private static boolean isSuccess(String code) {
+            String normalized = code == null ? "" : code.trim().toUpperCase();
+            return SUCCESS_CODE_ZERO.equals(normalized) || SUCCESS_CODE_A.equals(normalized);
+        }
     }
 }

@@ -77,4 +77,24 @@ class MigrationCommandsTemplateTest {
         assertThat(html).doesNotContain("targetSchema");
         assertThat(html).doesNotContain("目标 schema");
     }
+
+    @Test
+    void sqlCommandsTemplateContainsIndependentSqlMigrationForm() throws Exception {
+        String html = new String(
+                getClass().getResourceAsStream("/templates/migration/sql-commands.html").readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(html).contains("SQL迁移");
+        assertThat(html).contains("action=\"/migration/sql-commands\"");
+        assertThat(html).contains("name=\"responseSql\"");
+        assertThat(html).contains("msg_flow_log_response");
+        assertThat(html).contains("source_ip, trans_id");
+        assertThat(html).contains("后台按 source_ip + trans_id 回查请求报文");
+        assertThat(html).contains("/migration/commands/");
+        assertThat(html).doesNotContain("/vendor/flatpickr");
+        assertThat(html).doesNotContain("name=\"timeFrom\"");
+        assertThat(html).doesNotContain("name=\"timeTo\"");
+        assertThat(html).doesNotContain("name=\"requestSql\"");
+    }
 }

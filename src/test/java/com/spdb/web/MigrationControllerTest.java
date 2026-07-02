@@ -4,6 +4,7 @@ import com.spdb.migration.MigrationCommandForm;
 import com.spdb.migration.MigrationCommandRow;
 import com.spdb.migration.MigrationCommandService;
 import com.spdb.migration.MigrationProgressRow;
+import com.spdb.migration.MigrationSqlCommandForm;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ConcurrentModel;
 
@@ -93,6 +94,63 @@ class MigrationControllerTest {
     }
 
     @Test
+    void sqlCommandsPageUsesSeparateTemplateAndModel() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(commandRow(8L)), 1, PageRequestParams.of(1, 20));
+        when(service.searchSql(PageRequestParams.of(1, 20))).thenReturn(result);
+        when(service.sourceDataSource()).thenReturn("bxds");
+        when(service.targetDataSource()).thenReturn("primary");
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.sqlCommandsPage(1, 20, model);
+
+        assertThat(view).isEqualTo("migration/sql-commands");
+        assertThat(model.getAttribute("active")).isEqualTo("migration-sql");
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(model.getAttribute("form")).isEqualTo(MigrationSqlCommandForm.empty());
+        assertThat(model.getAttribute("sourceDataSource")).isEqualTo("bxds");
+        assertThat(model.getAttribute("targetDataSource")).isEqualTo("primary");
+        verify(service).searchSql(PageRequestParams.of(1, 20));
+    }
+
+    @Test
+    void createSqlCommandRedirectsToCreatedProgressPage() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationSqlCommandForm form = new MigrationSqlCommandForm("select 1", "sql");
+        when(service.createSqlCommand(form)).thenReturn(43L);
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.createSqlCommand(form, model);
+
+        assertThat(view).isEqualTo("redirect:/migration/commands/43");
+        verify(service).createSqlCommand(form);
+    }
+
+    @Test
+    void createSqlCommandReturnsSqlPageWithErrorWhenValidationFails() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationSqlCommandForm form = new MigrationSqlCommandForm("", "");
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
+        when(service.createSqlCommand(form)).thenThrow(new IllegalArgumentException("Response SQL不能为空"));
+        when(service.searchSql(PageRequestParams.of(null, null))).thenReturn(result);
+        when(service.sourceDataSource()).thenReturn("bxds");
+        when(service.targetDataSource()).thenReturn("primary");
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.createSqlCommand(form, model);
+
+        assertThat(view).isEqualTo("migration/sql-commands");
+        assertThat(model.getAttribute("active")).isEqualTo("migration-sql");
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(model.getAttribute("form")).isSameAs(form);
+        assertThat(model.getAttribute("error")).isEqualTo("Response SQL不能为空");
+        verify(service).createSqlCommand(form);
+    }
+
+    @Test
     void progressPageAddsServiceProgressToModel() {
         MigrationCommandService service = mock(MigrationCommandService.class);
         MigrationProgressRow progress = progressRow(42L, "RUNNING");
@@ -146,9 +204,9 @@ class MigrationControllerTest {
 
     private static MigrationCommandRow commandRow(long id) {
         return new MigrationCommandRow(
-                id, "source", "target", "RUNNING", 1L, 2L, 3600L, 2,
+                id, "source", "target", "TIME_RANGE", "RUNNING", 1L, 2L, 3600L, 2,
                 10L, 4L, 0L, 100L, 2L, 1L, "10s",
-                null, null, null, null, "remark"
+                null, null, null, null, null, null, "remark"
         );
     }
 

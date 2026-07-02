@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -50,10 +51,10 @@ public class MigrationCommandService {
             KeyHolder keyHolder = new GeneratedKeyHolder();
             jdbc.update("""
                     insert into ana_migration_command (
-                        source_data_source, target_data_source, time_from, time_to, window_seconds, parallelism,
+                        source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
                         status, total_shard_count, remark, created_by
                     ) values (
-                        :sourceDataSource, :targetDataSource, :timeFrom, :timeTo, :windowSeconds, :parallelism,
+                        :sourceDataSource, :targetDataSource, 'TIME_RANGE', :timeFrom, :timeTo, :windowSeconds, :parallelism,
                         'CREATED', :totalShardCount, :remark, '系统'
                     )
                     """, params(form).addValue("totalShardCount", totalShardCount), keyHolder, new String[]{"command_id"});
@@ -69,16 +70,61 @@ public class MigrationCommandService {
         return commandId;
     }
 
+    public long createSqlCommand(MigrationSqlCommandForm form) {
+        validateSql(form);
+        Long createdCommandId = transactionTemplate.execute(status -> {
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbc.update("""
+                    insert into ana_migration_command (
+                        source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
+                        status, total_shard_count, response_sql, remark, created_by
+                    ) values (
+                        :sourceDataSource, :targetDataSource, 'SQL', 0, 0, 0, 1,
+                        'CREATED', 1, :responseSql, :remark, '系统'
+                    )
+                    """, sqlParams(form), keyHolder, new String[]{"command_id"});
+            long commandId = generatedLongKey(keyHolder, "command_id");
+            jdbc.update("""
+                    insert into ana_migration_shard (
+                        command_id, shard_seq, time_from, time_to, status
+                    ) values (
+                        :commandId, 0, 0, 0, 'PENDING'
+                    )
+                    """, new MapSqlParameterSource("commandId", commandId));
+            return commandId;
+        });
+        if (createdCommandId == null) {
+            throw new IllegalStateException("SQL migration command was not created");
+        }
+        long commandId = createdCommandId;
+        launch(commandId);
+        return commandId;
+    }
+
     public PagedResult<MigrationCommandRow> search(PageRequestParams page) {
-        Long totalValue = jdbc.queryForObject("select count(*) from ana_migration_command", new MapSqlParameterSource(), Long.class);
+        return searchByType(page, "TIME_RANGE");
+    }
+
+    public PagedResult<MigrationCommandRow> searchSql(PageRequestParams page) {
+        return searchByType(page, "SQL");
+    }
+
+    private PagedResult<MigrationCommandRow> searchByType(PageRequestParams page, String commandType) {
+        Long totalValue = jdbc.queryForObject("""
+                select count(*)
+                from ana_migration_command
+                where command_type = :commandType
+                """, new MapSqlParameterSource("commandType", commandType), Long.class);
         long total = totalValue == null ? 0 : totalValue;
         PageRequestParams effectivePage = new PageRequestParams(Math.min(page.page(), page.totalPages(total)), page.size());
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("limit", effectivePage.size())
-                .addValue("offset", effectivePage.offset());
+                .addValue("offset", effectivePage.offset())
+                .addValue("commandType", commandType);
         List<MigrationCommandRow> rows = jdbc.query("""
                 select *
                 from ana_migration_command
+                where command_type = :commandType
                 order by created_time desc, command_id desc
                 limit :limit offset :offset
                 """, params, (rs, i) -> mapCommand(rs));
@@ -313,6 +359,37 @@ public class MigrationCommandService {
         shardCount(form);
     }
 
+    private void validateSql(MigrationSqlCommandForm form) {
+        if (form == null) {
+            throw new IllegalArgumentException("SQL迁移指令参数不能为空");
+        }
+        validateQuerySql(form.responseSql(), "Response SQL");
+    }
+
+    private void validateQuerySql(String sql, String label) {
+        if (!StringUtils.hasText(sql)) {
+            throw new IllegalArgumentException(label + "不能为空");
+        }
+        String trimmed = sql.trim();
+        if (trimmed.contains(";")) {
+            throw new IllegalArgumentException(label + "只允许单条查询SQL");
+        }
+        String normalized = trimmed.toLowerCase(Locale.ROOT);
+        if (!(normalized.startsWith("select ") || normalized.startsWith("with "))) {
+            throw new IllegalArgumentException(label + "只允许select或with查询");
+        }
+        String padded = " " + normalized.replaceAll("\\s+", " ") + " ";
+        String[] forbiddenKeywords = {
+                " insert ", " update ", " delete ", " drop ", " alter ",
+                " truncate ", " create ", " merge ", " call "
+        };
+        for (String keyword : forbiddenKeywords) {
+            if (padded.contains(keyword)) {
+                throw new IllegalArgumentException(label + "只允许查询SQL，不能包含写操作");
+            }
+        }
+    }
+
     private MapSqlParameterSource params(MigrationCommandForm form) {
         return new MapSqlParameterSource()
                 .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
@@ -321,6 +398,14 @@ public class MigrationCommandService {
                 .addValue("timeTo", form.timeTo())
                 .addValue("windowSeconds", form.windowSeconds())
                 .addValue("parallelism", form.parallelism())
+                .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
+    }
+
+    private MapSqlParameterSource sqlParams(MigrationSqlCommandForm form) {
+        return new MapSqlParameterSource()
+                .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
+                .addValue("targetDataSource", runtimeProperties.targetDataSource())
+                .addValue("responseSql", form.responseSql().trim())
                 .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
     }
 
@@ -391,6 +476,7 @@ public class MigrationCommandService {
                 rs.getLong("command_id"),
                 rs.getString("source_data_source"),
                 rs.getString("target_data_source"),
+                rs.getString("command_type"),
                 rs.getString("status"),
                 rs.getLong("time_from"),
                 rs.getLong("time_to"),
@@ -407,6 +493,8 @@ public class MigrationCommandService {
                 startedTime,
                 endedTime,
                 rs.getString("error_message"),
+                rs.getString("request_sql"),
+                rs.getString("response_sql"),
                 rs.getString("remark")
         );
     }

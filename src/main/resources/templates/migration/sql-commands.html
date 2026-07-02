@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL迁移</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">SQL Migration</div>
+      <h1>SQL迁移</h1>
+      <p class="muted" th:text="'从 ' + ${sourceDataSource} + ' 数据源按Response SQL读取响应交易，并迁移至 ' + ${targetDataSource} + ' 数据源。'">按Response SQL读取响应交易并迁移。</p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/migration/commands">时间范围迁移</a>
+    </div>
+  </div>
+
+  <div class="section-title">
+    <div><div class="eyebrow">Create</div><h2>创建SQL迁移指令</h2></div>
+  </div>
+  <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
+  <form class="panel form-grid" method="post" action="/migration/sql-commands" th:object="${form}">
+    <div>
+      <label>源数据源</label>
+      <input th:value="${sourceDataSource}" readonly class="muted-input">
+    </div>
+    <div>
+      <label>目标数据源</label>
+      <input th:value="${targetDataSource}" readonly class="muted-input">
+    </div>
+    <div class="span-2">
+      <label>Response SQL</label>
+      <textarea name="responseSql" th:text="*{responseSql}" rows="9" placeholder="select source_ip, trans_id, txn_code, response_time, message_type, response_message, return_code, return_msg from msg_flow_log_response where ..."></textarea>
+      <p class="muted">固定输出字段：source_ip, trans_id, txn_code, response_time, message_type, response_message, return_code, return_msg</p>
+    </div>
+    <div class="span-2">
+      <label>备注</label>
+      <input name="remark" th:value="*{remark}" placeholder="可选，记录本次SQL迁移用途">
+    </div>
+    <div class="span-2">
+      <p class="muted">用户只需输入Response表完整SQL；后台按 source_ip + trans_id 回查请求报文，只迁移请求和响应都存在的完整交易，缺失请求的响应计入丢弃数。</p>
+    </div>
+    <div class="span-2 actions">
+      <button class="btn primary" type="submit">创建SQL迁移</button>
+      <span class="muted" style="font-size:12px;align-self:center">仅允许单条 select 或 with 查询</span>
+    </div>
+  </form>
+
+  <section class="panel table-wrap">
+    <div class="section-title"><div><div class="eyebrow">History</div><h2>SQL迁移指令列表</h2></div></div>
+    <table class="command-table">
+      <thead>
+      <tr>
+        <th>指令ID</th><th>状态</th><th>进度</th><th>已迁移交易笔数</th>
+        <th>丢弃数</th><th>跳过数</th><th>耗时</th><th>创建时间</th><th>操作</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr th:each="row : ${result.rows()}">
+        <td th:text="${row.commandId}"></td>
+        <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
+        <td><span th:text="${row.progressText()}"></span></td>
+        <td th:text="${row.migratedRows}"></td>
+        <td th:text="${row.droppedRows}"></td>
+        <td th:text="${row.skippedRows}"></td>
+        <td th:text="${row.durationText}"></td>
+        <td th:text="${row.createdTime}"></td>
+        <td>
+          <a class="btn" th:href="@{/migration/commands/{id}(id=${row.commandId})}">进度</a>
+        </td>
+      </tr>
+      </tbody>
+    </table>
+    <form method="get">
+      <div th:replace="~{fragments/layout :: pager(${result})}"></div>
+    </form>
+  </section>
+</main>
+</body>
+</html>

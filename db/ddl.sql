@@ -535,6 +535,7 @@ create table if not exists ana_migration_command (
     command_id bigserial primary key,
     source_data_source varchar(64) not null default 'bxds',
     target_data_source varchar(64) not null default 'primary',
+    command_type varchar(32) not null default 'TIME_RANGE',
     time_from bigint not null,
     time_to bigint not null,
     window_seconds bigint not null,
@@ -546,6 +547,8 @@ create table if not exists ana_migration_command (
     migrated_rows bigint not null default 0,
     skipped_rows bigint not null default 0,
     dropped_rows bigint not null default 0,
+    request_sql text,
+    response_sql text,
     error_message varchar(2000),
     remark varchar(1000),
     created_by varchar(100),
@@ -559,9 +562,18 @@ alter table ana_migration_command
 add column if not exists source_data_source varchar(64) not null default 'bxds';
 alter table ana_migration_command
 add column if not exists target_data_source varchar(64) not null default 'primary';
+alter table ana_migration_command
+add column if not exists command_type varchar(32) not null default 'TIME_RANGE';
+alter table ana_migration_command
+add column if not exists request_sql text;
+alter table ana_migration_command
+add column if not exists response_sql text;
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_status;
 alter table ana_migration_command add constraint ck_ana_migration_command_status
 check (status in ('CREATED','RUNNING','COMPLETED','FAILED','CANCEL_REQUESTED','CANCELLED'));
+alter table ana_migration_command drop constraint if exists ck_ana_migration_command_type;
+alter table ana_migration_command add constraint ck_ana_migration_command_type
+check (command_type in ('TIME_RANGE','SQL'));
 
 create table if not exists ana_migration_shard (
     shard_id bigserial primary key,
@@ -589,10 +601,16 @@ check (status in ('PENDING','RUNNING','COMPLETED','FAILED','SKIPPED'));
 comment on table ana_migration_command is '报文日志迁移指令表';
 comment on column ana_migration_command.source_data_source is '源数据源标识，固定bxds';
 comment on column ana_migration_command.target_data_source is '目标数据源标识，固定主数据源';
+comment on column ana_migration_command.command_type is '迁移指令类型，TIME_RANGE或SQL';
+comment on column ana_migration_command.request_sql is 'SQL迁移模式历史兼容字段，当前请求报文按source_ip和trans_id自动回查';
+comment on column ana_migration_command.response_sql is 'SQL迁移模式的响应报文查询SQL';
 comment on table ana_migration_shard is '报文日志迁移分片表';
 
 create index if not exists idx_ana_migration_command_status
 on ana_migration_command(status, created_time desc);
+
+create index if not exists idx_ana_migration_command_type_created
+on ana_migration_command(command_type, created_time desc, command_id desc);
 
 create index if not exists idx_ana_migration_shard_command_status
 on ana_migration_shard(command_id, status, shard_seq);

@@ -161,42 +161,68 @@ class SampleExcelExportServiceTest {
     }
 
     @Test
-    void streamsTransactionDiffExportWithReturnCodeColumnsAndTransactionGrain() throws Exception {
+    void streamsTransactionDiffExportSplitByResponseCodeCategories() throws Exception {
         SampleExcelExportService service = new SampleExcelExportService();
-        SampleQueryService queryService = mock(SampleQueryService.class);
-        SampleDetailRow row = new SampleDetailRow(
-                1L, 2L, "B20260609", "20260609", "RETURN_CODE", 1, "CONFIGURED", "S001&bizjson",
-                "S001", "bizjson", "A001", "8", null, null, null, null,
-                "SEQ001", "张三", 12L, 0,
-                "E0001", "528余额不足", "C0002", "CCBS余额不足",
-                "响应码不一致", "tss_retcode_comp", "SEQ001"
-        );
-        doAnswer(invocation -> {
-            SampleDetailConsumer consumer = invocation.getArgument(1);
-            consumer.accept(row);
-            return null;
-        }).when(queryService).streamTransactionDiffExport(any(), any());
+        SampleDetailRow origSuccessDestFail = transactionDiffRow("SEQ_528_OK_CCBS_FAIL", "000000000000", "C0002");
+        SampleDetailRow origFailDestSuccess = transactionDiffRow("SEQ_528_FAIL_CCBS_OK", "E0001", "AAAAAAA");
+        SampleDetailRow bothSuccess = transactionDiffRow("SEQ_BOTH_OK", "000000000000", "AAAAAAA");
+        SampleDetailRow bothFail = transactionDiffRow("SEQ_BOTH_FAIL", "E0001", "C0002");
+        SampleQueryService queryService = new SampleQueryService(null) {
+            @Override
+            public void streamTransactionDiffExport(SampleSearchCriteria criteria, SampleDetailConsumer consumer) {
+                consumer.accept(origSuccessDestFail);
+                consumer.accept(origFailDestSuccess);
+                consumer.accept(bothSuccess);
+                consumer.accept(bothFail);
+            }
+        };
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         service.streamTransactionDiffExport(queryService, new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), out);
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(out.toByteArray()))) {
-            Sheet sheet = workbook.getSheet("交易级差异");
-            assertThat(sheet).isNotNull();
-            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("交易级差异导出");
-            Row header = sheet.getRow(1);
-            assertThat(rowText(header)).isEqualTo("业务日期,批次,交易码,服务码,报文类型,流水号,交易结果,528响应码,528响应描述,CCBS响应码,CCBS响应描述,责任人,数量");
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(4);
+            assertThat(workbook.getSheetName(0)).isEqualTo("528\u6210\u529fCCBS\u5931\u8d25");
+            assertThat(workbook.getSheetName(1)).isEqualTo("528\u5931\u8d25CCBS\u6210\u529f");
+            assertThat(workbook.getSheetName(2)).isEqualTo("\u4e8c\u8005\u90fd\u6210\u529f");
+            assertThat(workbook.getSheetName(3)).isEqualTo("\u4e8c\u8005\u90fd\u5931\u8d25");
+
+            Sheet firstSheet = workbook.getSheet("528\u6210\u529fCCBS\u5931\u8d25");
+            assertThat(firstSheet).isNotNull();
+            assertThat(firstSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("528\u6210\u529fCCBS\u5931\u8d25");
+            Row header = firstSheet.getRow(1);
             assertThat(header.getLastCellNum()).isEqualTo((short) 13);
-            assertThat(rowText(header)).doesNotContain("配置状态", "SOP字段名", "SOAP字段名", "BizJSON字段名",
-                    "字段中文名", "字段数", "来源表", "原因");
-            assertThat(sheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("SEQ001");
-            assertThat(sheet.getRow(2).getCell(6).getStringCellValue()).isEqualTo("8");
-            assertThat(sheet.getRow(2).getCell(7).getStringCellValue()).isEqualTo("E0001");
-            assertThat(sheet.getRow(2).getCell(8).getStringCellValue()).isEqualTo("528余额不足");
-            assertThat(sheet.getRow(2).getCell(9).getStringCellValue()).isEqualTo("C0002");
-            assertThat(sheet.getRow(2).getCell(10).getStringCellValue()).isEqualTo("CCBS余额不足");
-            assertThat(sheet.getRow(2).getCell(12).getNumericCellValue()).isEqualTo(12);
+            assertThat(header.getCell(5).getStringCellValue()).isNotBlank();
+            assertThat(header.getCell(7).getStringCellValue()).contains("528");
+            assertThat(header.getCell(9).getStringCellValue()).contains("CCBS");
+            assertThat(firstSheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("SEQ_528_OK_CCBS_FAIL");
+            assertThat(firstSheet.getRow(2).getCell(7).getStringCellValue()).isEqualTo("000000000000");
+            assertThat(firstSheet.getRow(2).getCell(9).getStringCellValue()).isEqualTo("C0002");
+            assertThat(firstSheet.getRow(2).getCell(12).getNumericCellValue()).isEqualTo(12);
+            assertThat(firstSheet.getRow(3)).isNull();
+
+            assertSheetOnlyContains(workbook, "528\u5931\u8d25CCBS\u6210\u529f", "SEQ_528_FAIL_CCBS_OK");
+            assertSheetOnlyContains(workbook, "\u4e8c\u8005\u90fd\u6210\u529f", "SEQ_BOTH_OK");
+            assertSheetOnlyContains(workbook, "\u4e8c\u8005\u90fd\u5931\u8d25", "SEQ_BOTH_FAIL");
         }
+    }
+
+    private SampleDetailRow transactionDiffRow(String tranSeqNo, String origErrorCode, String destErrorCode) {
+        return new SampleDetailRow(
+                1L, 2L, "B20260609", "20260609", "RETURN_CODE", 1, "CONFIGURED", "S001&bizjson",
+                "S001", "bizjson", "A001", "8", null, null, null, null,
+                tranSeqNo, "owner", 12L, 0,
+                origErrorCode, "528 response", destErrorCode, "CCBS response",
+                "return code mismatch", "tss_retcode_comp", tranSeqNo
+        );
+    }
+
+    private void assertSheetOnlyContains(XSSFWorkbook workbook, String sheetName, String tranSeqNo) {
+        Sheet sheet = workbook.getSheet(sheetName);
+        assertThat(sheet).isNotNull();
+        assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo(sheetName);
+        assertThat(sheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo(tranSeqNo);
+        assertThat(sheet.getRow(3)).isNull();
     }
 
     @Test

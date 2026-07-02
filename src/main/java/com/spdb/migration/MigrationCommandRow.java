@@ -6,6 +6,7 @@ public record MigrationCommandRow(
         long commandId,
         String sourceDataSource,
         String targetDataSource,
+        String commandType,
         String status,
         long timeFrom,
         long timeTo,
@@ -22,6 +23,8 @@ public record MigrationCommandRow(
         LocalDateTime startedTime,
         LocalDateTime endedTime,
         String errorMessage,
+        String requestSql,
+        String responseSql,
         String remark
 ) {
     public int completionPercent() {

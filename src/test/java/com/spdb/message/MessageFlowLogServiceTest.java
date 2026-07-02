@@ -95,6 +95,36 @@ class MessageFlowLogServiceTest {
                 "213290350200202606150002",
                 "TELLER002"
         );
+        jdbc.getJdbcTemplate().update("""
+                insert into msg_flow_log_request (
+                    source_ip, trans_id, txn_code, txn_time, message_type,
+                    request_message, global_seq_no, tran_teller_no
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "10.10.1.13",
+                "0200202606150003",
+                "QRY_BAL",
+                1781485240000L,
+                "XML",
+                "3C726F6F743E3C616363744E6F3E363232323C2F616363744E6F3E3C2F726F6F743E".getBytes(StandardCharsets.UTF_8),
+                "213290350200202606150003",
+                "TELLER003"
+        );
+        jdbc.getJdbcTemplate().update("""
+                insert into msg_flow_log_request (
+                    source_ip, trans_id, txn_code, txn_time, message_type,
+                    request_message, global_seq_no, tran_teller_no
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "10.10.1.14",
+                "0200202606150004",
+                "BINARY",
+                1781485250000L,
+                "BINARY",
+                "01020304".getBytes(StandardCharsets.UTF_8),
+                "213290350200202606150004",
+                "TELLER004"
+        );
         service = new MessageFlowLogService(jdbc);
     }
 
@@ -127,6 +157,22 @@ class MessageFlowLogServiceTest {
 
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).requestMessage()).isEqualTo("{\"txnCode\":\"QRY_BAL\"}");
+    }
+
+    @Test
+    void decodesHexEncodedXmlBlobTextToReadableMessage() {
+        List<MessageFlowLogRow> rows = service.search("0200202606150003");
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).requestMessage()).isEqualTo("<root><acctNo>6222</acctNo></root>");
+    }
+
+    @Test
+    void keepsNonJsonAndNonXmlMessagesAsHex() {
+        List<MessageFlowLogRow> rows = service.search("0200202606150004");
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).requestMessage()).isEqualTo("01020304");
     }
 
     @Test

@@ -1,21 +1,29 @@
 package com.spdb.message;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.io.IOException;
+import java.io.StringReader;
 
 @Service
 public class MessageFlowLogService {
     private static final String TRANS_ID_PREFIX = "0200";
     private static final Charset GBK = Charset.forName("GBK");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -153,11 +161,16 @@ public class MessageFlowLogService {
         if (bytes == null || bytes.length == 0) {
             return "";
         }
-        String text = decodeText(bytes);
-        if (isHexText(text)) {
-            return decodeText(hexToBytes(text));
+        byte[] messageBytes = bytes;
+        String rawText = decodeText(bytes).trim();
+        if (isHexText(rawText)) {
+            messageBytes = hexToBytes(rawText);
         }
-        return text;
+        String messageText = decodeText(messageBytes);
+        if (isReadableMessage(messageText)) {
+            return messageText;
+        }
+        return toHex(messageBytes);
     }
 
     private static String decodeText(byte[] bytes) {
@@ -186,6 +199,48 @@ public class MessageFlowLogService {
             bytes[i / 2] = (byte) Integer.parseInt(text.substring(i, i + 2), 16);
         }
         return bytes;
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder hex = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            hex.append(String.format("%02X", b));
+        }
+        return hex.toString();
+    }
+
+    private static boolean isReadableMessage(String text) {
+        String trimmed = text.trim();
+        return isJson(trimmed) || isXml(trimmed);
+    }
+
+    private static boolean isJson(String text) {
+        if (!text.startsWith("{") && !text.startsWith("[")) {
+            return false;
+        }
+        try {
+            OBJECT_MAPPER.readTree(text);
+            return true;
+        } catch (IOException ex) {
+            return false;
+        }
+    }
+
+    private static boolean isXml(String text) {
+        if (!text.startsWith("<")) {
+            return false;
+        }
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setExpandEntityReferences(false);
+            factory.newDocumentBuilder().parse(new InputSource(new StringReader(text)));
+            return true;
+        } catch (IOException | ParserConfigurationException | SAXException ex) {
+            return false;
+        }
     }
 
     private static String encodeForBlob(String value) {
