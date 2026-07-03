@@ -32,8 +32,13 @@ class AppCssStyleTest {
         assertThat(css).contains("white-space: nowrap");
         assertThat(css).contains("text-overflow: ellipsis");
         assertThat(css).contains(".field-diff-table");
-        assertThat(css).contains("min-width: 2200px");
-        assertThat(css).contains(".col-field-list");
+        assertThat(css).contains("min-width: 0");
+        assertThat(css).contains(".field-diff-table .col-soap-field");
+        assertThat(css).contains(".field-diff-table .col-action");
+        assertThat(css).contains(".detail-grid");
+        assertThat(css).contains(".compare-grid");
+        assertThat(css).doesNotContain("min-width: 2200px");
+        assertThat(css).doesNotContain(".col-field-list");
         assertThat(css).contains(".command-table");
         assertThat(css).contains("-webkit-line-clamp: 2");
         assertThat(css).contains(".command-actions");
