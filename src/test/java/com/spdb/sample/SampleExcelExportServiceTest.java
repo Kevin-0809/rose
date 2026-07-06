@@ -87,7 +87,7 @@ class SampleExcelExportServiceTest {
         SampleExcelExportService service = new SampleExcelExportService();
         SampleQueryService queryService = mock(SampleQueryService.class);
         SampleFieldDiffRow row = new SampleFieldDiffRow(
-                1L, "20260609", "B20260609", "A001", "S001", "bizjson",
+                "20260609", "B20260609", "A001", "S001", "bizjson",
                 "HUOBDH", "CurrencyId", "CurrencyId", "币种", "MAPPED",
                 "SEQ001", "111", "222", "张三", 12L
         );

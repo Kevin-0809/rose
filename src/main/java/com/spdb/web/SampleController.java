@@ -4,13 +4,10 @@ import com.spdb.sample.SampleExcelExportService;
 import com.spdb.sample.SampleQueryService;
 import com.spdb.sample.SampleSearchCriteria;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -93,15 +90,6 @@ public class SampleController {
         model.addAttribute("result", sampleQueryService.fieldDiffs(criteria, params));
         model.addAttribute("active", "field-diffs");
         return "samples/field-diffs";
-    }
-
-    @GetMapping("/samples/field-diffs/{resultId}")
-    public String fieldDiffDetail(@PathVariable Long resultId, Model model) {
-        var row = sampleQueryService.fieldDiff(resultId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Field diff not found"));
-        model.addAttribute("row", row);
-        model.addAttribute("active", "field-diffs");
-        return "samples/field-diff-detail";
     }
 
     @GetMapping("/samples/field-diffs/export")

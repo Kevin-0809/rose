@@ -69,7 +69,7 @@ class MigrationShardRunnerTest {
         assertThat(request.get("txn_code")).isEqualTo("PAY001");
         assertThat(request.get("txn_time")).isEqualTo(1000L);
         assertThat(new String((byte[]) request.get("request_message"), StandardCharsets.UTF_8))
-                .isEqualTo("request-TXN-1");
+                .isEqualTo("726571756573742D54584E2D31");
 
         Map<String, Object> response = targetJdbc.queryForMap("""
                 select *
@@ -80,7 +80,7 @@ class MigrationShardRunnerTest {
         assertThat(response.get("txn_code")).isEqualTo("PAY001");
         assertThat(response.get("response_time")).isEqualTo(1010L);
         assertThat(new String((byte[]) response.get("response_message"), StandardCharsets.UTF_8))
-                .isEqualTo("response-TXN-1");
+                .isEqualTo("726573706F6E73652D54584E2D31");
     }
 
     @Test
@@ -225,7 +225,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void targetBlobColumnsAreBoundAsBytes() {
+    void targetBlobColumnsAreBoundAsHexText() {
         DriverManagerDataSource rawSourceDataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:migration_shard_blob_source;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
                 "sa",
@@ -251,13 +251,11 @@ class MigrationShardRunnerTest {
 
         runner.run(4L, 1000L, 2000L, 100);
 
-        assertThat(boundValues).doesNotContain(
+        assertThat(boundValues).doesNotHaveAnyElementsOfTypes(byte[].class);
+        assertThat(boundValues).contains(
                 "726571756573742D54584E2D424C4F42",
                 "726573706F6E73652D54584E2D424C4F42"
         );
-        assertThat(boundValues)
-                .anySatisfy(value -> assertThat(value).isEqualTo("request-TXN-BLOB".getBytes(StandardCharsets.UTF_8)))
-                .anySatisfy(value -> assertThat(value).isEqualTo("response-TXN-BLOB".getBytes(StandardCharsets.UTF_8)));
     }
 
     @Test

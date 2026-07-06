@@ -13,7 +13,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class SampleQueryService {
@@ -74,16 +73,6 @@ public class SampleQueryService {
                 """, query.params, (rs, i) -> mapFieldDiffRow(rs));
         long total = count("ana_field_diff_result r", query);
         return PagedResult.of(rows, total, page);
-    }
-
-    public Optional<SampleFieldDiffRow> fieldDiff(Long resultId) {
-        if (resultId == null) {
-            return Optional.empty();
-        }
-        List<SampleFieldDiffRow> rows = jdbc.query(fieldResultSelect() + """
-                 where r.result_id = :resultId
-                """, new MapSqlParameterSource("resultId", resultId), (rs, i) -> mapFieldDiffRow(rs));
-        return rows.stream().findFirst();
     }
 
     public List<SampleDetailRow> exportDetails(SampleSearchCriteria criteria) {
@@ -284,7 +273,6 @@ public class SampleQueryService {
     private String fieldResultSelect() {
         return """
                 select
-                       r.result_id,
                        r.orig_cdate,
                        r.batch_id,
                        r.tran_code,
@@ -406,7 +394,6 @@ public class SampleQueryService {
 
     private SampleFieldDiffRow mapFieldDiffRow(ResultSet rs) throws SQLException {
         return new SampleFieldDiffRow(
-                rs.getLong("result_id"),
                 rs.getString("orig_cdate"),
                 rs.getString("batch_id"),
                 rs.getString("tran_code"),

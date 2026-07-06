@@ -110,42 +110,6 @@ class SampleQueryServiceTest {
     }
 
     @Test
-    void findsFieldDiffDetailByResultId() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource(
-                "jdbc:h2:mem:sample_query_field_diff_detail;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-                "sa",
-                ""
-        );
-        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        createSemanticSampleTables(jdbc);
-        seedSemanticSampleRows(jdbc);
-        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
-
-        var detail = service.fieldDiff(501L);
-
-        assertThat(detail).isPresent();
-        SampleFieldDiffRow row = detail.get();
-        assertThat(row.resultId()).isEqualTo(501L);
-        assertThat(row.origCdate()).isEqualTo("20260611");
-        assertThat(row.batchId()).isEqualTo("BATCH_A825");
-        assertThat(row.tranCode()).isEqualTo("A825");
-        assertThat(row.serviceCode()).isEqualTo("S030030014FcyCollCrspBnkLkgQry");
-        assertThat(row.messageType()).isEqualTo("bizjson");
-        assertThat(row.sopFieldName()).isEqualTo("HUOBDH");
-        assertThat(row.soapFieldName()).isEqualTo("CurrencyId");
-        assertThat(row.bizjsonFieldName()).isEqualTo("CurrencyId");
-        assertThat(row.fieldCnName()).isEqualTo("币种");
-        assertThat(row.mappingStatus()).isEqualTo("MAPPED");
-        assertThat(row.sampleTranSeqNo()).isEqualTo("11111111111");
-        assertThat(row.origFieldValue()).isEqualTo("111");
-        assertThat(row.destFieldValue()).isEqualTo("222");
-        assertThat(row.owner()).isEqualTo("张伟");
-        assertThat(row.affectedTranCount()).isEqualTo(2L);
-
-        assertThat(service.fieldDiff(999L)).isEmpty();
-    }
-
-    @Test
     void exportGroupsLimitsQueryToOneMillionRows() {
         NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
         when(jdbc.<SampleGroupRow>query(anyString(), any(SqlParameterSource.class), any(RowMapper.class))).thenReturn(List.of());
