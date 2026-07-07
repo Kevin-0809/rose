@@ -43,9 +43,7 @@ class LayoutTemplateTest {
                 "/templates/config/fields.html",
                 "/templates/config/recording.html",
                 "/templates/config/trans.html",
-                "/templates/samples/details.html",
                 "/templates/samples/field-diffs.html",
-                "/templates/samples/groups.html",
                 "/templates/samples/transaction-diffs.html",
                 "/templates/sampling/commands.html",
                 "/templates/sampling/summaries.html"

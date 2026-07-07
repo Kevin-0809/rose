@@ -36,9 +36,6 @@ public class SamplingBatchRunner {
     private void clearBatch(MapSqlParameterSource params) {
         jdbc.update("delete from ana_tran_diff_result where batch_id = :batchId", params);
         jdbc.update("delete from ana_field_diff_result where batch_id = :batchId", params);
-        jdbc.update("delete from ana_sample_detail_field where batch_id = :batchId", params);
-        jdbc.update("delete from ana_sample_detail where batch_id = :batchId", params);
-        jdbc.update("delete from ana_sample_group where batch_id = :batchId", params);
         jdbc.update("delete from ana_sampling_summary where batch_id = :batchId", params);
     }
 

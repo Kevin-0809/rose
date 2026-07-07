@@ -11,11 +11,9 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
@@ -25,39 +23,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 @Service
 public class SampleExcelExportService {
-    private final ThreadLocal<Map<TransactionDiffCategory, SheetState>> transactionDiffSheets = new ThreadLocal<>();
     private final Clock clock;
 
     private static final String TXT_DELIMITER = "!";
     private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
-    private static final String[] GROUP_HEADERS = {
-            "业务日期", "类型", "配置状态", "映射状态", "交易码", "服务码", "报文类型",
-            "语义字段", "涉及报文", "责任人", "交易数", "字段数", "样本数", "原因"
-    };
-    private static final int[] GROUP_WIDTHS = {12, 16, 16, 16, 12, 28, 12, 28, 18, 14, 12, 12, 12, 28};
-
-    private static final String[] DETAIL_HEADERS = {
-            "业务日期", "类型", "配置状态", "交易码", "服务码", "报文类型",
-            "流水号", "SOP字段名", "SOAP字段名", "BizJSON字段名", "字段中文名",
-            "字段数", "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述",
-            "责任人", "数量", "来源表", "原因"
-    };
-    private static final int[] DETAIL_WIDTHS = {12, 16, 16, 12, 28, 12, 24, 24, 24, 28, 18, 10, 24, 28, 24, 28, 14, 12, 18, 28};
-
-    private static final String[] TRANSACTION_DIFF_HEADERS = {
-            "业务日期", "批次", "交易码", "服务码", "报文类型", "流水号", "交易结果",
-            "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述", "责任人", "数量"
-    };
-    private static final int[] TRANSACTION_DIFF_WIDTHS = {12, 22, 12, 28, 12, 24, 12, 24, 28, 24, 28, 14, 12};
     private static final String[] TRANSACTION_DIFF_TEXT_HEADERS = {
             "业务日期", "批次", "交易码", "服务码", "报文类型", "流水号", "交易结果",
             "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述", "责任人", "数量"
@@ -67,12 +42,6 @@ public class SampleExcelExportService {
             "比对字段总数", "差异字段数", "比对字段差异总数", "单字段差异>=1%", "单字段差异<1%",
             "领域", "责任人"
     };
-
-    private static final String[] DETAIL_FIELD_HEADERS = {
-            "批次", "流水号", "报文类型", "原字段名", "标准字段名", "中文名",
-            "528字段值", "CCBS字段值", "映射状态", "字段序号"
-    };
-    private static final int[] DETAIL_FIELD_WIDTHS = {18, 24, 12, 28, 24, 18, 28, 28, 16, 10};
 
     private static final String[] FIELD_DIFF_EXPORT_HEADERS = {
             "业务日期", "批次号", "交易码", "服务码", "报文类型",
@@ -107,38 +76,6 @@ public class SampleExcelExportService {
 
     SampleExcelExportService(Clock clock) {
         this.clock = clock;
-    }
-
-    public byte[] exportGroups(List<SampleGroupRow> rows) {
-        return workbookToBytes("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, (sheet, styles) -> {
-            int rowIndex = 2;
-            for (SampleGroupRow row : rows) {
-                writeGroupRow(sheet, styles, rowIndex++, row);
-            }
-        });
-    }
-
-    public byte[] exportDetails(List<SampleDetailRow> rows) {
-        return workbookToBytes("采样明细", "采样明细导出", DETAIL_HEADERS, DETAIL_WIDTHS, (sheet, styles) -> {
-            int rowIndex = 2;
-            for (SampleDetailRow row : rows) {
-                writeDetailRow(sheet, styles, rowIndex++, row);
-            }
-        });
-    }
-
-    public void streamGroups(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
-        workbookToStream("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, outputStream, (sheet, styles) -> {
-            int[] rowIndex = {2};
-            queryService.streamGroups(criteria, row -> writeGroupRow(sheet, styles, rowIndex[0]++, row));
-        });
-    }
-
-    public void streamDetails(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
-        workbookToStream("采样明细", "采样明细导出", DETAIL_HEADERS, DETAIL_WIDTHS, outputStream, (sheet, styles) -> {
-            int[] rowIndex = {2};
-            queryService.streamDetails(criteria, row -> writeDetailRow(sheet, styles, rowIndex[0]++, row));
-        });
     }
 
     public void streamTransactionDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
@@ -177,22 +114,6 @@ public class SampleExcelExportService {
         }
     }
 
-    public byte[] exportDetailFields(List<SampleDetailFieldRow> rows) {
-        return workbookToBytes("字段明细", "样本字段明细导出", DETAIL_FIELD_HEADERS, DETAIL_FIELD_WIDTHS, (sheet, styles) -> {
-            int rowIndex = 2;
-            for (SampleDetailFieldRow row : rows) {
-                writeDetailFieldRow(sheet, styles, rowIndex++, row);
-            }
-        });
-    }
-
-    public void streamDetailFields(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
-        workbookToStream("字段明细", "样本字段明细导出", DETAIL_FIELD_HEADERS, DETAIL_FIELD_WIDTHS, outputStream, (sheet, styles) -> {
-            int[] rowIndex = {2};
-            queryService.streamDetailFields(criteria, row -> writeDetailFieldRow(sheet, styles, rowIndex[0]++, row));
-        });
-    }
-
     public void streamFieldDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
         workbookToStream("字段级差异明细", "字段级差异合并导出", FIELD_DIFF_EXPORT_HEADERS, FIELD_DIFF_EXPORT_WIDTHS, outputStream, (sheet, styles) -> {
             int[] rowIndex = {2};
@@ -207,43 +128,14 @@ public class SampleExcelExportService {
         });
     }
 
-    private byte[] workbookToBytes(String sheetName, String title, String[] headers, int[] widths, SheetWriter writer) {
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet(sheetName);
-            Styles styles = createStyles(workbook);
-            prepareSheet(sheet, title, headers, widths, styles);
-            writer.write(sheet, styles);
-            workbook.write(out);
-            return out.toByteArray();
-        } catch (IOException e) {
-            throw new IllegalStateException("生成 Excel 文件失败", e);
-        }
-    }
-
     private void workbookToStream(String sheetName, String title, String[] headers, int[] widths,
                                   OutputStream outputStream, SheetWriter writer) {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(500)) {
             workbook.setCompressTempFiles(true);
             Styles styles = createStyles(workbook);
-            org.apache.poi.ss.usermodel.Sheet sheet;
-            if (headers == TRANSACTION_DIFF_HEADERS) {
-                Map<TransactionDiffCategory, SheetState> sheets = new LinkedHashMap<>();
-                for (TransactionDiffCategory category : TransactionDiffCategory.values()) {
-                    org.apache.poi.ss.usermodel.Sheet categorySheet = workbook.createSheet(category.sheetName());
-                    prepareSheet(categorySheet, category.sheetName(), headers, widths, styles);
-                    sheets.put(category, new SheetState(categorySheet));
-                }
-                transactionDiffSheets.set(sheets);
-                sheet = sheets.get(TransactionDiffCategory.ORIG_SUCCESS_DEST_FAIL).sheet();
-            } else {
-                sheet = workbook.createSheet(sheetName);
-                prepareSheet(sheet, title, headers, widths, styles);
-            }
-            try {
-                writer.write(sheet, styles);
-            } finally {
-                transactionDiffSheets.remove();
-            }
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet(sheetName);
+            prepareSheet(sheet, title, headers, widths, styles);
+            writer.write(sheet, styles);
             workbook.write(outputStream);
             outputStream.flush();
             workbook.dispose();
@@ -306,74 +198,6 @@ public class SampleExcelExportService {
         percent.cloneStyleFrom(number);
         percent.setDataFormat(workbook.createDataFormat().getFormat("0.00%"));
         return new Styles(title, header, body, number, percent);
-    }
-
-    private void writeGroupRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleGroupRow row) {
-        Row excelRow = sheet.createRow(rowIndex);
-        int col = 0;
-        write(excelRow, col++, row.origCdate(), styles.body());
-        write(excelRow, col++, row.sampleType(), styles.body());
-        write(excelRow, col++, row.configStatus(), styles.body());
-        write(excelRow, col++, row.mappingStatus(), styles.body());
-        write(excelRow, col++, row.tranCode(), styles.body());
-        write(excelRow, col++, row.serviceCode(), styles.body());
-        write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.semanticFieldNames(), styles.body());
-        write(excelRow, col++, row.messageTypes(), styles.body());
-        write(excelRow, col++, row.owner(), styles.body());
-        write(excelRow, col++, row.affectedTranCount(), styles.number());
-        write(excelRow, col++, row.affectedFieldCount(), styles.number());
-        write(excelRow, col++, row.sampleCount(), styles.number());
-        write(excelRow, col, row.reason(), styles.body());
-    }
-
-    private void writeDetailRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailRow row) {
-        Row excelRow = sheet.createRow(rowIndex);
-        int col = 0;
-        write(excelRow, col++, row.origCdate(), styles.body());
-        write(excelRow, col++, row.sampleType(), styles.body());
-        write(excelRow, col++, row.configStatus(), styles.body());
-        write(excelRow, col++, row.tranCode(), styles.body());
-        write(excelRow, col++, row.serviceCode(), styles.body());
-        write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.tranSeqNo(), styles.body());
-        write(excelRow, col++, row.sopFieldName(), styles.body());
-        write(excelRow, col++, row.soapFieldName(), styles.body());
-        write(excelRow, col++, row.bizjsonFieldName(), styles.body());
-        write(excelRow, col++, row.fieldCnName(), styles.body());
-        write(excelRow, col++, row.fieldCount(), styles.number());
-        write(excelRow, col++, row.origErrorCode(), styles.body());
-        write(excelRow, col++, row.origErrorDesc(), styles.body());
-        write(excelRow, col++, row.destErrorCode(), styles.body());
-        write(excelRow, col++, row.destErrorDesc(), styles.body());
-        write(excelRow, col++, row.owner(), styles.body());
-        write(excelRow, col++, row.affectedCount(), styles.number());
-        write(excelRow, col++, row.sourceTable(), styles.body());
-        write(excelRow, col, row.reason(), styles.body());
-    }
-
-    private void writeTransactionDiffRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailRow row) {
-        Map<TransactionDiffCategory, SheetState> categorySheets = transactionDiffSheets.get();
-        if (categorySheets != null) {
-            SheetState state = categorySheets.get(TransactionDiffCategory.of(row));
-            sheet = state.sheet();
-            rowIndex = state.nextRowIndex();
-        }
-        Row excelRow = sheet.createRow(rowIndex);
-        int col = 0;
-        write(excelRow, col++, row.origCdate(), styles.body());
-        write(excelRow, col++, row.batchId(), styles.body());
-        write(excelRow, col++, row.tranCode(), styles.body());
-        write(excelRow, col++, row.serviceCode(), styles.body());
-        write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.tranSeqNo(), styles.body());
-        write(excelRow, col++, row.compResult(), styles.body());
-        write(excelRow, col++, row.origErrorCode(), styles.body());
-        write(excelRow, col++, row.origErrorDesc(), styles.body());
-        write(excelRow, col++, row.destErrorCode(), styles.body());
-        write(excelRow, col++, row.destErrorDesc(), styles.body());
-        write(excelRow, col++, row.owner(), styles.body());
-        write(excelRow, col, row.affectedCount(), styles.number());
     }
 
     private void writeTransactionStatEntry(ZipOutputStream zip, String timestamp, long[] counts) throws IOException {
@@ -492,21 +316,6 @@ public class SampleExcelExportService {
         }
     }
 
-    private void writeDetailFieldRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailFieldRow row) {
-        Row excelRow = sheet.createRow(rowIndex);
-        int col = 0;
-        write(excelRow, col++, row.batchId(), styles.body());
-        write(excelRow, col++, row.mesgSeq(), styles.body());
-        write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.rawFieldName(), styles.body());
-        write(excelRow, col++, row.stdFieldName(), styles.body());
-        write(excelRow, col++, row.fieldCnName(), styles.body());
-        write(excelRow, col++, row.origFieldValue(), styles.body());
-        write(excelRow, col++, row.destFieldValue(), styles.body());
-        write(excelRow, col++, row.mappingStatus(), styles.body());
-        write(excelRow, col, row.fieldIndex(), styles.number());
-    }
-
     private void writeFieldDiffExportRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleFieldDiffRow row) {
         Row excelRow = sheet.createRow(rowIndex);
         int col = 0;
@@ -604,38 +413,14 @@ public class SampleExcelExportService {
         void write(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles);
     }
 
-    private record SheetState(org.apache.poi.ss.usermodel.Sheet sheet, int[] rowIndex) {
-        SheetState(org.apache.poi.ss.usermodel.Sheet sheet) {
-            this(sheet, new int[]{2});
-        }
-
-        int nextRowIndex() {
-            return rowIndex[0]++;
-        }
-    }
-
     private enum TransactionDiffCategory {
-        ORIG_SUCCESS_DEST_FAIL("528\u6210\u529fCCBS\u5931\u8d25"),
-        ORIG_FAIL_DEST_SUCCESS("528\u5931\u8d25CCBS\u6210\u529f"),
-        BOTH_SUCCESS("\u4e8c\u8005\u90fd\u6210\u529f"),
-        BOTH_FAIL("\u4e8c\u8005\u90fd\u5931\u8d25");
+        ORIG_SUCCESS_DEST_FAIL,
+        ORIG_FAIL_DEST_SUCCESS,
+        BOTH_SUCCESS,
+        BOTH_FAIL;
 
         private static final String SUCCESS_CODE_ZERO = "000000000000";
         private static final String SUCCESS_CODE_A = "AAAAAAA";
-
-        private final String sheetName;
-
-        TransactionDiffCategory(String sheetName) {
-            this.sheetName = sheetName;
-        }
-
-        String sheetName() {
-            return sheetName;
-        }
-
-        boolean exported() {
-            return this != BOTH_SUCCESS;
-        }
 
         static TransactionDiffCategory of(SampleDetailRow row) {
             boolean origSuccess = isSuccess(row.origErrorCode());

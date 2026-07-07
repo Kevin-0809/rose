@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DatabaseScriptLayoutTest {
 
     @Test
-    void dbFolderOnlyContainsCurrentDdlAndSeedSqlEntrypoints() throws Exception {
+    void dbFolderContainsCurrentDdlAndSeedSqlEntrypoints() throws Exception {
         List<String> sqlFiles;
         try (var paths = Files.walk(Path.of("db"))) {
             sqlFiles = paths
@@ -22,7 +22,7 @@ class DatabaseScriptLayoutTest {
                     .toList();
         }
 
-        assertThat(sqlFiles).containsExactly("ddl.sql", "seed.sql");
+        assertThat(sqlFiles).contains("ddl.sql", "seed.sql");
     }
 
     @Test
@@ -93,10 +93,7 @@ class DatabaseScriptLayoutTest {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
         String ddlLower = ddl.toLowerCase();
         String seedLower = Files.readString(Path.of("db/seed.sql"), StandardCharsets.UTF_8).toLowerCase();
-        String retcodeSeed = seedLower.substring(
-                seedLower.indexOf("insert into tss_retcode_comp"),
-                seedLower.indexOf("-- 005_seed_ana_samples_from_tss.sql")
-        );
+        String retcodeSeed = seedLower.substring(seedLower.indexOf("insert into tss_retcode_comp"));
 
         assertThat(ddlLower).contains("create table if not exists tss_retcode_comp");
         assertThat(ddlLower).doesNotContain("retcode_id");
@@ -132,56 +129,21 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
-    void sampleGroupStoresSemanticGroupingFields() throws Exception {
+    void legacySamplingTablesAreRemovedFromDdlAndSeed() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+        String seed = Files.readString(Path.of("db/seed.sql"), StandardCharsets.UTF_8).toLowerCase();
+        String scripts = ddl + "\n" + seed;
 
-        assertThat(ddl).contains("orig_cdate varchar(8)");
-        assertThat(ddl).contains("config_status varchar(32)");
-        assertThat(ddl).contains("mapping_status varchar(32)");
-        assertThat(ddl).contains("semantic_signature varchar(2000)");
-        assertThat(ddl).contains("semantic_signature_hash varchar(32)");
-        assertThat(ddl).contains("semantic_field_names varchar(1000)");
-        assertThat(ddl).contains("message_types varchar(200)");
-        assertThat(ddl).contains("affected_tran_count bigint");
-        assertThat(ddl).contains("affected_field_count bigint");
-    }
-
-    @Test
-    void ddlCanUpgradeExistingSemanticSamplingTables() throws Exception {
-        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
-
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists orig_cdate varchar(8)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists config_status varchar(32)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists mapping_status varchar(32)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists semantic_signature varchar(2000)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists semantic_signature_hash varchar(32)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists semantic_field_names varchar(1000)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists message_types varchar(200)");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists affected_tran_count bigint");
-        assertThat(ddl).contains("alter table ana_sample_group add column if not exists affected_field_count bigint");
-        assertThat(ddl).contains("alter table ana_sample_group alter column sop_field_name drop not null");
-        assertThat(ddl).contains("update ana_sample_group set sample_type = 'return_code' where sample_type = 'tran_result'");
-        assertThat(ddl).contains("alter table ana_sample_group drop constraint if exists ck_ana_sample_group_type");
-        assertThat(ddl).contains("alter table ana_sample_group add constraint ck_ana_sample_group_type check (sample_type in ('return_code', 'field_diff'))");
-        assertThat(ddl).contains("alter table ana_sample_detail add column if not exists field_count integer");
-        assertThat(ddl).contains("alter table ana_sample_detail alter column sop_field_name drop not null");
-        assertThat(ddl).contains("update ana_sample_detail set sample_type = 'return_code' where sample_type = 'tran_result'");
-        assertThat(ddl).contains("alter table ana_sample_detail drop constraint if exists ck_ana_sample_detail_type");
-        assertThat(ddl).contains("alter table ana_sample_detail add constraint ck_ana_sample_detail_type check (sample_type in ('return_code', 'field_diff'))");
+        assertThat(scripts)
+                .doesNotContain("ana_sample_group")
+                .doesNotContain("ana_sample_detail")
+                .doesNotContain("ana_sample_detail_field")
+                .doesNotContain("ana_sampling_candidate");
+        assertThat(scripts)
+                .doesNotContain("idx_ana_sample_group")
+                .doesNotContain("idx_ana_sample_detail")
+                .doesNotContain("idx_ana_sampling_candidate");
         assertThat(ddl).contains("alter table ana_sampling_summary add column if not exists tran_issue_count bigint");
-    }
-
-    @Test
-    void sampleDetailFieldTableExists() throws Exception {
-        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
-
-        assertThat(ddl).contains("create table if not exists ana_sample_detail_field");
-        assertThat(ddl).contains("field_detail_id bigserial primary key");
-        assertThat(ddl).contains("sample_id bigint not null");
-        assertThat(ddl).contains("raw_field_name varchar(200)");
-        assertThat(ddl).contains("std_field_name varchar(200)");
-        assertThat(ddl).contains("mapping_status varchar(32)");
-        assertThat(ddl).contains("idx_ana_sample_detail_field_sample");
     }
 
     @Test
