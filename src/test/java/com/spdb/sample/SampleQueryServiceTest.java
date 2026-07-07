@@ -362,6 +362,41 @@ class SampleQueryServiceTest {
                 .containsExactly("S001", "S002");
     }
 
+    @Test
+    void streamTransactionSuccessStatsNormalizesArrayFieldsAndAggregatesConfiguredFields() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:transaction_success_stats;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createTransactionSuccessStatTables(jdbc);
+        seedTransactionSuccessStatRows(jdbc);
+        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
+
+        List<TransactionSuccessStatRow> rows = new java.util.ArrayList<>();
+        service.streamTransactionSuccessStats(new SampleSearchCriteria(
+                "BATCH_SUCCESS", "20260703", "RETURN_CODE", null, null, null, null, null, null, null, null
+        ), rows::add);
+
+        assertThat(rows).hasSize(1);
+        TransactionSuccessStatRow row = rows.get(0);
+        assertThat(row.origCdate()).isEqualTo("20260703");
+        assertThat(row.batchId()).isEqualTo("BATCH_SUCCESS");
+        assertThat(row.tranCode()).isEqualTo("C000");
+        assertThat(row.serviceCode()).isEqualTo("aaa");
+        assertThat(row.messageType()).isEqualTo("bzjson");
+        assertThat(row.successCount()).isEqualTo(100L);
+        assertThat(row.interfaceFieldCount()).isEqualTo(2L);
+        assertThat(row.comparedFieldCount()).isEqualTo(200L);
+        assertThat(row.diffFieldCount()).isEqualTo(2L);
+        assertThat(row.comparedFieldDiffCount()).isEqualTo(2L);
+        assertThat(row.highRatioFieldCount()).isEqualTo(2L);
+        assertThat(row.lowRatioFieldCount()).isEqualTo(0L);
+        assertThat(row.moduleName()).isEqualTo("存款,负债");
+        assertThat(row.owner()).isEqualTo("张三,李四");
+    }
+
     private int exportLimit(SqlParameterSource params) {
         assertThat(params.hasValue("exportLimit")).isTrue();
         return ((Number) params.getValue("exportLimit")).intValue();
@@ -458,6 +493,87 @@ class SampleQueryServiceTest {
                     batch_id varchar(64),
                     orig_cdate varchar(8)
                 )
+                """);
+    }
+
+    private void createTransactionSuccessStatTables(JdbcTemplate jdbc) {
+        jdbc.execute("""
+                create table tss_tran_comp (
+                    mesg_seq varchar(64),
+                    orig_cdate varchar(8),
+                    dest_trcd varchar(200),
+                    comp_result varchar(1)
+                )
+                """);
+        jdbc.execute("""
+                create table tss_field_comp (
+                    mesg_seq varchar(64),
+                    orig_cdate varchar(8),
+                    comp_result varchar(1),
+                    orig_field_name varchar(200),
+                    dest_field_name varchar(200),
+                    conv_index integer,
+                    conv_cindex integer
+                )
+                """);
+        jdbc.execute("""
+                create table ana_field_mapping (
+                    tran_code varchar(32),
+                    service_code varchar(200),
+                    std_field_name varchar(200),
+                    sop_field_name varchar(200),
+                    soap_field_name varchar(200),
+                    bizjson_field_name varchar(200)
+                )
+                """);
+        jdbc.execute("""
+                create table ana_tran_catalog (
+                    tran_code varchar(32),
+                    service_code varchar(200),
+                    tran_name varchar(200),
+                    module_name varchar(100),
+                    owner varchar(100)
+                )
+                """);
+        jdbc.execute("""
+                create table ana_sampling_summary (
+                    batch_id varchar(64),
+                    orig_cdate varchar(8)
+                )
+                """);
+    }
+
+    private void seedTransactionSuccessStatRows(JdbcTemplate jdbc) {
+        jdbc.update("insert into ana_sampling_summary (batch_id, orig_cdate) values ('BATCH_SUCCESS', '20260703')");
+        jdbc.update("""
+                insert into ana_tran_catalog (
+                    tran_code, service_code, tran_name, module_name, owner
+                ) values
+                    ('C000', 'aaa', '交易一', '存款', '张三'),
+                    ('C000', 'aaa', '交易一', '负债', '李四')
+                """);
+        jdbc.update("""
+                insert into ana_field_mapping (
+                    tran_code, service_code, std_field_name, sop_field_name, soap_field_name, bizjson_field_name
+                ) values
+                    ('C000', 'aaa', 'lst.acctNo', 'lst[0].acctNo', null, 'lst[0].acctNo'),
+                    ('C000', 'aaa', 'lst.acctNo', 'lst[1].acctNo', null, 'lst[1].acctNo'),
+                    ('C000', 'aaa', 'amount', 'amount', null, 'amount')
+                """);
+        StringBuilder sql = new StringBuilder("insert into tss_tran_comp (mesg_seq, orig_cdate, dest_trcd, comp_result) values ");
+        for (int i = 1; i <= 100; i++) {
+            if (i > 1) {
+                sql.append(',');
+            }
+            sql.append("('SEQ").append(i).append("', '20260703', 'aaa&bzjson', '4')");
+        }
+        jdbc.update(sql.toString());
+        jdbc.update("""
+                insert into tss_field_comp (
+                    mesg_seq, orig_cdate, comp_result, orig_field_name, dest_field_name, conv_index, conv_cindex
+                ) values
+                    ('SEQ1', '20260703', '0', 'fallback[0].unused', 'lst[0].acctNo', 1, 1),
+                    ('SEQ2', '20260703', '0', 'amount', null, 1, 1)
                 """);
     }
 

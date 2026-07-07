@@ -51,49 +51,64 @@ public class SamplingBatchRunner {
                 )
                 select
                     cast(:batchId as varchar(64)),
-                    n.orig_cdate,
-                    coalesce(c.tran_code, n.service_code) as tran_code,
-                    n.service_code,
-                    n.message_type,
-                    n.mesg_seq as sample_tran_seq_no,
-                    nullif(n.orig_error_code, '') as orig_error_code,
-                    nullif(n.orig_error_desc, '') as orig_error_desc,
-                    nullif(n.dest_error_code, '') as dest_error_code,
-                    nullif(n.dest_error_desc, '') as dest_error_desc,
+                    grouped.orig_cdate,
+                    coalesce(c.tran_code, grouped.service_code) as tran_code,
+                    grouped.service_code,
+                    grouped.message_type,
+                    grouped.sample_tran_seq_no,
+                    nullif(grouped.orig_error_code, '') as orig_error_code,
+                    nullif(sample.orig_error_desc, '') as orig_error_desc,
+                    nullif(grouped.dest_error_code, '') as dest_error_code,
+                    nullif(sample.dest_error_desc, '') as dest_error_desc,
                     c.owner,
-                    1 as affected_tran_count
+                    grouped.affected_tran_count
                 from (
                     select
-                        r.mesg_seq,
-                        r.orig_cdate,
-                        case
-                            when position('&' in coalesce(coalesce(t.dest_trcd, r.service_code), '')) > 0
-                                then substring(coalesce(t.dest_trcd, r.service_code) from 1 for position('&' in coalesce(t.dest_trcd, r.service_code)) - 1)
-                            else coalesce(coalesce(t.dest_trcd, r.service_code), '')
-                        end as service_code,
-                        lower(case
-                            when position('&' in coalesce(coalesce(t.dest_trcd, r.service_code), '')) > 0
-                                then substring(coalesce(t.dest_trcd, r.service_code) from position('&' in coalesce(t.dest_trcd, r.service_code)) + 1)
-                            else ''
-                        end) as message_type,
-                        r.orig_error_code,
-                        r.orig_error_desc,
-                        r.dest_error_code,
-                        r.dest_error_desc
-                    from tss_retcode_comp r
-                    left join tss_tran_comp t
-                      on t.orig_cdate = r.orig_cdate
-                     and t.mesg_seq = r.mesg_seq
-                    where r.orig_cdate = :origCdate
-                      and (
-                            length(trim(coalesce(r.orig_error_code, ''))) > 0
-                         or length(trim(coalesce(r.orig_error_desc, ''))) > 0
-                         or length(trim(coalesce(r.dest_error_code, ''))) > 0
-                         or length(trim(coalesce(r.dest_error_desc, ''))) > 0
-                      )
-                ) n
+                        base.orig_cdate,
+                        base.service_code,
+                        base.message_type,
+                        base.orig_error_code,
+                        base.dest_error_code,
+                        min(base.mesg_seq) as sample_tran_seq_no,
+                        count(*) as affected_tran_count
+                    from (
+                        select
+                            r.mesg_seq,
+                            r.orig_cdate,
+                            case
+                                when position('&' in coalesce(coalesce(t.dest_trcd, r.service_code), '')) > 0
+                                    then substring(coalesce(t.dest_trcd, r.service_code) from 1 for position('&' in coalesce(t.dest_trcd, r.service_code)) - 1)
+                                else coalesce(coalesce(t.dest_trcd, r.service_code), '')
+                            end as service_code,
+                            lower(case
+                                when position('&' in coalesce(coalesce(t.dest_trcd, r.service_code), '')) > 0
+                                    then substring(coalesce(t.dest_trcd, r.service_code) from position('&' in coalesce(t.dest_trcd, r.service_code)) + 1)
+                                else ''
+                            end) as message_type,
+                            coalesce(r.orig_error_code, '') as orig_error_code,
+                            r.orig_error_desc,
+                            coalesce(r.dest_error_code, '') as dest_error_code,
+                            r.dest_error_desc
+                        from tss_retcode_comp r
+                        left join tss_tran_comp t
+                          on t.orig_cdate = r.orig_cdate
+                         and t.mesg_seq = r.mesg_seq
+                        where r.orig_cdate = :origCdate
+                          and (
+                                length(trim(coalesce(r.orig_error_code, ''))) > 0
+                             or length(trim(coalesce(r.orig_error_desc, ''))) > 0
+                             or length(trim(coalesce(r.dest_error_code, ''))) > 0
+                             or length(trim(coalesce(r.dest_error_desc, ''))) > 0
+                          )
+                    ) base
+                    group by base.orig_cdate, base.service_code, base.message_type,
+                             base.orig_error_code, base.dest_error_code
+                ) grouped
+                join tss_retcode_comp sample
+                  on sample.orig_cdate = grouped.orig_cdate
+                 and sample.mesg_seq = grouped.sample_tran_seq_no
                 left join ana_tran_catalog c
-                  on lower(c.service_code) = lower(n.service_code)
+                  on lower(c.service_code) = lower(grouped.service_code)
                 """, params);
     }
 

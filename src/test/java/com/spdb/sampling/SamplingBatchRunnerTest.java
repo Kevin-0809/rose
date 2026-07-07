@@ -89,13 +89,14 @@ class SamplingBatchRunnerTest {
     }
 
     @Test
-    void transactionDiffResultKeepsEachReturnCodeRowWithoutAggregation() {
+    void transactionDiffResultAggregatesReturnCodeRowsBy528AndCcbsCodePair() {
         jdbc.update("""
                 insert into tss_tran_comp
                 (mesg_seq, orig_cdate, conv_index, conv_cindex, comp_date, dest_trcd, orig_tran_res, dest_tran_res, comp_result)
                 values
                 ('33333333331', '20260612', 1, 1, '20260612', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '2', '2', '1'),
-                ('33333333332', '20260612', 1, 1, '20260612', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '2', '2', '1')
+                ('33333333332', '20260612', 1, 1, '20260612', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '2', '2', '1'),
+                ('33333333333', '20260612', 1, 1, '20260612', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '2', '2', '1')
                 """);
         jdbc.update("""
                 insert into tss_retcode_comp
@@ -107,6 +108,28 @@ class SamplingBatchRunnerTest {
                 ('33333333332', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '20260612',
                  'ORIG-ERROR-CODE-0000000000000000000000000000002', '原始错误描述2',
                  'DEST-ERROR-CODE-0000000000000000000000000000002', '目标错误描述2')
+                """);
+        jdbc.update("""
+                update tss_retcode_comp
+                set orig_error_desc = 'sample 528 desc 1',
+                    dest_error_desc = 'sample CCBS desc 1'
+                where mesg_seq = '33333333331'
+                """);
+        jdbc.update("""
+                update tss_retcode_comp
+                set orig_error_code = 'ORIG-ERROR-CODE-0000000000000000000000000000001',
+                    orig_error_desc = 'different 528 desc same code',
+                    dest_error_code = 'DEST-ERROR-CODE-0000000000000000000000000000001',
+                    dest_error_desc = 'different CCBS desc same code'
+                where mesg_seq = '33333333332'
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp
+                (mesg_seq, service_code, orig_cdate, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc)
+                values
+                ('33333333333', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '20260612',
+                 'ORIG-ERROR-CODE-0000000000000000000000000000002', 'sample 528 desc 2',
+                 'DEST-ERROR-CODE-0000000000000000000000000000002', 'sample CCBS desc 2')
                 """);
 
         runner.run(new SamplingCommandRow(
@@ -144,14 +167,14 @@ class SamplingBatchRunnerTest {
         ));
 
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select sample_tran_seq_no, orig_error_code, dest_error_code, affected_tran_count
+                select sample_tran_seq_no, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc, affected_tran_count
                 from ana_tran_diff_result
                 where batch_id = 'BATCH_LONG_CODE'
                 order by sample_tran_seq_no
                 """);
         assertThat(rows).hasSize(2);
         assertThat(rows).extracting(row -> row.get("sample_tran_seq_no"))
-                .containsExactly("33333333331", "33333333332");
+                .containsExactly("33333333331", "33333333333");
         assertThat(rows).extracting(row -> row.get("orig_error_code"))
                 .containsExactly(
                         "ORIG-ERROR-CODE-0000000000000000000000000000001",
@@ -162,8 +185,10 @@ class SamplingBatchRunnerTest {
                         "DEST-ERROR-CODE-0000000000000000000000000000001",
                         "DEST-ERROR-CODE-0000000000000000000000000000002"
                 );
+        assertThat(rows.get(0).get("orig_error_desc")).isEqualTo("sample 528 desc 1");
+        assertThat(rows.get(0).get("dest_error_desc")).isEqualTo("sample CCBS desc 1");
         assertThat(rows).extracting(row -> row.get("affected_tran_count"))
-                .containsExactly(1L, 1L);
+                .containsExactly(2L, 1L);
     }
 
     @Test

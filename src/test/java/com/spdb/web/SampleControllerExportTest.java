@@ -8,6 +8,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.io.OutputStream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -41,15 +42,18 @@ class SampleControllerExportTest {
 
     @Test
     void transactionDiffExportStreamsDedicatedTransactionRows() throws Exception {
-        SampleQueryService queryService = mock(SampleQueryService.class);
-        SampleExcelExportService excelExportService = mock(SampleExcelExportService.class);
+        SampleQueryService queryService = new SampleQueryService(null);
+        RecordingExportService excelExportService = new RecordingExportService();
         SampleController controller = new SampleController(queryService, excelExportService);
+        MockHttpServletResponse response = new MockHttpServletResponse();
 
-        controller.exportTransactionDiffs(null, null, null, null, null, null, null, null, new MockHttpServletResponse());
+        controller.exportTransactionDiffs(null, null, null, null, null, null, null, null, response);
 
-        verify(excelExportService).streamTransactionDiffExport(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
-        verify(excelExportService, never()).streamDetails(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
-        verify(queryService, never()).exportDetails(any());
+        assertThat(response.getContentType()).isEqualTo("application/zip");
+        assertThat(response.getHeader("Content-Disposition")).contains("transdiff_");
+        assertThat(response.getHeader("Content-Disposition")).contains(".zip");
+        assertThat(excelExportService.transactionDiffExportCalled).isTrue();
+        assertThat(excelExportService.detailsExportCalled).isFalse();
     }
 
     @Test
@@ -75,5 +79,20 @@ class SampleControllerExportTest {
         verify(excelExportService).streamFieldDiffExport(any(SampleQueryService.class), any(SampleSearchCriteria.class), any(OutputStream.class));
         verify(queryService, never()).exportDetails(any());
         verify(queryService, never()).exportDetailFields(any());
+    }
+
+    private static class RecordingExportService extends SampleExcelExportService {
+        boolean transactionDiffExportCalled;
+        boolean detailsExportCalled;
+
+        @Override
+        public void streamTransactionDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
+            transactionDiffExportCalled = true;
+        }
+
+        @Override
+        public void streamDetails(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
+            detailsExportCalled = true;
+        }
     }
 }

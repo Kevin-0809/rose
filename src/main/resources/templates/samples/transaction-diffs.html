@@ -20,7 +20,7 @@
       <div><label>配置状态</label><input name="configStatus" th:value="${criteria.configStatus()}"></div>
       <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
       <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/transaction-diffs/export">导出Excel</button><a class="btn" href="/samples/transaction-diffs">重置</a></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/transaction-diffs/export">导出TXT</button><a class="btn" href="/samples/transaction-diffs">重置</a></div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>

@@ -18,6 +18,8 @@ class SampleDetailTemplateTest {
 
         assertThat(html).contains("交易级差异");
         assertThat(html).contains("/samples/transaction-diffs/export");
+        assertThat(html).contains("导出TXT");
+        assertThat(html).doesNotContain("formaction=\"/samples/transaction-diffs/export\">导出Excel");
         assertThat(html).contains("<th>交易结果</th>");
         assertThat(html).contains("<th>528响应码</th><th>528响应描述</th><th>CCBS响应码</th><th>CCBS响应描述</th>");
         assertThat(html).doesNotContain("name=\"sampleType\"");

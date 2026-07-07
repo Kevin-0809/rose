@@ -14,16 +14,30 @@ import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class SampleExcelExportService {
     private final ThreadLocal<Map<TransactionDiffCategory, SheetState>> transactionDiffSheets = new ThreadLocal<>();
+    private final Clock clock;
+
+    private static final String TXT_DELIMITER = "!";
+    private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
     private static final String[] GROUP_HEADERS = {
             "业务日期", "类型", "配置状态", "映射状态", "交易码", "服务码", "报文类型",
@@ -44,6 +58,15 @@ public class SampleExcelExportService {
             "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述", "责任人", "数量"
     };
     private static final int[] TRANSACTION_DIFF_WIDTHS = {12, 22, 12, 28, 12, 24, 12, 24, 28, 24, 28, 14, 12};
+    private static final String[] TRANSACTION_DIFF_TEXT_HEADERS = {
+            "业务日期", "批次", "交易码", "服务码", "报文类型", "流水号", "交易结果",
+            "528响应码", "528响应描述", "CCBS响应码", "CCBS响应描述", "责任人", "数量"
+    };
+    private static final String[] TRANSACTION_SUCCESS_STAT_HEADERS = {
+            "业务日期", "批次", "交易码", "服务码", "报文类型", "成功数量", "接口字段总数",
+            "比对字段总数", "差异字段数", "比对字段差异总数", "单字段差异>=1%", "单字段差异<1%",
+            "领域", "责任人"
+    };
 
     private static final String[] DETAIL_FIELD_HEADERS = {
             "批次", "流水号", "报文类型", "原字段名", "标准字段名", "中文名",
@@ -78,6 +101,14 @@ public class SampleExcelExportService {
             12, 12, 12, 16, 16, 16, 16, 12, 12, 12, 12, 16, 16, 16, 16, 12, 12, 18, 18, 12, 12
     };
 
+    public SampleExcelExportService() {
+        this(Clock.systemDefaultZone());
+    }
+
+    SampleExcelExportService(Clock clock) {
+        this.clock = clock;
+    }
+
     public byte[] exportGroups(List<SampleGroupRow> rows) {
         return workbookToBytes("采样分组", "采样分组导出", GROUP_HEADERS, GROUP_WIDTHS, (sheet, styles) -> {
             int rowIndex = 2;
@@ -111,10 +142,39 @@ public class SampleExcelExportService {
     }
 
     public void streamTransactionDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
-        workbookToStream("交易级差异", "交易级差异导出", TRANSACTION_DIFF_HEADERS, TRANSACTION_DIFF_WIDTHS, outputStream, (sheet, styles) -> {
-            int[] rowIndex = {2};
-            queryService.streamTransactionDiffExport(criteria, row -> writeTransactionDiffRow(sheet, styles, rowIndex[0]++, row));
-        });
+        String timestamp = LocalDateTime.now(clock).format(EXPORT_TIMESTAMP);
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("transdiff-export-");
+            Path ccbsFile = tempDir.resolve("transdiff_ccbs_" + timestamp + ".txt");
+            Path cbspFile = tempDir.resolve("transdiff_cbsp_" + timestamp + ".txt");
+            Path bothFile = tempDir.resolve("transdiff_both_" + timestamp + ".txt");
+            Path successFile = tempDir.resolve("transdiff_success_" + timestamp + ".txt");
+            long[] counts = new long[3];
+            try (BufferedWriter ccbs = Files.newBufferedWriter(ccbsFile, StandardCharsets.UTF_8);
+                 BufferedWriter cbsp = Files.newBufferedWriter(cbspFile, StandardCharsets.UTF_8);
+                 BufferedWriter both = Files.newBufferedWriter(bothFile, StandardCharsets.UTF_8);
+                 BufferedWriter success = Files.newBufferedWriter(successFile, StandardCharsets.UTF_8)) {
+                appendTextLine(ccbs, (Object[]) TRANSACTION_DIFF_TEXT_HEADERS);
+                appendTextLine(cbsp, (Object[]) TRANSACTION_DIFF_TEXT_HEADERS);
+                appendTextLine(both, (Object[]) TRANSACTION_DIFF_TEXT_HEADERS);
+                appendTextLine(success, (Object[]) TRANSACTION_SUCCESS_STAT_HEADERS);
+                queryService.streamTransactionDiffExport(criteria, row -> writeTransactionTextRow(row, ccbs, cbsp, both, counts));
+                queryService.streamTransactionSuccessStats(criteria, row -> writeTransactionSuccessStatRow(success, row));
+            }
+            try (ZipOutputStream zip = new ZipOutputStream(outputStream, StandardCharsets.UTF_8)) {
+                writeTransactionStatEntry(zip, timestamp, counts);
+                writeZipFile(zip, ccbsFile);
+                writeZipFile(zip, cbspFile);
+                writeZipFile(zip, bothFile);
+                writeZipFile(zip, successFile);
+                zip.finish();
+            }
+        } catch (IOException | UncheckedIOException e) {
+            throw new IllegalStateException("生成交易级差异文本文件失败", e);
+        } finally {
+            deleteDirectoryQuietly(tempDir);
+        }
     }
 
     public byte[] exportDetailFields(List<SampleDetailFieldRow> rows) {
@@ -316,6 +376,122 @@ public class SampleExcelExportService {
         write(excelRow, col, row.affectedCount(), styles.number());
     }
 
+    private void writeTransactionStatEntry(ZipOutputStream zip, String timestamp, long[] counts) throws IOException {
+        StringBuilder text = new StringBuilder();
+        appendTextLine(text, "类型", "数量");
+        appendTextLine(text, "528成功CCBS失败", counts[0]);
+        appendTextLine(text, "CCBS成功528失败", counts[1]);
+        appendTextLine(text, "528与CCBS均失败但错误码不一致", counts[2]);
+        writeZipText(zip, "transdiff_stat_" + timestamp + ".txt", text);
+    }
+
+    private void writeTransactionTextRow(SampleDetailRow row, BufferedWriter ccbs, BufferedWriter cbsp,
+                                         BufferedWriter both, long[] counts) {
+        try {
+            TransactionDiffCategory category = TransactionDiffCategory.of(row);
+            if (category == TransactionDiffCategory.ORIG_SUCCESS_DEST_FAIL) {
+                appendTransactionTextLine(ccbs, row);
+                counts[0]++;
+            } else if (category == TransactionDiffCategory.ORIG_FAIL_DEST_SUCCESS) {
+                appendTransactionTextLine(cbsp, row);
+                counts[1]++;
+            } else if (category == TransactionDiffCategory.BOTH_FAIL) {
+                appendTransactionTextLine(both, row);
+                counts[2]++;
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private void appendTransactionTextLine(BufferedWriter writer, SampleDetailRow row) throws IOException {
+        appendTextLine(writer,
+                row.origCdate(),
+                row.batchId(),
+                row.tranCode(),
+                row.serviceCode(),
+                row.messageType(),
+                row.tranSeqNo(),
+                row.compResult(),
+                row.origErrorCode(),
+                row.origErrorDesc(),
+                row.destErrorCode(),
+                row.destErrorDesc(),
+                row.owner(),
+                row.affectedCount()
+        );
+    }
+
+    private void writeTransactionSuccessStatRow(BufferedWriter writer, TransactionSuccessStatRow row) {
+        try {
+            appendTextLine(writer,
+                    row.origCdate(),
+                    row.batchId(),
+                    row.tranCode(),
+                    row.serviceCode(),
+                    row.messageType(),
+                    row.successCount(),
+                    row.interfaceFieldCount(),
+                    row.comparedFieldCount(),
+                    row.diffFieldCount(),
+                    row.comparedFieldDiffCount(),
+                    row.highRatioFieldCount(),
+                    row.lowRatioFieldCount(),
+                    row.moduleName(),
+                    row.owner()
+            );
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private void writeZipText(ZipOutputStream zip, String filename, CharSequence text) throws IOException {
+        zip.putNextEntry(new ZipEntry(filename));
+        zip.write(text.toString().getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
+    private void writeZipFile(ZipOutputStream zip, Path file) throws IOException {
+        zip.putNextEntry(new ZipEntry(file.getFileName().toString()));
+        Files.copy(file, zip);
+        zip.closeEntry();
+    }
+
+    private void appendTextLine(StringBuilder text, Object... columns) {
+        for (int i = 0; i < columns.length; i++) {
+            if (i > 0) {
+                text.append(TXT_DELIMITER);
+            }
+            text.append(columns[i] == null ? "" : columns[i]);
+        }
+        text.append('\n');
+    }
+
+    private void appendTextLine(BufferedWriter writer, Object... columns) throws IOException {
+        for (int i = 0; i < columns.length; i++) {
+            if (i > 0) {
+                writer.write(TXT_DELIMITER);
+            }
+            writer.write(columns[i] == null ? "" : columns[i].toString());
+        }
+        writer.write('\n');
+    }
+
+    private void deleteDirectoryQuietly(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try (var paths = Files.walk(dir)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                }
+            });
+        } catch (IOException ignored) {
+        }
+    }
+
     private void writeDetailFieldRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleDetailFieldRow row) {
         Row excelRow = sheet.createRow(rowIndex);
         int col = 0;
@@ -455,6 +631,10 @@ public class SampleExcelExportService {
 
         String sheetName() {
             return sheetName;
+        }
+
+        boolean exported() {
+            return this != BOTH_SUCCESS;
         }
 
         static TransactionDiffCategory of(SampleDetailRow row) {

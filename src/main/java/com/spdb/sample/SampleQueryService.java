@@ -99,6 +99,13 @@ public class SampleQueryService {
                 """, query.params, handler);
     }
 
+    public void streamTransactionSuccessStats(SampleSearchCriteria criteria, TransactionSuccessStatConsumer consumer) {
+        SuccessQueryParts query = transactionSuccessWhere(criteria);
+        RowCallbackHandler handler = rs -> consumer.accept(mapTransactionSuccessStatRow(rs));
+        jdbc.query(transactionSuccessStatSelect(query.tranWhere(), query.detailWhere(), query.mappingWhere(), query.catalogWhere()),
+                query.params(), handler);
+    }
+
     public PagedResult<SampleDetailFieldRow> detailFields(Long sampleId, PageRequestParams page) {
         QueryParts query = detailFieldWhere(new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), sampleId);
         query.params.addValue("limit", page.size()).addValue("offset", page.offset());
@@ -435,6 +442,25 @@ public class SampleQueryService {
         );
     }
 
+    private TransactionSuccessStatRow mapTransactionSuccessStatRow(ResultSet rs) throws SQLException {
+        return new TransactionSuccessStatRow(
+                rs.getString("orig_cdate"),
+                rs.getString("batch_id"),
+                rs.getString("tran_code"),
+                rs.getString("service_code"),
+                rs.getString("message_type"),
+                rs.getLong("success_count"),
+                rs.getLong("interface_field_count"),
+                rs.getLong("compared_field_count"),
+                rs.getLong("diff_field_count"),
+                rs.getLong("compared_field_diff_count"),
+                rs.getLong("high_ratio_field_count"),
+                rs.getLong("low_ratio_field_count"),
+                rs.getString("module_name"),
+                rs.getString("owner")
+        );
+    }
+
     public SummaryStats summary() {
         List<SummaryStats> rows = jdbc.query("""
                 select batch_id, orig_cdate, total_tran_count,
@@ -621,6 +647,209 @@ public class SampleQueryService {
                 """;
     }
 
+    private String transactionSuccessStatSelect(String tranWhere, String detailWhere, String mappingWhere, String catalogWhere) {
+        String normalized = "regexp_replace(%s, '\\\\[[0-9]+\\\\]', '', 'g')";
+        String normMappingStd = String.format(normalized, "std_field_name");
+        String normMappedStd = String.format(normalized, "m.std_field_name");
+        String normDest = String.format(normalized, "f.dest_field_name");
+        String normOrig = String.format(normalized, "f.orig_field_name");
+        return """
+                select
+                    s.orig_cdate,
+                    coalesce(ds.batch_id, '') as batch_id,
+                    s.tran_code,
+                    s.service_code,
+                    s.message_type,
+                    s.success_count,
+                    coalesce(m.interface_field_count, 0) as interface_field_count,
+                    s.success_count * coalesce(m.interface_field_count, 0) as compared_field_count,
+                    coalesce(ds.diff_field_count, 0) as diff_field_count,
+                    coalesce(ds.compared_field_diff_count, 0) as compared_field_diff_count,
+                    coalesce(ds.high_ratio_field_count, 0) as high_ratio_field_count,
+                    coalesce(ds.low_ratio_field_count, 0) as low_ratio_field_count,
+                    coalesce(c.module_name, '') as module_name,
+                    coalesce(c.owner, '') as owner
+                from (
+                    select
+                        t.orig_cdate,
+                        coalesce(c.tran_code, '') as tran_code,
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                            else t.dest_trcd
+                        end as service_code,
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, instr(t.dest_trcd, '&') + 1)
+                            else ''
+                        end as message_type,
+                        count(*) as success_count
+                    from tss_tran_comp t
+                    left join (
+                        select service_code, min(tran_code) as tran_code, string_agg(distinct owner, ',' order by owner) as owner
+                        from ana_tran_catalog
+                        group by service_code
+                    ) c on c.service_code = case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                            else t.dest_trcd
+                        end
+                """ + tranWhere + """
+                    group by
+                        t.orig_cdate,
+                        coalesce(c.tran_code, ''),
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                            else t.dest_trcd
+                        end,
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, instr(t.dest_trcd, '&') + 1)
+                            else ''
+                        end
+                ) s
+                left join (
+                    select
+                        tran_code,
+                        service_code,
+                        count(distinct norm_field_name) as interface_field_count
+                    from (
+                        select tran_code, service_code, """ + normMappingStd + """
+                         as norm_field_name
+                        from ana_field_mapping
+                """ + mappingWhere + """
+                    ) mapping_norm
+                    group by tran_code, service_code
+                ) m on m.tran_code = s.tran_code and m.service_code = s.service_code
+                left join (
+                    select
+                        grouped.orig_cdate,
+                        grouped.tran_code,
+                        grouped.service_code,
+                        grouped.message_type,
+                        max(grouped.batch_id) as batch_id,
+                        count(*) as diff_field_count,
+                        sum(grouped.diff_count) as compared_field_diff_count,
+                        sum(case when grouped.diff_count >= grouped.success_count * 0.01 then 1 else 0 end) as high_ratio_field_count,
+                        sum(case when grouped.diff_count < grouped.success_count * 0.01 then 1 else 0 end) as low_ratio_field_count
+                    from (
+                        select
+                            base.orig_cdate,
+                            max(base.batch_id) as batch_id,
+                            base.tran_code,
+                            base.service_code,
+                            base.message_type,
+                            base.norm_field_name,
+                            count(*) as diff_count,
+                            max(base.success_count) as success_count
+                        from (
+                            select
+                                t.orig_cdate,
+                                sm.batch_id,
+                                coalesce(c.tran_code, '') as tran_code,
+                                case
+                                    when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                                    else t.dest_trcd
+                                end as service_code,
+                                case
+                                    when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, instr(t.dest_trcd, '&') + 1)
+                                    else ''
+                                end as message_type,
+                                coalesce(
+                                    """ + normMappedStd + """
+                ,
+                                    """ + normDest + """
+                ,
+                                    """ + normOrig + """
+                
+                                ) as norm_field_name,
+                                sc.success_count
+                            from tss_tran_comp t
+                            join tss_field_comp f on f.orig_cdate = t.orig_cdate
+                                 and f.mesg_seq = t.mesg_seq
+                                 and f.comp_result = '0'
+                            left join ana_sampling_summary sm on sm.orig_cdate = t.orig_cdate
+                            left join (
+                                select service_code, min(tran_code) as tran_code, string_agg(distinct owner, ',' order by owner) as owner
+                                from ana_tran_catalog
+                                group by service_code
+                            ) c on c.service_code = case
+                                    when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                                    else t.dest_trcd
+                                end
+                            left join ana_field_mapping m on m.tran_code = c.tran_code
+                                 and m.service_code = c.service_code
+                                 and lower(""" + normMappedStd + """
+                ) = lower(coalesce(
+                                     """ + normDest + """
+                ,
+                                     """ + normOrig + """
+                
+                                  ))
+                            join (
+                                select
+                                    t2.orig_cdate,
+                                    coalesce(c2.tran_code, '') as tran_code,
+                                    case
+                                        when instr(t2.dest_trcd, '&') > 0 then substr(t2.dest_trcd, 1, instr(t2.dest_trcd, '&') - 1)
+                                        else t2.dest_trcd
+                                    end as service_code,
+                                    case
+                                        when instr(t2.dest_trcd, '&') > 0 then substr(t2.dest_trcd, instr(t2.dest_trcd, '&') + 1)
+                                        else ''
+                                    end as message_type,
+                                    count(*) as success_count
+                                from tss_tran_comp t2
+                                left join (
+                                    select service_code, min(tran_code) as tran_code
+                                    from ana_tran_catalog
+                                    group by service_code
+                                ) c2 on c2.service_code = case
+                                        when instr(t2.dest_trcd, '&') > 0 then substr(t2.dest_trcd, 1, instr(t2.dest_trcd, '&') - 1)
+                                        else t2.dest_trcd
+                                    end
+                                where t2.comp_result = '4'
+                                group by
+                                    t2.orig_cdate,
+                                    coalesce(c2.tran_code, ''),
+                                    case
+                                        when instr(t2.dest_trcd, '&') > 0 then substr(t2.dest_trcd, 1, instr(t2.dest_trcd, '&') - 1)
+                                        else t2.dest_trcd
+                                    end,
+                                    case
+                                        when instr(t2.dest_trcd, '&') > 0 then substr(t2.dest_trcd, instr(t2.dest_trcd, '&') + 1)
+                                        else ''
+                                    end
+                            ) sc on sc.orig_cdate = t.orig_cdate
+                                 and sc.tran_code = coalesce(c.tran_code, '')
+                                 and sc.service_code = case
+                                    when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                                    else t.dest_trcd
+                                end
+                                 and sc.message_type = case
+                                    when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, instr(t.dest_trcd, '&') + 1)
+                                    else ''
+                                end
+                """ + detailWhere + """
+                        ) base
+                        where base.norm_field_name is not null and length(trim(base.norm_field_name)) > 0
+                        group by base.orig_cdate, base.tran_code, base.service_code, base.message_type, base.norm_field_name
+                    ) grouped
+                    group by grouped.orig_cdate, grouped.tran_code, grouped.service_code, grouped.message_type
+                ) ds on ds.orig_cdate = s.orig_cdate
+                    and ds.tran_code = s.tran_code
+                    and ds.service_code = s.service_code
+                    and ds.message_type = s.message_type
+                left join (
+                    select
+                        tran_code,
+                        service_code,
+                        string_agg(distinct module_name, ',' order by module_name) as module_name,
+                        string_agg(distinct owner, ',' order by owner) as owner
+                    from ana_tran_catalog
+                """ + catalogWhere + """
+                    group by tran_code, service_code
+                ) c on c.tran_code = s.tran_code and c.service_code = s.service_code
+                order by s.orig_cdate, s.tran_code, s.service_code, s.message_type
+                """;
+    }
+
     private long count(String table, QueryParts query) {
         Long total = jdbc.queryForObject("select count(*) from " + table + query.where, query.params, Long.class);
         return total == null ? 0 : total;
@@ -647,6 +876,88 @@ public class SampleQueryService {
             addLike(clauses, params, "r.sample_tran_seq_no", "tranSeqNo", c.tranSeqNo());
         }
         return new QueryParts(clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses), params);
+    }
+
+    private SuccessQueryParts transactionSuccessWhere(SampleSearchCriteria c) {
+        List<String> tranClauses = new ArrayList<>();
+        List<String> detailClauses = new ArrayList<>();
+        List<String> mappingClauses = new ArrayList<>();
+        List<String> catalogClauses = new ArrayList<>();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        tranClauses.add("t.comp_result = '4'");
+        detailClauses.add("t.comp_result = '4'");
+        if (c != null) {
+            String effectiveOrigCdate = c.origCdate();
+            if (!StringUtils.hasText(effectiveOrigCdate) && StringUtils.hasText(c.batchId())) {
+                effectiveOrigCdate = origCdateForBatch(c.batchId().trim());
+            }
+            if (StringUtils.hasText(c.batchId())) {
+                detailClauses.add("sm.batch_id = :batchId");
+                params.addValue("batchId", c.batchId().trim());
+            }
+            if (StringUtils.hasText(effectiveOrigCdate)) {
+                tranClauses.add("t.orig_cdate = :origCdate");
+                detailClauses.add("t.orig_cdate = :origCdate");
+                params.addValue("origCdate", effectiveOrigCdate.trim());
+            }
+            if (StringUtils.hasText(c.tranCode())) {
+                tranClauses.add("c.tran_code like :tranCode");
+                detailClauses.add("c.tran_code like :tranCode");
+                mappingClauses.add("tran_code like :tranCode");
+                catalogClauses.add("tran_code like :tranCode");
+                params.addValue("tranCode", "%" + c.tranCode().trim() + "%");
+            }
+            if (StringUtils.hasText(c.serviceCode())) {
+                tranClauses.add("""
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                            else t.dest_trcd
+                        end like :serviceCode
+                        """);
+                detailClauses.add("""
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, 1, instr(t.dest_trcd, '&') - 1)
+                            else t.dest_trcd
+                        end like :serviceCode
+                        """);
+                mappingClauses.add("service_code like :serviceCode");
+                catalogClauses.add("service_code like :serviceCode");
+                params.addValue("serviceCode", "%" + c.serviceCode().trim() + "%");
+            }
+            if (StringUtils.hasText(c.messageType())) {
+                tranClauses.add("""
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, instr(t.dest_trcd, '&') + 1)
+                            else ''
+                        end = :messageType
+                        """);
+                detailClauses.add("""
+                        case
+                            when instr(t.dest_trcd, '&') > 0 then substr(t.dest_trcd, instr(t.dest_trcd, '&') + 1)
+                            else ''
+                        end = :messageType
+                        """);
+                params.addValue("messageType", c.messageType().trim());
+            }
+            if (StringUtils.hasText(c.owner())) {
+                tranClauses.add("c.owner like :owner");
+                detailClauses.add("c.owner like :owner");
+                catalogClauses.add("owner like :owner");
+                params.addValue("owner", "%" + c.owner().trim() + "%");
+            }
+            if (StringUtils.hasText(c.tranSeqNo())) {
+                tranClauses.add("t.mesg_seq like :tranSeqNo");
+                detailClauses.add("t.mesg_seq like :tranSeqNo");
+                params.addValue("tranSeqNo", "%" + c.tranSeqNo().trim() + "%");
+            }
+        }
+        return new SuccessQueryParts(
+                " where " + String.join(" and ", tranClauses),
+                " where " + String.join(" and ", detailClauses),
+                mappingClauses.isEmpty() ? "" : " where " + String.join(" and ", mappingClauses),
+                catalogClauses.isEmpty() ? "" : " where " + String.join(" and ", catalogClauses),
+                params
+        );
     }
 
     private QueryParts detailFieldWhere(SampleSearchCriteria c, Long sampleId) {
@@ -743,4 +1054,7 @@ public class SampleQueryService {
     }
 
     private record QueryParts(String where, MapSqlParameterSource params) {}
+
+    private record SuccessQueryParts(String tranWhere, String detailWhere, String mappingWhere,
+                                     String catalogWhere, MapSqlParameterSource params) {}
 }

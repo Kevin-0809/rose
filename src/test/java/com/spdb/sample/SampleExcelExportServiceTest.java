@@ -7,7 +7,14 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -161,8 +168,10 @@ class SampleExcelExportServiceTest {
     }
 
     @Test
-    void streamsTransactionDiffExportSplitByResponseCodeCategories() throws Exception {
-        SampleExcelExportService service = new SampleExcelExportService();
+    void streamsTransactionDiffExportAsUtf8TxtZipSplitByResponseCodeCategories() throws Exception {
+        SampleExcelExportService service = new SampleExcelExportService(
+                Clock.fixed(Instant.parse("2026-07-06T02:14:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
         SampleDetailRow origSuccessDestFail = transactionDiffRow("SEQ_528_OK_CCBS_FAIL", "000000000000", "C0002");
         SampleDetailRow origFailDestSuccess = transactionDiffRow("SEQ_528_FAIL_CCBS_OK", "E0001", "AAAAAAA");
         SampleDetailRow bothSuccess = transactionDiffRow("SEQ_BOTH_OK", "000000000000", "AAAAAAA");
@@ -175,36 +184,67 @@ class SampleExcelExportServiceTest {
                 consumer.accept(bothSuccess);
                 consumer.accept(bothFail);
             }
+
+            @Override
+            public void streamTransactionSuccessStats(SampleSearchCriteria criteria, TransactionSuccessStatConsumer consumer) {
+            }
         };
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         service.streamTransactionDiffExport(queryService, new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), out);
 
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(out.toByteArray()))) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(4);
-            assertThat(workbook.getSheetName(0)).isEqualTo("528\u6210\u529fCCBS\u5931\u8d25");
-            assertThat(workbook.getSheetName(1)).isEqualTo("528\u5931\u8d25CCBS\u6210\u529f");
-            assertThat(workbook.getSheetName(2)).isEqualTo("\u4e8c\u8005\u90fd\u6210\u529f");
-            assertThat(workbook.getSheetName(3)).isEqualTo("\u4e8c\u8005\u90fd\u5931\u8d25");
+        Map<String, String> entries = unzipUtf8(out.toByteArray());
+        assertThat(entries.keySet()).containsExactly(
+                "transdiff_stat_202607061014.txt",
+                "transdiff_ccbs_202607061014.txt",
+                "transdiff_cbsp_202607061014.txt",
+                "transdiff_both_202607061014.txt",
+                "transdiff_success_202607061014.txt"
+        );
+        assertThat(entries.get("transdiff_stat_202607061014.txt")).isEqualTo("""
+                类型!数量
+                528成功CCBS失败!1
+                CCBS成功528失败!1
+                528与CCBS均失败但错误码不一致!1
+                """);
+        assertThat(entries.get("transdiff_ccbs_202607061014.txt")).contains("""
+                业务日期!批次!交易码!服务码!报文类型!流水号!交易结果!528响应码!528响应描述!CCBS响应码!CCBS响应描述!责任人!数量
+                20260609!B20260609!A001!S001!bizjson!SEQ_528_OK_CCBS_FAIL!8!000000000000!528 response!C0002!CCBS response!owner!12
+                """);
+        assertThat(entries.get("transdiff_cbsp_202607061014.txt")).contains("SEQ_528_FAIL_CCBS_OK!8!E0001!528 response!AAAAAAA");
+        assertThat(entries.get("transdiff_both_202607061014.txt")).contains("SEQ_BOTH_FAIL!8!E0001!528 response!C0002");
+        assertThat(entries.get("transdiff_both_202607061014.txt")).doesNotContain("SEQ_BOTH_OK");
+    }
 
-            Sheet firstSheet = workbook.getSheet("528\u6210\u529fCCBS\u5931\u8d25");
-            assertThat(firstSheet).isNotNull();
-            assertThat(firstSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("528\u6210\u529fCCBS\u5931\u8d25");
-            Row header = firstSheet.getRow(1);
-            assertThat(header.getLastCellNum()).isEqualTo((short) 13);
-            assertThat(header.getCell(5).getStringCellValue()).isNotBlank();
-            assertThat(header.getCell(7).getStringCellValue()).contains("528");
-            assertThat(header.getCell(9).getStringCellValue()).contains("CCBS");
-            assertThat(firstSheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("SEQ_528_OK_CCBS_FAIL");
-            assertThat(firstSheet.getRow(2).getCell(7).getStringCellValue()).isEqualTo("000000000000");
-            assertThat(firstSheet.getRow(2).getCell(9).getStringCellValue()).isEqualTo("C0002");
-            assertThat(firstSheet.getRow(2).getCell(12).getNumericCellValue()).isEqualTo(12);
-            assertThat(firstSheet.getRow(3)).isNull();
+    @Test
+    void streamsTransactionDiffExportWithSuccessStatFile() throws Exception {
+        SampleExcelExportService service = new SampleExcelExportService(
+                Clock.fixed(Instant.parse("2026-07-06T02:14:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+        SampleQueryService queryService = new SampleQueryService(null) {
+            @Override
+            public void streamTransactionDiffExport(SampleSearchCriteria criteria, SampleDetailConsumer consumer) {
+            }
 
-            assertSheetOnlyContains(workbook, "528\u5931\u8d25CCBS\u6210\u529f", "SEQ_528_FAIL_CCBS_OK");
-            assertSheetOnlyContains(workbook, "\u4e8c\u8005\u90fd\u6210\u529f", "SEQ_BOTH_OK");
-            assertSheetOnlyContains(workbook, "\u4e8c\u8005\u90fd\u5931\u8d25", "SEQ_BOTH_FAIL");
-        }
+            @Override
+            public void streamTransactionSuccessStats(SampleSearchCriteria criteria, TransactionSuccessStatConsumer consumer) {
+                consumer.accept(new TransactionSuccessStatRow(
+                        "20260703", "BATCH_01", "C000", "aaa", "bzjson",
+                        1000L, 34L, 34000L, 10L, 10000L, 7L, 3L,
+                        "存款", "张三,李四"
+                ));
+            }
+        };
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        service.streamTransactionDiffExport(queryService, new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), out);
+
+        Map<String, String> entries = unzipUtf8(out.toByteArray());
+        assertThat(entries.keySet()).contains("transdiff_success_202607061014.txt");
+        assertThat(entries.get("transdiff_success_202607061014.txt")).isEqualTo("""
+                业务日期!批次!交易码!服务码!报文类型!成功数量!接口字段总数!比对字段总数!差异字段数!比对字段差异总数!单字段差异>=1%!单字段差异<1%!领域!责任人
+                20260703!BATCH_01!C000!aaa!bzjson!1000!34!34000!10!10000!7!3!存款!张三,李四
+                """);
     }
 
     private SampleDetailRow transactionDiffRow(String tranSeqNo, String origErrorCode, String destErrorCode) {
@@ -217,12 +257,15 @@ class SampleExcelExportServiceTest {
         );
     }
 
-    private void assertSheetOnlyContains(XSSFWorkbook workbook, String sheetName, String tranSeqNo) {
-        Sheet sheet = workbook.getSheet(sheetName);
-        assertThat(sheet).isNotNull();
-        assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo(sheetName);
-        assertThat(sheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo(tranSeqNo);
-        assertThat(sheet.getRow(3)).isNull();
+    private Map<String, String> unzipUtf8(byte[] bytes) throws Exception {
+        Map<String, String> entries = new java.util.LinkedHashMap<>();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                entries.put(entry.getName(), new String(zip.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        return entries;
     }
 
     @Test

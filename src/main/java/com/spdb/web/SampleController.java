@@ -12,11 +12,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Controller
 public class SampleController {
     private static final String TRANSACTION_DIFF = "RETURN_CODE";
     private static final String FIELD_DIFF = "FIELD_DIFF";
+    private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
     private final SampleQueryService sampleQueryService;
     private final SampleExcelExportService sampleExcelExportService;
@@ -63,7 +66,7 @@ public class SampleController {
                 batchId, origCdate, TRANSACTION_DIFF, tranCode, serviceCode, messageType, configStatus, null,
                 null, owner, tranSeqNo
         );
-        prepareExcel(response, "交易级差异.xlsx");
+        prepareZip(response, "transdiff_" + LocalDateTime.now().format(EXPORT_TIMESTAMP) + ".zip");
         sampleExcelExportService.streamTransactionDiffExport(sampleQueryService, criteria, response.getOutputStream());
     }
 
@@ -223,6 +226,12 @@ public class SampleController {
     private void prepareExcel(HttpServletResponse response, String filename) {
         String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
+    }
+
+    private void prepareZip(HttpServletResponse response, String filename) {
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        response.setContentType("application/zip");
         response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
     }
 }
