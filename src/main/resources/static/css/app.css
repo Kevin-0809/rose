@@ -771,6 +771,10 @@ textarea {
   max-width: 100%;
 }
 
+.field-diff-table-wrap {
+  overflow-x: hidden;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -811,19 +815,97 @@ td {
 }
 
 .field-diff-table {
-  min-width: 2200px;
+  min-width: 0;
+  width: 100%;
 }
 
-.field-diff-table .col-date { width: 92px; }
-.field-diff-table .col-batch { width: 190px; }
-.field-diff-table .col-code { width: 78px; }
-.field-diff-table .col-service { width: 230px; }
-.field-diff-table .col-type { width: 92px; }
-.field-diff-table .col-seq { width: 180px; }
-.field-diff-table .col-field-list { width: 330px; }
-.field-diff-table .col-field-cn { width: 220px; }
-.field-diff-table .col-count { width: 72px; }
-.field-diff-table .col-owner { width: 110px; }
+.field-diff-table th,
+.field-diff-table td {
+  padding: 9px 8px;
+}
+
+.field-diff-table .col-date { width: 5.5%; }
+.field-diff-table .col-batch { width: 7%; }
+.field-diff-table .col-code { width: 4.8%; }
+.field-diff-table .col-service { width: 7%; }
+.field-diff-table .col-type { width: 5.5%; }
+.field-diff-table .col-seq { width: 6.7%; }
+.field-diff-table .col-field-list { width: 8.3%; }
+.field-diff-table .col-field-cn { width: 7%; }
+.field-diff-table .col-status { width: 5.8%; }
+.field-diff-table .col-value { width: 7%; }
+.field-diff-table .col-count { width: 4.8%; }
+.field-diff-table .col-owner { width: 4.8%; }
+
+.field-diff-table .field-diff-row {
+  cursor: zoom-in;
+}
+
+.field-diff-table .cell-clip {
+  display: -webkit-box;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.35;
+  max-height: 3.1em;
+}
+
+.detail-dialog {
+  width: min(920px, calc(100% - 72px));
+  max-height: min(760px, calc(100vh - 72px));
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #0b1424;
+  color: var(--text-body);
+}
+
+.detail-dialog::backdrop {
+  background: rgba(3, 8, 15, 0.72);
+}
+
+.detail-dialog form {
+  margin: 0;
+}
+
+.detail-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 0;
+  max-height: calc(100vh - 170px);
+  margin: 0;
+  overflow: auto;
+}
+
+.detail-list dt,
+.detail-list dd {
+  margin: 0;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.detail-list dt {
+  color: var(--text-secondary);
+  background: rgba(14, 27, 46, 0.66);
+}
+
+.detail-list dd {
+  color: var(--text-heading);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .command-table-wrap {
   max-width: 100%;

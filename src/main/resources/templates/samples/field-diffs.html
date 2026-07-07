@@ -26,30 +26,67 @@
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>
-  <section class="panel table-wrap table-wrap-wide">
-    <table class="table-compact field-diff-table">
+  <section class="panel table-wrap table-wrap-wide field-diff-table-wrap">
+    <table class="table-compact field-diff-table" data-field-diff-table>
       <thead><tr><th class="col-date">业务日期</th><th class="col-batch">批次号</th><th class="col-code">交易码</th><th class="col-service">服务码</th><th class="col-type">报文类型</th><th class="col-field-list">SOP字段名</th><th class="col-field-list">SOAP字段名</th><th class="col-field-list">BizJSON字段名</th><th class="col-field-cn">字段中文名</th><th class="col-status">映射状态</th><th class="col-seq">样例流水号</th><th class="col-value">528值</th><th class="col-value">CCBS值</th><th class="col-owner">责任人</th><th class="col-count">影响交易笔数</th></tr></thead>
       <tbody>
-      <tr th:each="row : ${result.rows()}">
-        <td class="col-date" th:text="${row.origCdate()}"></td>
-        <td class="col-batch" th:text="${row.batchId()}" th:title="${row.batchId()}"></td>
-        <td class="col-code" th:text="${row.tranCode()}"></td>
-        <td class="col-service" th:text="${row.serviceCode()}" th:title="${row.serviceCode()}"></td>
-        <td class="col-type" th:text="${row.messageType()}"></td>
-        <td class="col-field-list" th:text="${row.sopFieldName()}" th:title="${row.sopFieldName()}"></td>
-        <td class="col-field-list" th:text="${row.soapFieldName()}" th:title="${row.soapFieldName()}"></td>
-        <td class="col-field-list" th:text="${row.bizjsonFieldName()}" th:title="${row.bizjsonFieldName()}"></td>
-        <td class="col-field-cn" th:text="${row.fieldCnName()}" th:title="${row.fieldCnName()}"></td>
-        <td class="col-status"><span class="tag" th:text="${row.mappingStatus() == 'MAPPED' ? '已映射' : (row.mappingStatus() == 'UNMAPPED' ? '未映射' : (row.mappingStatus() == 'MIXED' ? '混合' : row.mappingStatus()))}"></span></td>
-        <td class="col-seq" th:text="${row.sampleTranSeqNo()}" th:title="${row.sampleTranSeqNo()}"></td>
-        <td class="col-value" th:text="${row.origFieldValue()}" th:title="${row.origFieldValue()}"></td>
-        <td class="col-value" th:text="${row.destFieldValue()}" th:title="${row.destFieldValue()}"></td>
-        <td class="col-owner" th:text="${row.owner()}"></td>
-        <td class="col-count" th:text="${row.affectedTranCount()}"></td>
+      <tr class="field-diff-row" th:each="row : ${result.rows()}" title="双击查看完整行数据">
+        <td class="col-date" data-detail-label="业务日期" th:text="${row.origCdate()}"></td>
+        <td class="col-batch" data-detail-label="批次号" th:text="${row.batchId()}" th:title="${row.batchId()}"></td>
+        <td class="col-code" data-detail-label="交易码" th:text="${row.tranCode()}"></td>
+        <td class="col-service" data-detail-label="服务码" th:text="${row.serviceCode()}" th:title="${row.serviceCode()}"></td>
+        <td class="col-type" data-detail-label="报文类型" th:text="${row.messageType()}"></td>
+        <td class="col-field-list" data-detail-label="SOP字段名" th:title="${row.sopFieldName()}"><span class="cell-clip" th:text="${row.sopFieldName()}"></span></td>
+        <td class="col-field-list" data-detail-label="SOAP字段名" th:title="${row.soapFieldName()}"><span class="cell-clip" th:text="${row.soapFieldName()}"></span></td>
+        <td class="col-field-list" data-detail-label="BizJSON字段名" th:title="${row.bizjsonFieldName()}"><span class="cell-clip" th:text="${row.bizjsonFieldName()}"></span></td>
+        <td class="col-field-cn" data-detail-label="字段中文名" th:title="${row.fieldCnName()}"><span class="cell-clip" th:text="${row.fieldCnName()}"></span></td>
+        <td class="col-status" data-detail-label="映射状态"><span class="tag" th:text="${row.mappingStatus() == 'MAPPED' ? '已映射' : (row.mappingStatus() == 'UNMAPPED' ? '未映射' : (row.mappingStatus() == 'MIXED' ? '混合' : row.mappingStatus()))}"></span></td>
+        <td class="col-seq" data-detail-label="样例流水号" th:title="${row.sampleTranSeqNo()}"><span class="cell-clip" th:text="${row.sampleTranSeqNo()}"></span></td>
+        <td class="col-value" data-detail-label="528值" th:title="${row.origFieldValue()}"><span class="cell-clip" th:text="${row.origFieldValue()}"></span></td>
+        <td class="col-value" data-detail-label="CCBS值" th:title="${row.destFieldValue()}"><span class="cell-clip" th:text="${row.destFieldValue()}"></span></td>
+        <td class="col-owner" data-detail-label="责任人" th:text="${row.owner()}"></td>
+        <td class="col-count" data-detail-label="影响交易笔数" th:text="${row.affectedTranCount()}"></td>
       </tr>
       </tbody>
     </table>
   </section>
+  <dialog class="detail-dialog" id="fieldDiffDialog" aria-labelledby="fieldDiffDialogTitle">
+    <form method="dialog">
+      <div class="detail-dialog-head">
+        <h2 id="fieldDiffDialogTitle">字段级差异详情</h2>
+        <button class="btn small" type="submit">关闭</button>
+      </div>
+      <dl class="detail-list" id="fieldDiffDetailList"></dl>
+    </form>
+  </dialog>
 </main>
+<script>
+  (() => {
+    const table = document.querySelector('[data-field-diff-table]');
+    const dialog = document.getElementById('fieldDiffDialog');
+    const detailList = document.getElementById('fieldDiffDetailList');
+    if (!table || !dialog || !detailList) {
+      return;
+    }
+
+    table.addEventListener('dblclick', (event) => {
+      const row = event.target.closest('.field-diff-row');
+      if (!row) {
+        return;
+      }
+
+      detailList.replaceChildren();
+      row.querySelectorAll('[data-detail-label]').forEach((cell) => {
+        const label = document.createElement('dt');
+        const value = document.createElement('dd');
+        label.textContent = cell.dataset.detailLabel;
+        value.textContent = cell.textContent.trim() || '-';
+        detailList.append(label, value);
+      });
+
+      dialog.showModal();
+    });
+  })();
+</script>
 </body>
 </html>

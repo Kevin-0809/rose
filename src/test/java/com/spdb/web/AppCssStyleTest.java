@@ -14,7 +14,7 @@ class AppCssStyleTest {
         String css = new String(
                 getClass().getResourceAsStream("/static/css/app.css").readAllBytes(),
                 StandardCharsets.UTF_8
-        );
+        ).replace("\r\n", "\n");
 
         assertThat(css).contains("--bg-page: #09111f");
         assertThat(css).contains("--primary: #38bdf8");
@@ -32,7 +32,14 @@ class AppCssStyleTest {
         assertThat(css).contains("white-space: nowrap");
         assertThat(css).contains("text-overflow: ellipsis");
         assertThat(css).contains(".field-diff-table");
-        assertThat(css).contains("min-width: 2200px");
+        assertThat(css).contains(".field-diff-table {\n  min-width: 0");
+        assertThat(css).contains(".field-diff-table-wrap {\n  overflow-x: hidden");
+        assertThat(css).contains(".field-diff-table .col-value");
+        assertThat(css).contains(".field-diff-table .cell-clip");
+        assertThat(css).contains("word-break: break-word");
+        assertThat(css).contains(".detail-dialog");
+        assertThat(css).contains(".detail-list");
+        assertThat(css).doesNotContain("min-width: 2200px");
         assertThat(css).contains(".col-field-list");
         assertThat(css).contains(".command-table");
         assertThat(css).contains("-webkit-line-clamp: 2");

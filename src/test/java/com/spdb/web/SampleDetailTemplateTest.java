@@ -39,6 +39,13 @@ class SampleDetailTemplateTest {
         assertThat(html).doesNotContain("/samples/detail-fields/export");
         assertThat(html).contains("table-wrap table-wrap-wide");
         assertThat(html).contains("class=\"table-compact field-diff-table\"");
+        assertThat(html).contains("data-field-diff-table");
+        assertThat(html).contains("class=\"field-diff-row\"");
+        assertThat(html).contains("data-detail-label=\"业务日期\"");
+        assertThat(html).contains("data-detail-label=\"CCBS值\"");
+        assertThat(html).contains("id=\"fieldDiffDialog\"");
+        assertThat(html).contains("id=\"fieldDiffDetailList\"");
+        assertThat(html).contains("addEventListener('dblclick'");
         assertThat(html).contains("class=\"col-batch\"");
         assertThat(html).contains("class=\"col-service\"");
         assertThat(html).contains("class=\"col-field-list\"");
@@ -46,6 +53,8 @@ class SampleDetailTemplateTest {
         assertThat(html).contains("th:title=\"${row.soapFieldName()}\"");
         assertThat(html).contains("th:title=\"${row.bizjsonFieldName()}\"");
         assertThat(html).contains("th:title=\"${row.fieldCnName()}\"");
+        assertThat(html).contains("class=\"cell-clip\" th:text=\"${row.sopFieldName()}\"");
+        assertThat(html).contains("class=\"cell-clip\" th:text=\"${row.destFieldValue()}\"");
         assertThat(html).doesNotContain("name=\"sampleType\"");
         assertThat(html).contains("row.sopFieldName()");
         assertThat(html).contains("row.soapFieldName()");
