@@ -20,6 +20,7 @@ public class SampleController {
     private static final String TRANSACTION_DIFF = "RETURN_CODE";
     private static final String FIELD_DIFF = "FIELD_DIFF";
     private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+    private static final String FIELD_DIFF_EXPORT_FILENAME_PREFIX = "\u5b57\u6bb5\u7ea7\u5dee\u5f02_";
 
     private final SampleQueryService sampleQueryService;
     private final SampleExcelExportService sampleExcelExportService;
@@ -111,7 +112,7 @@ public class SampleController {
                 batchId, origCdate, FIELD_DIFF, tranCode, serviceCode, messageType, configStatus, mappingStatus,
                 semanticFieldName, owner, tranSeqNo
         );
-        prepareExcel(response, "瀛楁绾у樊寮?xlsx");
+        prepareExcel(response, FIELD_DIFF_EXPORT_FILENAME_PREFIX + LocalDateTime.now().format(EXPORT_TIMESTAMP) + ".xlsx");
         sampleExcelExportService.streamFieldDiffExport(sampleQueryService, criteria, response.getOutputStream());
     }
 

@@ -50,7 +50,7 @@ public class SampleExcelExportService {
             "审核人", "是否修复", "差异分类", "差异说明"
     };
     private static final int[] FIELD_DIFF_EXPORT_WIDTHS = {
-            12, 22, 12, 28, 12, 24, 24, 28, 18, 16, 24, 28, 28, 14, 14, 14, 12, 14, 32
+            10, 20, 10, 30, 10, 18, 22, 22, 14, 10, 20, 22, 22, 10, 12, 10, 10, 12, 34
     };
     private static final String[] SERVICE_REPORT_HEADERS = {
             "业务日期", "批次", "交易码", "服务码", "交易名称", "责任人",
@@ -115,24 +115,24 @@ public class SampleExcelExportService {
     }
 
     public void streamFieldDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
-        workbookToStream("字段级差异明细", "字段级差异合并导出", FIELD_DIFF_EXPORT_HEADERS, FIELD_DIFF_EXPORT_WIDTHS, outputStream, (sheet, styles) -> {
+        workbookToStream("字段级差异明细", "字段级差异合并导出", FIELD_DIFF_EXPORT_HEADERS, FIELD_DIFF_EXPORT_WIDTHS, ExportStyle.FIELD_REVIEW, outputStream, (sheet, styles) -> {
             int[] rowIndex = {2};
             queryService.streamFieldDiffExport(criteria, row -> writeFieldDiffExportRow(sheet, styles, rowIndex[0]++, row));
         });
     }
 
     public void streamServiceReport(SampleQueryService queryService, SamplingSummarySearchCriteria criteria, OutputStream outputStream) {
-        workbookToStream("服务码汇报", "采样服务码维度汇报", SERVICE_REPORT_HEADERS, SERVICE_REPORT_WIDTHS, outputStream, (sheet, styles) -> {
+        workbookToStream("服务码汇报", "采样服务码维度汇报", SERVICE_REPORT_HEADERS, SERVICE_REPORT_WIDTHS, ExportStyle.DEFAULT, outputStream, (sheet, styles) -> {
             int[] rowIndex = {2};
             queryService.streamServiceReport(criteria, row -> writeServiceReportRow(sheet, styles, rowIndex[0]++, row));
         });
     }
 
     private void workbookToStream(String sheetName, String title, String[] headers, int[] widths,
-                                  OutputStream outputStream, SheetWriter writer) {
+                                  ExportStyle exportStyle, OutputStream outputStream, SheetWriter writer) {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(500)) {
             workbook.setCompressTempFiles(true);
-            Styles styles = createStyles(workbook);
+            Styles styles = createStyles(workbook, exportStyle);
             org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet(sheetName);
             prepareSheet(sheet, title, headers, widths, styles);
             writer.write(sheet, styles);
@@ -147,11 +147,13 @@ public class SampleExcelExportService {
     private void prepareSheet(org.apache.poi.ss.usermodel.Sheet sheet, String title, String[] headers, int[] widths, Styles styles) {
         sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, headers.length - 1));
         Row titleRow = sheet.createRow(0);
-        titleRow.setHeightInPoints(28);
-        write(titleRow, 0, title, styles.title());
+        titleRow.setHeightInPoints(styles.titleHeightInPoints());
+        for (int i = 0; i < headers.length; i++) {
+            write(titleRow, i, i == 0 ? title : "", styles.title());
+        }
 
         Row headerRow = sheet.createRow(1);
-        headerRow.setHeightInPoints(24);
+        headerRow.setHeightInPoints(styles.headerHeightInPoints());
         for (int i = 0; i < headers.length; i++) {
             write(headerRow, i, headers[i], styles.header());
             sheet.setColumnWidth(i, widths[i] * 256);
@@ -160,7 +162,14 @@ public class SampleExcelExportService {
         sheet.setAutoFilter(new CellRangeAddress(1, 1, 0, headers.length - 1));
     }
 
-    private Styles createStyles(org.apache.poi.ss.usermodel.Workbook workbook) {
+    private Styles createStyles(org.apache.poi.ss.usermodel.Workbook workbook, ExportStyle exportStyle) {
+        if (exportStyle == ExportStyle.FIELD_REVIEW) {
+            return createFieldReviewStyles(workbook);
+        }
+        return createDefaultStyles(workbook);
+    }
+
+    private Styles createDefaultStyles(org.apache.poi.ss.usermodel.Workbook workbook) {
         Font titleFont = workbook.createFont();
         titleFont.setBold(true);
         titleFont.setFontHeightInPoints((short) 14);
@@ -197,7 +206,69 @@ public class SampleExcelExportService {
         CellStyle percent = workbook.createCellStyle();
         percent.cloneStyleFrom(number);
         percent.setDataFormat(workbook.createDataFormat().getFormat("0.00%"));
-        return new Styles(title, header, body, number, percent);
+        return new Styles(title, header, body, body, number, number, percent, 28, 24, 0);
+    }
+
+    private Styles createFieldReviewStyles(org.apache.poi.ss.usermodel.Workbook workbook) {
+        Font titleFont = workbook.createFont();
+        titleFont.setBold(true);
+        titleFont.setFontHeightInPoints((short) 11);
+        titleFont.setColor(IndexedColors.WHITE.getIndex());
+        titleFont.setFontName("Microsoft YaHei");
+
+        CellStyle title = workbook.createCellStyle();
+        title.setFont(titleFont);
+        title.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        title.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        title.setAlignment(HorizontalAlignment.CENTER);
+        title.setVerticalAlignment(VerticalAlignment.CENTER);
+        border(title);
+
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerFont.setFontHeightInPoints((short) 9);
+        headerFont.setColor(IndexedColors.DARK_BLUE.getIndex());
+        headerFont.setFontName("Microsoft YaHei");
+
+        CellStyle header = workbook.createCellStyle();
+        header.setFont(headerFont);
+        header.setFillForegroundColor(IndexedColors.PALE_BLUE.getIndex());
+        header.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        header.setAlignment(HorizontalAlignment.CENTER);
+        header.setVerticalAlignment(VerticalAlignment.CENTER);
+        header.setWrapText(true);
+        border(header);
+
+        Font bodyFont = workbook.createFont();
+        bodyFont.setFontHeightInPoints((short) 8);
+        bodyFont.setColor(IndexedColors.BLACK.getIndex());
+        bodyFont.setFontName("Microsoft YaHei");
+
+        CellStyle body = workbook.createCellStyle();
+        body.setFont(bodyFont);
+        body.setVerticalAlignment(VerticalAlignment.CENTER);
+        body.setWrapText(true);
+        body.setFillForegroundColor(IndexedColors.WHITE.getIndex());
+        body.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        border(body);
+
+        CellStyle bodyAlternate = workbook.createCellStyle();
+        bodyAlternate.cloneStyleFrom(body);
+        bodyAlternate.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        bodyAlternate.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+        CellStyle number = workbook.createCellStyle();
+        number.cloneStyleFrom(body);
+        number.setAlignment(HorizontalAlignment.RIGHT);
+
+        CellStyle numberAlternate = workbook.createCellStyle();
+        numberAlternate.cloneStyleFrom(bodyAlternate);
+        numberAlternate.setAlignment(HorizontalAlignment.RIGHT);
+
+        CellStyle percent = workbook.createCellStyle();
+        percent.cloneStyleFrom(number);
+        percent.setDataFormat(workbook.createDataFormat().getFormat("0.00%"));
+        return new Styles(title, header, body, bodyAlternate, number, numberAlternate, percent, 21, 22, 26);
     }
 
     private void writeTransactionStatEntry(ZipOutputStream zip, String timestamp, long[] counts) throws IOException {
@@ -318,26 +389,31 @@ public class SampleExcelExportService {
 
     private void writeFieldDiffExportRow(org.apache.poi.ss.usermodel.Sheet sheet, Styles styles, int rowIndex, SampleFieldDiffRow row) {
         Row excelRow = sheet.createRow(rowIndex);
+        if (styles.bodyHeightInPoints() > 0) {
+            excelRow.setHeightInPoints(styles.bodyHeightInPoints());
+        }
+        CellStyle body = styles.body(rowIndex);
+        CellStyle number = styles.number(rowIndex);
         int col = 0;
-        write(excelRow, col++, row.origCdate(), styles.body());
-        write(excelRow, col++, row.batchId(), styles.body());
-        write(excelRow, col++, row.tranCode(), styles.body());
-        write(excelRow, col++, row.serviceCode(), styles.body());
-        write(excelRow, col++, row.messageType(), styles.body());
-        write(excelRow, col++, row.sopFieldName(), styles.body());
-        write(excelRow, col++, row.soapFieldName(), styles.body());
-        write(excelRow, col++, row.bizjsonFieldName(), styles.body());
-        write(excelRow, col++, row.fieldCnName(), styles.body());
-        write(excelRow, col++, mappingStatusText(row.mappingStatus()), styles.body());
-        write(excelRow, col++, row.sampleTranSeqNo(), styles.body());
-        write(excelRow, col++, row.origFieldValue(), styles.body());
-        write(excelRow, col++, row.destFieldValue(), styles.body());
-        write(excelRow, col++, row.owner(), styles.body());
-        write(excelRow, col++, row.affectedTranCount(), styles.number());
-        write(excelRow, col++, "", styles.body());
-        write(excelRow, col++, "否", styles.body());
-        write(excelRow, col++, "", styles.body());
-        write(excelRow, col, "", styles.body());
+        write(excelRow, col++, row.origCdate(), body);
+        write(excelRow, col++, row.batchId(), body);
+        write(excelRow, col++, row.tranCode(), body);
+        write(excelRow, col++, row.serviceCode(), body);
+        write(excelRow, col++, row.messageType(), body);
+        write(excelRow, col++, row.sopFieldName(), body);
+        write(excelRow, col++, row.soapFieldName(), body);
+        write(excelRow, col++, row.bizjsonFieldName(), body);
+        write(excelRow, col++, row.fieldCnName(), body);
+        write(excelRow, col++, mappingStatusText(row.mappingStatus()), body);
+        write(excelRow, col++, row.sampleTranSeqNo(), body);
+        write(excelRow, col++, row.origFieldValue(), body);
+        write(excelRow, col++, row.destFieldValue(), body);
+        write(excelRow, col++, row.owner(), body);
+        write(excelRow, col++, row.affectedTranCount(), number);
+        write(excelRow, col++, "", body);
+        write(excelRow, col++, "否", body);
+        write(excelRow, col++, "", body);
+        write(excelRow, col, "", body);
     }
 
     private String mappingStatusText(String mappingStatus) {
@@ -390,10 +466,10 @@ public class SampleExcelExportService {
         style.setBorderRight(BorderStyle.THIN);
         style.setBorderBottom(BorderStyle.THIN);
         style.setBorderLeft(BorderStyle.THIN);
-        style.setTopBorderColor(IndexedColors.GREY_25_PERCENT.getIndex());
-        style.setRightBorderColor(IndexedColors.GREY_25_PERCENT.getIndex());
-        style.setBottomBorderColor(IndexedColors.GREY_25_PERCENT.getIndex());
-        style.setLeftBorderColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setTopBorderColor(IndexedColors.GREY_50_PERCENT.getIndex());
+        style.setRightBorderColor(IndexedColors.GREY_50_PERCENT.getIndex());
+        style.setBottomBorderColor(IndexedColors.GREY_50_PERCENT.getIndex());
+        style.setLeftBorderColor(IndexedColors.GREY_50_PERCENT.getIndex());
     }
 
     private void write(Row row, int column, Object value, CellStyle style) {
@@ -406,7 +482,33 @@ public class SampleExcelExportService {
         cell.setCellStyle(style);
     }
 
-    private record Styles(CellStyle title, CellStyle header, CellStyle body, CellStyle number, CellStyle percent) {}
+    private record Styles(CellStyle title,
+                          CellStyle header,
+                          CellStyle body,
+                          CellStyle bodyAlternate,
+                          CellStyle number,
+                          CellStyle numberAlternate,
+                          CellStyle percent,
+                          int titleHeightInPoints,
+                          int headerHeightInPoints,
+                          int bodyHeightInPoints) {
+        private CellStyle body(int rowIndex) {
+            return useAlternate(rowIndex) ? bodyAlternate : body;
+        }
+
+        private CellStyle number(int rowIndex) {
+            return useAlternate(rowIndex) ? numberAlternate : number;
+        }
+
+        private boolean useAlternate(int rowIndex) {
+            return (rowIndex - 2) % 2 == 1;
+        }
+    }
+
+    private enum ExportStyle {
+        DEFAULT,
+        FIELD_REVIEW
+    }
 
     @FunctionalInterface
     private interface SheetWriter {

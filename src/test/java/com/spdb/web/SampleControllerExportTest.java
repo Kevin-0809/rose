@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.io.OutputStream;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 class SampleControllerExportTest {
@@ -31,11 +33,22 @@ class SampleControllerExportTest {
         SampleQueryService queryService = new SampleQueryService(null);
         RecordingExportService excelExportService = new RecordingExportService();
         SampleController controller = new SampleController(queryService, excelExportService);
+        MockHttpServletResponse response = new MockHttpServletResponse();
 
-        controller.exportFieldDiffs(null, null, null, null, null, null, null, null, null, null, new MockHttpServletResponse());
+        controller.exportFieldDiffs(null, null, null, null, null, null, null, null, null, null, response);
 
+        assertThat(response.getContentType()).isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(decodedFilename(response)).startsWith("字段级差异_").endsWith(".xlsx");
+        assertThat(decodedFilename(response)).doesNotContain("瀛", "鐎");
         assertThat(excelExportService.fieldDiffExportCalled).isTrue();
         assertThat(excelExportService.transactionDiffExportCalled).isFalse();
+    }
+
+    private String decodedFilename(MockHttpServletResponse response) {
+        String header = response.getHeader("Content-Disposition");
+        String prefix = "attachment; filename*=UTF-8''";
+        assertThat(header).startsWith(prefix);
+        return URLDecoder.decode(header.substring(prefix.length()), StandardCharsets.UTF_8);
     }
 
     private static class RecordingExportService extends SampleExcelExportService {

@@ -1,5 +1,8 @@
 package com.spdb.sample;
 
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -27,10 +30,16 @@ class SampleExcelExportServiceTest {
                 "HUOBDH", "CurrencyId", "CurrencyId", "币种", "MAPPED",
                 "SEQ001", "111", "222", "张三", 12L
         );
+        SampleFieldDiffRow secondRow = new SampleFieldDiffRow(
+                "20260609", "B20260609", "A002", "S002", "soap",
+                "FAB251", "AcctNo", "acctNo", "账号", "UNMAPPED",
+                "SEQ002", "6214", "6215", "李四", 3L
+        );
         SampleQueryService queryService = new SampleQueryService(null) {
             @Override
             public void streamFieldDiffExport(SampleSearchCriteria criteria, SampleFieldDiffExportConsumer consumer) {
                 consumer.accept(row);
+                consumer.accept(secondRow);
             }
         };
 
@@ -46,6 +55,18 @@ class SampleExcelExportServiceTest {
             assertThat(rowText(header)).isEqualTo("业务日期,批次号,交易码,服务码,报文类型,SOP字段名,SOAP字段名,BizJSON字段名,字段中文名,映射状态,样例流水号,528值,CCBS值,责任人,影响交易笔数,审核人,是否修复,差异分类,差异说明");
             assertThat(header.getLastCellNum()).isEqualTo((short) 19);
             assertThat(rowText(header)).doesNotContain("原字段名", "标准字段名", "字段序号", "字段数", "来源表");
+            assertThat(workbook.getFontAt(sheet.getRow(0).getCell(0).getCellStyle().getFontIndex()).getFontHeightInPoints())
+                    .isEqualTo((short) 11);
+            assertThat(workbook.getFontAt(header.getCell(0).getCellStyle().getFontIndex()).getFontHeightInPoints())
+                    .isEqualTo((short) 9);
+            assertThat(workbook.getFontAt(sheet.getRow(2).getCell(0).getCellStyle().getFontIndex()).getFontHeightInPoints())
+                    .isEqualTo((short) 8);
+            assertAllThinBorders(header.getCell(0).getCellStyle());
+            assertAllThinBorders(sheet.getRow(2).getCell(0).getCellStyle());
+            assertThat(sheet.getRow(2).getCell(0).getCellStyle().getFillForegroundColor())
+                    .isEqualTo(IndexedColors.WHITE.getIndex());
+            assertThat(sheet.getRow(3).getCell(0).getCellStyle().getFillForegroundColor())
+                    .isNotEqualTo(sheet.getRow(2).getCell(0).getCellStyle().getFillForegroundColor());
             assertThat(sheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("20260609");
             assertThat(sheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("B20260609");
             assertThat(sheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("HUOBDH");
@@ -61,6 +82,13 @@ class SampleExcelExportServiceTest {
             assertThat(sheet.getRow(2).getCell(18).getStringCellValue()).isEmpty();
             assertThat(sheet.getPaneInformation().isFreezePane()).isTrue();
         }
+    }
+
+    private void assertAllThinBorders(CellStyle style) {
+        assertThat(style.getBorderTop()).isEqualTo(BorderStyle.THIN);
+        assertThat(style.getBorderRight()).isEqualTo(BorderStyle.THIN);
+        assertThat(style.getBorderBottom()).isEqualTo(BorderStyle.THIN);
+        assertThat(style.getBorderLeft()).isEqualTo(BorderStyle.THIN);
     }
 
     private String rowText(Row row) {
