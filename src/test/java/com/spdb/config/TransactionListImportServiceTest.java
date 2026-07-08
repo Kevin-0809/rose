@@ -1,9 +1,14 @@
 package com.spdb.config;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -98,6 +103,33 @@ class TransactionListImportServiceTest {
         assertThat(result.failures()).contains("C999: 未在映射文档中找到交易码");
     }
 
+    @Test
+    void logsBatchProgressWhenImportingTransactionList() throws Exception {
+        Path listWorkbook = writeTransactionListWorkbook();
+
+        ListAppender<ILoggingEvent> appender = attachAppender();
+        try {
+            service.importList(listWorkbook);
+        } finally {
+            detachAppender(appender);
+        }
+
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage())
+                    .contains("Transaction list mapping download batch started")
+                    .contains("batch=1/1")
+                    .contains("tranCount=1");
+        });
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage())
+                    .contains("Transaction list import completed")
+                    .contains("totalCount=1")
+                    .contains("successBatchCount=1");
+        });
+    }
+
     private Path writeTransactionListWorkbook() throws Exception {
         return writeTransactionListWorkbook("A825");
     }
@@ -130,6 +162,19 @@ class TransactionListImportServiceTest {
         } catch (Exception ex) {
             throw new AssertionError(ex);
         }
+    }
+
+    private ListAppender<ILoggingEvent> attachAppender() {
+        Logger logger = (Logger) LoggerFactory.getLogger(TransactionListImportService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        return appender;
+    }
+
+    private void detachAppender(ListAppender<ILoggingEvent> appender) {
+        Logger logger = (Logger) LoggerFactory.getLogger(TransactionListImportService.class);
+        logger.detachAppender(appender);
     }
 
     private static class StubMappingDocumentClient extends MappingDocumentClient {

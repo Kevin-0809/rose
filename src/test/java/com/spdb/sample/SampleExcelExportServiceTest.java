@@ -124,6 +124,14 @@ class SampleExcelExportServiceTest {
             @Override
             public void streamTransactionSuccessStats(SampleSearchCriteria criteria, TransactionSuccessStatConsumer consumer) {
             }
+
+            @Override
+            public void streamLeadershipServiceReport(SamplingSummarySearchCriteria criteria, LeadershipServiceReportConsumer consumer) {
+            }
+
+            @Override
+            public void streamModuleOwnerConfigs(ModuleOwnerConfigConsumer consumer) {
+            }
         };
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -135,7 +143,8 @@ class SampleExcelExportServiceTest {
                 "transdiff_ccbs_202607061014.txt",
                 "transdiff_cbsp_202607061014.txt",
                 "transdiff_both_202607061014.txt",
-                "transdiff_success_202607061014.txt"
+                "transdiff_success_202607061014.txt",
+                "leadership_summary_202607061014.xlsx"
         );
         assertThat(entries.get("transdiff_stat_202607061014.txt")).isEqualTo("""
                 类型!数量
@@ -170,6 +179,14 @@ class SampleExcelExportServiceTest {
                         "存款", "张三,李四"
                 ));
             }
+
+            @Override
+            public void streamLeadershipServiceReport(SamplingSummarySearchCriteria criteria, LeadershipServiceReportConsumer consumer) {
+            }
+
+            @Override
+            public void streamModuleOwnerConfigs(ModuleOwnerConfigConsumer consumer) {
+            }
         };
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -181,6 +198,81 @@ class SampleExcelExportServiceTest {
                 业务日期!批次!交易码!服务码!报文类型!成功数量!接口字段总数!比对字段总数!差异字段数!比对字段差异总数!单字段差异>=1%!单字段差异<1%!领域!责任人
                 20260703!BATCH_01!C000!aaa!bzjson!1000!34!34000!10!10000!7!3!存款!张三,李四
                 """);
+    }
+
+    @Test
+    void streamsTransactionDiffExportWithLeadershipWorkbookForExecutives() throws Exception {
+        SampleExcelExportService service = new SampleExcelExportService(
+                Clock.fixed(Instant.parse("2026-07-06T02:14:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+        SampleQueryService queryService = new SampleQueryService(null) {
+            @Override
+            public void streamTransactionDiffExport(SampleSearchCriteria criteria, SampleDetailConsumer consumer) {
+                consumer.accept(transactionDiffRow("SEQ_528_OK_CCBS_FAIL", "000000000000", "C0002"));
+                consumer.accept(transactionDiffRow("SEQ_528_FAIL_CCBS_OK", "E0001", "AAAAAAA"));
+                consumer.accept(transactionDiffRow("SEQ_BOTH_FAIL", "E0001", "C0002"));
+            }
+
+            @Override
+            public void streamTransactionSuccessStats(SampleSearchCriteria criteria, TransactionSuccessStatConsumer consumer) {
+                consumer.accept(new TransactionSuccessStatRow(
+                        "20260703", "BATCH_01", "C000", "aaa", "bizjson",
+                        1000L, 34L, 34000L, 10L, 10000L, 7L, 3L,
+                        "存款", "张三"
+                ));
+            }
+
+            @Override
+            public void streamLeadershipServiceReport(SamplingSummarySearchCriteria criteria, LeadershipServiceReportConsumer consumer) {
+                consumer.accept(new LeadershipServiceReportRow(
+                        "BATCH_01", "20260703", "C000", "aaa", "交易一", "存款", "张三",
+                        1000L, 5L, 4L, 3L, 900L, 88L, 900L, 9L, 7L, 12L, 860L, 10L
+                ));
+            }
+
+            @Override
+            public void streamModuleOwnerConfigs(ModuleOwnerConfigConsumer consumer) {
+                consumer.accept(new ModuleOwnerConfigRow("存款", "张三", "李四", "核心存款交易", "启用"));
+            }
+        };
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        service.streamTransactionDiffExport(queryService, new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), out);
+
+        Map<String, byte[]> entries = unzipBytes(out.toByteArray());
+        assertThat(entries.keySet()).contains(
+                "transdiff_stat_202607061014.txt",
+                "transdiff_ccbs_202607061014.txt",
+                "transdiff_cbsp_202607061014.txt",
+                "transdiff_both_202607061014.txt",
+                "transdiff_success_202607061014.txt",
+                "leadership_summary_202607061014.xlsx"
+        );
+        assertThat(new String(entries.get("transdiff_stat_202607061014.txt"), StandardCharsets.UTF_8)).startsWith("类型!数量\n");
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(entries.get("leadership_summary_202607061014.xlsx")))) {
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(6);
+            assertThat(workbook.getSheetName(0)).isEqualTo("领导总览");
+            assertThat(workbook.getSheet("责任人看板")).isNotNull();
+            assertThat(workbook.getSheet("领域看板")).isNotNull();
+            assertThat(workbook.getSheet("领域负责人配置")).isNotNull();
+            assertThat(workbook.getSheet("服务码明细")).isNotNull();
+            assertThat(workbook.getSheet("字段差异摘要")).isNotNull();
+
+            Sheet summary = workbook.getSheet("领导总览");
+            assertThat(summary.getRow(0).getCell(0).getStringCellValue()).isEqualTo("回放差异领导汇总报表");
+            assertThat(summary.getRow(3).getCell(0).getStringCellValue()).contains("发起交易数", "1,000");
+            assertThat(summary.getRow(6).getCell(0).getStringCellValue()).isEqualTo("本批结论");
+
+            Sheet config = workbook.getSheet("领域负责人配置");
+            assertThat(rowText(config.getRow(3))).contains("领域", "主负责人", "备份负责人", "状态");
+            assertThat(config.getRow(4).getCell(0).getStringCellValue()).isEqualTo("存款");
+            assertThat(config.getRow(4).getCell(1).getStringCellValue()).isEqualTo("张三");
+
+            Sheet serviceSheet = workbook.getSheet("服务码明细");
+            assertThat(rowText(serviceSheet.getRow(3))).contains("领域", "责任人", "字段差异流水数");
+            assertThat(serviceSheet.getPaneInformation().isFreezePane()).isTrue();
+        }
     }
 
     private SampleDetailRow transactionDiffRow(String tranSeqNo, String origErrorCode, String destErrorCode) {
@@ -199,6 +291,17 @@ class SampleExcelExportServiceTest {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 entries.put(entry.getName(), new String(zip.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        return entries;
+    }
+
+    private Map<String, byte[]> unzipBytes(byte[] bytes) throws Exception {
+        Map<String, byte[]> entries = new java.util.LinkedHashMap<>();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                entries.put(entry.getName(), zip.readAllBytes());
             }
         }
         return entries;

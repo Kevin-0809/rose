@@ -34,4 +34,19 @@ class ConfigImportTemplateTest {
         assertThat(html).contains("金融业务交易信息登记表");
         assertThat(html).contains("防腐528交易码");
     }
+    @Test
+    void listImportProgressPageContainsProgressCardsAndPollingScript() throws Exception {
+        String html = new String(
+                getClass().getResourceAsStream("/templates/config/import-list-progress.html").readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(html).contains("清单导入进度");
+        assertThat(html).contains("progress-bar");
+        assertThat(html).contains("progressText()");
+        assertThat(html).contains("completionPercent()");
+        assertThat(html).contains("/config/import/list-tasks/");
+        assertThat(html).contains("setTimeout(pollProgress");
+        assertThat(html).contains("失败信息");
+    }
 }

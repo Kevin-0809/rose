@@ -252,6 +252,49 @@ class SampleQueryServiceTest {
     }
 
     @Test
+    void streamLeadershipServiceReportIncludesModuleAndModuleOwnerConfigRows() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:leadership_service_report;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa",
+                ""
+        );
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        createSemanticSampleTables(jdbc);
+        createServiceReportSourceTables(jdbc);
+        createModuleOwnerConfigTable(jdbc);
+        seedServiceReportRows(jdbc);
+        jdbc.update("""
+                insert into ana_module_owner_config (
+                    module_name, primary_owner, backup_owner, remark, status
+                ) values
+                    ('M1', '领域负责人一', '备份一', '核心领域', '启用'),
+                    ('M2', '领域负责人二', '备份二', '辅助领域', '启用')
+                """);
+        SampleQueryService service = new SampleQueryService(new NamedParameterJdbcTemplate(dataSource));
+
+        List<LeadershipServiceReportRow> rows = new java.util.ArrayList<>();
+        service.streamLeadershipServiceReport(new SamplingSummarySearchCriteria("BATCH_RPT", "20260611"), rows::add);
+
+        assertThat(rows).hasSize(2);
+        LeadershipServiceReportRow first = rows.get(0);
+        assertThat(first.serviceCode()).isEqualTo("S001");
+        assertThat(first.moduleName()).isEqualTo("M1");
+        assertThat(first.owner()).isEqualTo("张三");
+        assertThat(first.totalTranCount()).isEqualTo(5L);
+        assertThat(first.returnCodeIssueCount()).isEqualTo(1L);
+        assertThat(first.issueFieldCount()).isEqualTo(2L);
+
+        List<ModuleOwnerConfigRow> configs = new java.util.ArrayList<>();
+        service.streamModuleOwnerConfigs(configs::add);
+        assertThat(configs)
+                .extracting(ModuleOwnerConfigRow::moduleName, ModuleOwnerConfigRow::primaryOwner, ModuleOwnerConfigRow::backupOwner)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("M1", "领域负责人一", "备份一"),
+                        org.assertj.core.groups.Tuple.tuple("M2", "领域负责人二", "备份二")
+                );
+    }
+
+    @Test
     void streamTransactionSuccessStatsNormalizesArrayFieldsAndAggregatesConfiguredFields() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:transaction_success_stats;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -351,6 +394,18 @@ class SampleQueryServiceTest {
                     tran_name varchar(200),
                     module_name varchar(100),
                     owner varchar(100)
+                )
+                """);
+    }
+
+    private void createModuleOwnerConfigTable(JdbcTemplate jdbc) {
+        jdbc.execute("""
+                create table ana_module_owner_config (
+                    module_name varchar(100),
+                    primary_owner varchar(100),
+                    backup_owner varchar(100),
+                    remark varchar(1000),
+                    status varchar(20)
                 )
                 """);
     }

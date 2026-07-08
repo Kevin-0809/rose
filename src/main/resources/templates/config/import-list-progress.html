@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>清单导入进度</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="shell layout-frame">
+  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Transaction List Import</div>
+      <h1>清单导入进度</h1>
+      <p class="muted" th:if="${progress}" th:text="'任务 #' + ${progress.taskId()} + ' / 状态：' + ${progress.status()}"></p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/config/import">返回导入页</a>
+    </div>
+  </div>
+
+  <section class="panel" th:unless="${progress}">
+    <p class="muted">未找到该导入任务。</p>
+  </section>
+
+  <section th:if="${progress}">
+    <div id="progress-error" class="panel" style="display:none;margin-top:16px">
+      <p class="muted">进度获取失败，请刷新页面。</p>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="label">状态</div><div class="value"><span class="tag" th:classappend="${progress.status() == 'COMPLETED'} ? 'green' : (${progress.status() == 'FAILED'} ? 'yellow' : '')" th:text="${progress.status()}"></span></div></div>
+      <div class="card"><div class="label">批次进度</div><div class="value" th:text="${progress.progressText()}">0/0</div></div>
+      <div class="card"><div class="label">清单交易数</div><div class="value" th:text="${progress.totalCount()}">0</div></div>
+      <div class="card"><div class="label">已导入交易</div><div class="value" th:text="${progress.importedCount()}">0</div></div>
+      <div class="card"><div class="label">成功批次</div><div class="value" th:text="${progress.completedBatchCount()}">0</div></div>
+      <div class="card"><div class="label">失败批次</div><div class="value" th:text="${progress.failedBatchCount()}">0</div></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <div class="section-title"><div><div class="eyebrow">Progress</div><h2>完成度</h2></div></div>
+      <div class="progress-bar" style="background:rgba(97,128,165,.18);border-radius:6px;overflow:hidden;height:24px;position:relative">
+        <div id="progress-fill" style="height:100%;background:linear-gradient(90deg,#38bdf8,#4ade80);transition:width .6s;" th:styleappend="'width:' + ${progress.completionPercent()} + '%'"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0f172a" th:text="${progress.completionPercent()} + '%'"></div>
+      </div>
+    </div>
+
+    <section class="cards" style="margin-top:16px">
+      <div class="card"><div class="label">交易新增</div><div class="value" th:text="${progress.tranInserted()}">0</div></div>
+      <div class="card"><div class="label">交易更新</div><div class="value" th:text="${progress.tranUpdated()}">0</div></div>
+      <div class="card"><div class="label">字段新增</div><div class="value" th:text="${progress.fieldInserted()}">0</div></div>
+      <div class="card"><div class="label">字段更新</div><div class="value" th:text="${progress.fieldUpdated()}">0</div></div>
+      <div class="card"><div class="label">字段跳过</div><div class="value" th:text="${progress.fieldSkipped()}">0</div></div>
+    </section>
+
+    <section class="panel table-wrap" th:if="${progress.failureMessage() != null and !progress.failureMessage().isBlank()}" style="margin-top:16px">
+      <div class="section-title"><div><div class="eyebrow">Failures</div><h2>失败信息</h2></div></div>
+      <pre class="muted" style="white-space:pre-wrap" th:text="${progress.failureMessage()}"></pre>
+    </section>
+  </section>
+</main>
+<script th:if="${progress != null and progress.running()}" th:inline="javascript">
+  /*<![CDATA[*/
+  const taskId = /*[[${progress.taskId()}]]*/ 0;
+  let retryCount = 0;
+  const maxRetries = 5;
+  function showProgressError() {
+    const el = document.getElementById('progress-error');
+    if (el) { el.style.display = ''; }
+  }
+  function pollProgress() {
+    fetch('/config/import/list-tasks/' + taskId + '/progress')
+      .then(r => {
+        if (!r.ok) { throw new Error(r.status); }
+        return r.json();
+      })
+      .then(data => {
+        retryCount = 0;
+        if (!data || (data.status !== 'CREATED' && data.status !== 'RUNNING')) {
+          location.reload();
+          return;
+        }
+        setTimeout(pollProgress, 3000);
+      })
+      .catch(() => {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          showProgressError();
+          return;
+        }
+        setTimeout(pollProgress, 5000);
+      });
+  }
+  setTimeout(pollProgress, 3000);
+  /*]]>*/
+</script>
+</body>
+</html>

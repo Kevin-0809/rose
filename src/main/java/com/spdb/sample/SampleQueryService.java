@@ -76,28 +76,30 @@ public class SampleQueryService {
     }
 
     public void streamServiceReport(SamplingSummarySearchCriteria criteria, SamplingServiceReportConsumer consumer) {
-        MapSqlParameterSource params = new MapSqlParameterSource();
-        List<String> tranClauses = new ArrayList<>();
-        List<String> detailClauses = new ArrayList<>();
-        if (criteria != null) {
-            String effectiveOrigCdate = criteria.origCdate();
-            if (!StringUtils.hasText(effectiveOrigCdate) && StringUtils.hasText(criteria.batchId())) {
-                effectiveOrigCdate = origCdateForBatch(criteria.batchId().trim());
-            }
-            if (StringUtils.hasText(effectiveOrigCdate)) {
-                tranClauses.add("t.orig_cdate = :origCdate");
-                detailClauses.add("d.orig_cdate = :origCdate");
-                params.addValue("origCdate", effectiveOrigCdate.trim());
-            }
-            if (StringUtils.hasText(criteria.batchId())) {
-                detailClauses.add("d.batch_id = :batchId");
-                params.addValue("batchId", criteria.batchId().trim());
-            }
-        }
-        String tranWhere = tranClauses.isEmpty() ? "" : " where " + String.join(" and ", tranClauses);
-        String detailWhere = detailClauses.isEmpty() ? "" : " where " + String.join(" and ", detailClauses);
+        ReportQueryParts query = serviceReportWhere(criteria);
         RowCallbackHandler handler = rs -> consumer.accept(mapServiceReportRow(rs));
-        jdbc.query(serviceReportSelect(tranWhere, detailWhere), params, handler);
+        jdbc.query(serviceReportSelect(query.tranWhere(), query.detailWhere(), false), query.params(), handler);
+    }
+
+    public void streamLeadershipServiceReport(SamplingSummarySearchCriteria criteria, LeadershipServiceReportConsumer consumer) {
+        ReportQueryParts query = serviceReportWhere(criteria);
+        RowCallbackHandler handler = rs -> consumer.accept(mapLeadershipServiceReportRow(rs));
+        jdbc.query(serviceReportSelect(query.tranWhere(), query.detailWhere(), true), query.params(), handler);
+    }
+
+    public void streamModuleOwnerConfigs(ModuleOwnerConfigConsumer consumer) {
+        RowCallbackHandler handler = rs -> consumer.accept(new ModuleOwnerConfigRow(
+                rs.getString("module_name"),
+                rs.getString("primary_owner"),
+                rs.getString("backup_owner"),
+                rs.getString("remark"),
+                rs.getString("status")
+        ));
+        jdbc.query("""
+                select module_name, primary_owner, backup_owner, remark, status
+                from ana_module_owner_config
+                order by module_name
+                """, new MapSqlParameterSource(), handler);
     }
 
     private String origCdateForBatch(String batchId) {
@@ -248,6 +250,30 @@ public class SampleQueryService {
         );
     }
 
+    private LeadershipServiceReportRow mapLeadershipServiceReportRow(ResultSet rs) throws SQLException {
+        return new LeadershipServiceReportRow(
+                rs.getString("batch_id"),
+                rs.getString("orig_cdate"),
+                rs.getString("tran_code"),
+                rs.getString("service_code"),
+                rs.getString("tran_name"),
+                rs.getString("module_name"),
+                rs.getString("owner"),
+                rs.getLong("total_tran_count"),
+                rs.getLong("comp_result_1_count"),
+                rs.getLong("comp_result_2_count"),
+                rs.getLong("comp_result_3_count"),
+                rs.getLong("comp_result_4_count"),
+                rs.getLong("comp_result_8_count"),
+                rs.getLong("pass_tran_count"),
+                rs.getLong("tran_issue_count"),
+                rs.getLong("return_code_issue_count"),
+                rs.getLong("field_diff_tran_count"),
+                rs.getLong("fully_matched_count"),
+                rs.getLong("issue_field_count")
+        );
+    }
+
     private TransactionSuccessStatRow mapTransactionSuccessStatRow(ResultSet rs) throws SQLException {
         return new TransactionSuccessStatRow(
                 rs.getString("orig_cdate"),
@@ -363,7 +389,7 @@ public class SampleQueryService {
         return rows;
     }
 
-    private String serviceReportSelect(String tranWhere, String detailWhere) {
+    private String serviceReportSelect(String tranWhere, String detailWhere, boolean includeModuleName) {
         return """
                 select
                     coalesce(ds.batch_id, '') as batch_id,
@@ -371,6 +397,7 @@ public class SampleQueryService {
                     coalesce(ds.tran_code, c.tran_code) as tran_code,
                     ts.service_code,
                     c.tran_name,
+                """ + (includeModuleName ? "    c.module_name,\n" : "") + """
                     coalesce(ds.owner, c.owner) as owner,
                     ts.total_tran_count,
                     ts.comp_result_1_count,
@@ -451,6 +478,30 @@ public class SampleQueryService {
                 left join ana_tran_catalog c on c.service_code = ts.service_code
                 order by ts.total_tran_count desc, ts.service_code
                 """;
+    }
+
+    private ReportQueryParts serviceReportWhere(SamplingSummarySearchCriteria criteria) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        List<String> tranClauses = new ArrayList<>();
+        List<String> detailClauses = new ArrayList<>();
+        if (criteria != null) {
+            String effectiveOrigCdate = criteria.origCdate();
+            if (!StringUtils.hasText(effectiveOrigCdate) && StringUtils.hasText(criteria.batchId())) {
+                effectiveOrigCdate = origCdateForBatch(criteria.batchId().trim());
+            }
+            if (StringUtils.hasText(effectiveOrigCdate)) {
+                tranClauses.add("t.orig_cdate = :origCdate");
+                detailClauses.add("d.orig_cdate = :origCdate");
+                params.addValue("origCdate", effectiveOrigCdate.trim());
+            }
+            if (StringUtils.hasText(criteria.batchId())) {
+                detailClauses.add("d.batch_id = :batchId");
+                params.addValue("batchId", criteria.batchId().trim());
+            }
+        }
+        String tranWhere = tranClauses.isEmpty() ? "" : " where " + String.join(" and ", tranClauses);
+        String detailWhere = detailClauses.isEmpty() ? "" : " where " + String.join(" and ", detailClauses);
+        return new ReportQueryParts(tranWhere, detailWhere, params);
     }
 
     private String transactionSuccessStatSelect(String tranWhere, String detailWhere, String mappingWhere, String catalogWhere) {
@@ -812,6 +863,8 @@ public class SampleQueryService {
     }
 
     private record QueryParts(String where, MapSqlParameterSource params) {}
+
+    private record ReportQueryParts(String tranWhere, String detailWhere, MapSqlParameterSource params) {}
 
     private record SuccessQueryParts(String tranWhere, String detailWhere, String mappingWhere,
                                      String catalogWhere, MapSqlParameterSource params) {}

@@ -1,5 +1,7 @@
 target/
 
+/outputs/
+
 .idea/
 .vscode/
 *.iml

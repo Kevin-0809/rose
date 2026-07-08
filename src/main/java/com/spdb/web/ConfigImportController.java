@@ -3,14 +3,16 @@ package com.spdb.web;
 import com.spdb.config.ConfigImportBatchResult;
 import com.spdb.config.ConfigImportFile;
 import com.spdb.config.ConfigImportService;
-import com.spdb.config.TransactionListImportResult;
-import com.spdb.config.TransactionListImportService;
+import com.spdb.config.TransactionListImportProgressRow;
+import com.spdb.config.TransactionListImportTaskService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -22,12 +24,12 @@ import java.util.List;
 @Controller
 public class ConfigImportController {
     private final ConfigImportService importService;
-    private final TransactionListImportService listImportService;
+    private final TransactionListImportTaskService listImportTaskService;
 
     public ConfigImportController(ConfigImportService importService,
-                                  TransactionListImportService listImportService) {
+                                  TransactionListImportTaskService listImportTaskService) {
         this.importService = importService;
-        this.listImportService = listImportService;
+        this.listImportTaskService = listImportTaskService;
     }
 
     @GetMapping("/config/import")
@@ -44,17 +46,26 @@ public class ConfigImportController {
             model.addAttribute("errorMessage", "请选择金融业务交易信息登记表Excel文件");
             return "config/import";
         }
-        ConfigImportFile tempFile = new ConfigImportFile(copyToTempFile(listFile), listFile.getOriginalFilename());
         try {
-            TransactionListImportResult result = listImportService.importList(tempFile.path());
-            model.addAttribute("listResult", result);
-            model.addAttribute("batchResult", result.importResult());
+            long taskId = listImportTaskService.createTask(copyToTempFile(listFile), listFile.getOriginalFilename());
+            return "redirect:/config/import/list-tasks/" + taskId;
         } catch (RuntimeException | IOException ex) {
             model.addAttribute("errorMessage", ex.getMessage());
-        } finally {
-            deleteTempFiles(List.of(tempFile));
         }
         return "config/import";
+    }
+
+    @GetMapping("/config/import/list-tasks/{id}")
+    public String listImportProgressPage(@PathVariable long id, Model model) {
+        prepare(model);
+        model.addAttribute("progress", listImportTaskService.progress(id));
+        return "config/import-list-progress";
+    }
+
+    @GetMapping("/config/import/list-tasks/{id}/progress")
+    @ResponseBody
+    public TransactionListImportProgressRow listImportProgressJson(@PathVariable long id) {
+        return listImportTaskService.progress(id);
     }
 
     @PostMapping("/config/import/confirm")

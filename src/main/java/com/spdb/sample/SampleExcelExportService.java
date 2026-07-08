@@ -8,6 +8,7 @@ import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
@@ -23,6 +24,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -87,6 +93,7 @@ public class SampleExcelExportService {
             Path cbspFile = tempDir.resolve("transdiff_cbsp_" + timestamp + ".txt");
             Path bothFile = tempDir.resolve("transdiff_both_" + timestamp + ".txt");
             Path successFile = tempDir.resolve("transdiff_success_" + timestamp + ".txt");
+            Path leadershipFile = tempDir.resolve("leadership_summary_" + timestamp + ".xlsx");
             long[] counts = new long[3];
             try (BufferedWriter ccbs = Files.newBufferedWriter(ccbsFile, StandardCharsets.UTF_8);
                  BufferedWriter cbsp = Files.newBufferedWriter(cbspFile, StandardCharsets.UTF_8);
@@ -99,12 +106,14 @@ public class SampleExcelExportService {
                 queryService.streamTransactionDiffExport(criteria, row -> writeTransactionTextRow(row, ccbs, cbsp, both, counts));
                 queryService.streamTransactionSuccessStats(criteria, row -> writeTransactionSuccessStatRow(success, row));
             }
+            writeLeadershipWorkbook(queryService, criteria, counts, leadershipFile);
             try (ZipOutputStream zip = new ZipOutputStream(outputStream, StandardCharsets.UTF_8)) {
                 writeTransactionStatEntry(zip, timestamp, counts);
                 writeZipFile(zip, ccbsFile);
                 writeZipFile(zip, cbspFile);
                 writeZipFile(zip, bothFile);
                 writeZipFile(zip, successFile);
+                writeZipFile(zip, leadershipFile);
                 zip.finish();
             }
         } catch (IOException | UncheckedIOException e) {
@@ -126,6 +135,152 @@ public class SampleExcelExportService {
             int[] rowIndex = {2};
             queryService.streamServiceReport(criteria, row -> writeServiceReportRow(sheet, styles, rowIndex[0]++, row));
         });
+    }
+
+    private void writeLeadershipWorkbook(SampleQueryService queryService, SampleSearchCriteria criteria,
+                                         long[] categoryCounts, Path output) throws IOException {
+        List<LeadershipServiceReportRow> serviceRows = new ArrayList<>();
+        List<TransactionSuccessStatRow> successRows = new ArrayList<>();
+        List<ModuleOwnerConfigRow> configRows = new ArrayList<>();
+        SamplingSummarySearchCriteria summaryCriteria = new SamplingSummarySearchCriteria(
+                criteria == null ? null : criteria.batchId(),
+                criteria == null ? null : criteria.origCdate()
+        );
+        queryService.streamLeadershipServiceReport(summaryCriteria, serviceRows::add);
+        queryService.streamTransactionSuccessStats(criteria, successRows::add);
+        queryService.streamModuleOwnerConfigs(configRows::add);
+
+        try (SXSSFWorkbook workbook = new SXSSFWorkbook(200)) {
+            workbook.setCompressTempFiles(true);
+            LeadershipStyles styles = createLeadershipStyles(workbook);
+            writeLeadershipSummarySheet(workbook, styles, serviceRows, categoryCounts);
+            writeOwnerDashboardSheet(workbook, styles, serviceRows);
+            writeModuleDashboardSheet(workbook, styles, serviceRows, configRows);
+            writeModuleOwnerConfigSheet(workbook, styles, configRows);
+            writeLeadershipServiceDetailSheet(workbook, styles, serviceRows);
+            writeFieldSummarySheet(workbook, styles, successRows);
+            try (OutputStream out = Files.newOutputStream(output)) {
+                workbook.write(out);
+            }
+            workbook.dispose();
+        }
+    }
+
+    private void writeLeadershipSummarySheet(SXSSFWorkbook workbook, LeadershipStyles styles,
+                                             List<LeadershipServiceReportRow> rows, long[] categoryCounts) {
+        Sheet sheet = workbook.createSheet("领导总览");
+        int[] widths = {16, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14};
+        setWidths(sheet, widths);
+        mergeWrite(sheet, 0, 0, 0, 13, "回放差异领导汇总报表", styles.title());
+        mergeWrite(sheet, 1, 0, 1, 13, leadershipSubtitle(rows), styles.subtitle());
+
+        long total = rows.stream().mapToLong(LeadershipServiceReportRow::totalTranCount).sum();
+        long pass = rows.stream().mapToLong(LeadershipServiceReportRow::passTranCount).sum();
+        long tranIssue = rows.stream().mapToLong(LeadershipServiceReportRow::tranIssueCount).sum();
+        long retIssue = rows.stream().mapToLong(LeadershipServiceReportRow::returnCodeIssueCount).sum();
+        long fieldDiff = rows.stream().mapToLong(LeadershipServiceReportRow::fieldDiffTranCount).sum();
+        long issueFields = rows.stream().mapToLong(LeadershipServiceReportRow::issueFieldCount).sum();
+        writeKpi(sheet, styles, 3, 0, "发起交易数", total, "全量回放交易", styles.kpiBlue());
+        writeKpi(sheet, styles, 3, 2, "通过交易数", pass, "二者均成功", styles.kpiGreen());
+        writeKpi(sheet, styles, 3, 4, "通过率", rate(pass, total), "通过 / 发起", styles.kpiGreen());
+        writeKpi(sheet, styles, 3, 6, "问题交易数", tranIssue, "原失败/新失败类", styles.kpiOrange());
+        writeKpi(sheet, styles, 3, 8, "响应码问题", retIssue, "响应码不一致", styles.kpiOrange());
+        writeKpi(sheet, styles, 3, 10, "字段差异流水", fieldDiff, "成功交易内字段差异", styles.kpiRed());
+        writeKpi(sheet, styles, 3, 12, "问题字段数", issueFields, "去重字段数", styles.kpiRed());
+
+        mergeWrite(sheet, 6, 0, 6, 13, "本批结论", styles.section());
+        mergeWrite(sheet, 7, 0, 8, 13,
+                "本批次整体通过率 " + percentText(rate(pass, total)) + "，问题交易占比 " + percentText(rate(tranIssue, total))
+                        + "。建议优先关注问题占比较高的领域、服务码，以及字段差异流水较高的服务。",
+                styles.note());
+
+        mergeWrite(sheet, 10, 0, 10, 6, "问题分类摘要", styles.section());
+        writeTable(sheet, styles, 11, 0,
+                new String[]{"问题类型", "数量", "占比", "归类", "建议动作"},
+                problemCategoryRows(total, categoryCounts, retIssue, fieldDiff),
+                new int[]{0, 1, 2, 0, 0});
+
+        mergeWrite(sheet, 10, 8, 10, 13, "Top 风险服务码", styles.section());
+        List<LeadershipServiceReportRow> top = rows.stream()
+                .sorted(Comparator.comparingDouble((LeadershipServiceReportRow row) -> row.rate(row.tranIssueCount())).reversed())
+                .limit(5)
+                .toList();
+        List<Object[]> topRows = top.stream()
+                .map(row -> new Object[]{row.serviceCode(), row.tranName(), row.moduleName(), row.owner(), row.tranIssueCount(), row.rate(row.tranIssueCount())})
+                .toList();
+        writeTable(sheet, styles, 11, 8,
+                new String[]{"服务码", "交易名称", "领域", "责任人", "问题交易", "问题占比"},
+                topRows, new int[]{0, 0, 0, 0, 1, 2});
+        sheet.createFreezePane(0, 2);
+    }
+
+    private void writeOwnerDashboardSheet(SXSSFWorkbook workbook, LeadershipStyles styles, List<LeadershipServiceReportRow> rows) {
+        Sheet sheet = workbook.createSheet("责任人看板");
+        setWidths(sheet, new int[]{16, 22, 14, 14, 12, 14, 12, 14, 12, 14, 12, 14, 12, 22});
+        mergeWrite(sheet, 0, 0, 0, 13, "责任人维度看板", styles.title());
+        mergeWrite(sheet, 1, 0, 1, 13, "用于按责任人识别风险分布、整改压力和重点服务码", styles.subtitle());
+        writeTable(sheet, styles, 3, 0,
+                new String[]{"责任人", "涉及领域", "发起交易数", "通过交易数", "通过率", "问题交易数", "问题占比", "响应码问题", "响应码占比", "字段差异流水", "字段差异占比", "问题字段数", "字段问题占比", "Top 服务码"},
+                aggregateByOwner(rows), new int[]{0, 0, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0});
+        sheet.createFreezePane(0, 4);
+    }
+
+    private void writeModuleDashboardSheet(SXSSFWorkbook workbook, LeadershipStyles styles,
+                                           List<LeadershipServiceReportRow> rows, List<ModuleOwnerConfigRow> configs) {
+        Sheet sheet = workbook.createSheet("领域看板");
+        setWidths(sheet, new int[]{16, 20, 14, 14, 12, 14, 12, 14, 12, 14, 12, 14, 12, 22});
+        mergeWrite(sheet, 0, 0, 0, 13, "领域分组维度看板", styles.title());
+        mergeWrite(sheet, 1, 0, 1, 13, "用于按业务领域识别质量风险和资源投入重点", styles.subtitle());
+        writeTable(sheet, styles, 3, 0,
+                new String[]{"领域", "责任人", "发起交易数", "通过交易数", "通过率", "问题交易数", "问题占比", "响应码问题", "响应码占比", "字段差异流水", "字段差异占比", "问题字段数", "字段问题占比", "Top 服务码"},
+                aggregateByModule(rows, configs), new int[]{0, 0, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 0});
+        sheet.createFreezePane(0, 4);
+    }
+
+    private void writeModuleOwnerConfigSheet(SXSSFWorkbook workbook, LeadershipStyles styles, List<ModuleOwnerConfigRow> rows) {
+        Sheet sheet = workbook.createSheet("领域负责人配置");
+        setWidths(sheet, new int[]{18, 18, 18, 34, 14});
+        mergeWrite(sheet, 0, 0, 0, 4, "领域与负责人配置", styles.title());
+        mergeWrite(sheet, 1, 0, 1, 4, "领域级看板的归口负责人来源；正式功能中建议作为可维护配置", styles.subtitle());
+        List<Object[]> tableRows = rows.stream()
+                .map(row -> new Object[]{row.moduleName(), row.primaryOwner(), row.backupOwner(), row.remark(), row.status()})
+                .toList();
+        writeTable(sheet, styles, 3, 0, new String[]{"领域", "主负责人", "备份负责人", "说明", "状态"}, tableRows, new int[]{0, 0, 0, 0, 0});
+        sheet.createFreezePane(0, 4);
+    }
+
+    private void writeLeadershipServiceDetailSheet(SXSSFWorkbook workbook, LeadershipStyles styles, List<LeadershipServiceReportRow> rows) {
+        Sheet sheet = workbook.createSheet("服务码明细");
+        setWidths(sheet, new int[]{12, 20, 10, 14, 18, 12, 14, 12, 12, 12, 14, 14, 14, 14, 12, 12, 12, 12, 16, 16, 14, 14, 18, 18, 14, 12});
+        mergeWrite(sheet, 0, 0, 0, 25, "服务码明细汇总", styles.title());
+        mergeWrite(sheet, 1, 0, 1, 25, "沿用现有服务码汇报口径，增加领域列并做领导汇报版式", styles.subtitle());
+        List<Object[]> tableRows = rows.stream()
+                .map(row -> new Object[]{row.origCdate(), row.batchId(), row.tranCode(), row.serviceCode(), row.tranName(), row.moduleName(), row.owner(),
+                        row.totalTranCount(), row.passTranCount(), row.rate(row.passTranCount()),
+                        row.compResult1Count(), row.rate(row.compResult1Count()), row.compResult2Count(), row.rate(row.compResult2Count()),
+                        row.compResult3Count(), row.rate(row.compResult3Count()), row.compResult4Count(), row.rate(row.compResult4Count()),
+                        row.compResult8Count(), row.rate(row.compResult8Count()), row.tranIssueCount(), row.rate(row.tranIssueCount()),
+                        row.fieldDiffTranCount(), row.rate(row.fieldDiffTranCount()), row.fullyMatchedCount(), row.issueFieldCount()})
+                .toList();
+        writeTable(sheet, styles, 3, 0,
+                new String[]{"业务日期", "批次", "交易码", "服务码", "交易名称", "领域", "责任人", "发起交易数", "通过交易数", "通过率", "原失败新成功数", "原失败新成功占比", "原成功新失败数", "原成功新失败占比", "都失败数", "都失败占比", "都成功数", "都成功占比", "响应码不一致数", "响应码不一致占比", "交易问题数", "交易问题占比", "字段差异流水数", "字段差异流水占比", "完全匹配数", "问题字段数"},
+                tableRows, new int[]{0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1});
+        sheet.createFreezePane(4, 4);
+    }
+
+    private void writeFieldSummarySheet(SXSSFWorkbook workbook, LeadershipStyles styles, List<TransactionSuccessStatRow> rows) {
+        Sheet sheet = workbook.createSheet("字段差异摘要");
+        setWidths(sheet, new int[]{12, 20, 10, 14, 12, 12, 14, 14, 14, 16, 14, 18, 16, 16});
+        mergeWrite(sheet, 0, 0, 0, 13, "二者都成功字段差异摘要", styles.title());
+        mergeWrite(sheet, 1, 0, 1, 13, "对应 transdiff_success 口径，帮助识别成功交易内部字段质量问题", styles.subtitle());
+        List<Object[]> tableRows = rows.stream()
+                .map(row -> new Object[]{row.origCdate(), row.batchId(), row.tranCode(), row.serviceCode(), row.messageType(), row.moduleName(), row.owner(),
+                        row.successCount(), row.interfaceFieldCount(), row.comparedFieldCount(), row.diffFieldCount(), row.comparedFieldDiffCount(), row.highRatioFieldCount(), row.lowRatioFieldCount()})
+                .toList();
+        writeTable(sheet, styles, 3, 0,
+                new String[]{"业务日期", "批次", "交易码", "服务码", "报文类型", "领域", "责任人", "成功数", "接口字段数", "比对字段总数", "差异字段数", "比对字段差异总数", "单字段差异>=1%", "单字段差异<1%"},
+                tableRows, new int[]{0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1});
+        sheet.createFreezePane(0, 4);
     }
 
     private void workbookToStream(String sheetName, String title, String[] headers, int[] widths,
@@ -160,6 +315,244 @@ public class SampleExcelExportService {
         }
         sheet.createFreezePane(0, 2);
         sheet.setAutoFilter(new CellRangeAddress(1, 1, 0, headers.length - 1));
+    }
+
+    private LeadershipStyles createLeadershipStyles(org.apache.poi.ss.usermodel.Workbook workbook) {
+        Font titleFont = workbook.createFont();
+        titleFont.setBold(true);
+        titleFont.setFontHeightInPoints((short) 16);
+        titleFont.setColor(IndexedColors.WHITE.getIndex());
+        titleFont.setFontName("Microsoft YaHei");
+
+        CellStyle title = workbook.createCellStyle();
+        title.setFont(titleFont);
+        title.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        title.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        title.setAlignment(HorizontalAlignment.CENTER);
+        title.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        Font subtitleFont = workbook.createFont();
+        subtitleFont.setFontHeightInPoints((short) 10);
+        subtitleFont.setColor(IndexedColors.GREY_50_PERCENT.getIndex());
+        subtitleFont.setFontName("Microsoft YaHei");
+
+        CellStyle subtitle = workbook.createCellStyle();
+        subtitle.setFont(subtitleFont);
+        subtitle.setFillForegroundColor(IndexedColors.PALE_BLUE.getIndex());
+        subtitle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        subtitle.setAlignment(HorizontalAlignment.CENTER);
+        subtitle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        Font whiteBold = workbook.createFont();
+        whiteBold.setBold(true);
+        whiteBold.setColor(IndexedColors.WHITE.getIndex());
+        whiteBold.setFontName("Microsoft YaHei");
+
+        CellStyle section = workbook.createCellStyle();
+        section.setFont(whiteBold);
+        section.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        section.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        section.setAlignment(HorizontalAlignment.LEFT);
+        section.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        CellStyle header = workbook.createCellStyle();
+        header.setFont(whiteBold);
+        header.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        header.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        header.setAlignment(HorizontalAlignment.CENTER);
+        header.setVerticalAlignment(VerticalAlignment.CENTER);
+        header.setWrapText(true);
+        border(header);
+
+        Font bodyFont = workbook.createFont();
+        bodyFont.setFontName("Microsoft YaHei");
+        bodyFont.setFontHeightInPoints((short) 10);
+
+        CellStyle body = workbook.createCellStyle();
+        body.setFont(bodyFont);
+        body.setVerticalAlignment(VerticalAlignment.CENTER);
+        border(body);
+
+        CellStyle alternate = workbook.createCellStyle();
+        alternate.cloneStyleFrom(body);
+        alternate.setFillForegroundColor(IndexedColors.PALE_BLUE.getIndex());
+        alternate.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+        CellStyle number = workbook.createCellStyle();
+        number.cloneStyleFrom(body);
+        number.setAlignment(HorizontalAlignment.RIGHT);
+        number.setDataFormat(workbook.createDataFormat().getFormat("#,##0"));
+
+        CellStyle percent = workbook.createCellStyle();
+        percent.cloneStyleFrom(number);
+        percent.setDataFormat(workbook.createDataFormat().getFormat("0.00%"));
+
+        CellStyle note = workbook.createCellStyle();
+        note.setFont(bodyFont);
+        note.setFillForegroundColor(IndexedColors.LIGHT_YELLOW.getIndex());
+        note.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        note.setWrapText(true);
+        note.setVerticalAlignment(VerticalAlignment.CENTER);
+        border(note);
+
+        return new LeadershipStyles(title, subtitle, section, header, body, alternate, number, percent, note,
+                kpiStyle(workbook, IndexedColors.DARK_BLUE),
+                kpiStyle(workbook, IndexedColors.GREEN),
+                kpiStyle(workbook, IndexedColors.TAN),
+                kpiStyle(workbook, IndexedColors.RED));
+    }
+
+    private CellStyle kpiStyle(org.apache.poi.ss.usermodel.Workbook workbook, IndexedColors color) {
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setColor(IndexedColors.WHITE.getIndex());
+        font.setFontName("Microsoft YaHei");
+        font.setFontHeightInPoints((short) 10);
+        CellStyle style = workbook.createCellStyle();
+        style.setFont(font);
+        style.setFillForegroundColor(color.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setWrapText(true);
+        return style;
+    }
+
+    private void setWidths(Sheet sheet, int[] widths) {
+        for (int i = 0; i < widths.length; i++) {
+            sheet.setColumnWidth(i, widths[i] * 256);
+        }
+    }
+
+    private void mergeWrite(Sheet sheet, int firstRow, int firstCol, int lastRow, int lastCol, Object value, CellStyle style) {
+        sheet.addMergedRegion(new CellRangeAddress(firstRow, lastRow, firstCol, lastCol));
+        for (int r = firstRow; r <= lastRow; r++) {
+            Row row = getOrCreateRow(sheet, r);
+            for (int c = firstCol; c <= lastCol; c++) {
+                write(row, c, r == firstRow && c == firstCol ? value : "", style);
+            }
+        }
+    }
+
+    private void writeKpi(Sheet sheet, LeadershipStyles styles, int rowIndex, int colIndex,
+                          String label, Object value, String note, CellStyle style) {
+        String valueText = value instanceof Double d ? percentText(d) : formatLong(((Number) value).longValue());
+        mergeWrite(sheet, rowIndex, colIndex, rowIndex + 1, colIndex + 1,
+                label + "\n" + valueText + "\n" + note, style);
+        sheet.getRow(rowIndex).setHeightInPoints(34);
+        sheet.getRow(rowIndex + 1).setHeightInPoints(34);
+    }
+
+    private void writeTable(Sheet sheet, LeadershipStyles styles, int startRow, int startCol,
+                            String[] headers, List<Object[]> rows, int[] formats) {
+        Row header = getOrCreateRow(sheet, startRow);
+        for (int i = 0; i < headers.length; i++) {
+            write(header, startCol + i, headers[i], styles.header());
+        }
+        for (int r = 0; r < rows.size(); r++) {
+            Row row = getOrCreateRow(sheet, startRow + 1 + r);
+            Object[] values = rows.get(r);
+            for (int c = 0; c < headers.length; c++) {
+                CellStyle style = switch (formats[c]) {
+                    case 1 -> styles.number();
+                    case 2 -> styles.percent();
+                    default -> (r % 2 == 0 ? styles.alternate() : styles.body());
+                };
+                write(row, startCol + c, values[c], style);
+            }
+        }
+        if (!rows.isEmpty()) {
+            sheet.setAutoFilter(new CellRangeAddress(startRow, startRow, startCol, startCol + headers.length - 1));
+        }
+    }
+
+    private Row getOrCreateRow(Sheet sheet, int rowIndex) {
+        Row row = sheet.getRow(rowIndex);
+        return row == null ? sheet.createRow(rowIndex) : row;
+    }
+
+    private String leadershipSubtitle(List<LeadershipServiceReportRow> rows) {
+        String businessDate = rows.isEmpty() ? "" : rows.get(0).origCdate();
+        String batchId = rows.stream().map(LeadershipServiceReportRow::batchId).filter(s -> s != null && !s.isBlank()).findFirst().orElse("");
+        return "业务日期：" + businessDate + "    批次：" + batchId + "    数据范围：交易级差异 + 字段级差异";
+    }
+
+    private List<Object[]> problemCategoryRows(long total, long[] categoryCounts, long retIssue, long fieldDiff) {
+        return List.of(
+                new Object[]{"528成功CCBS失败", categoryCounts[0], rate(categoryCounts[0], total), "交易结果类", "优先排查回归风险"},
+                new Object[]{"CCBS成功528失败", categoryCounts[1], rate(categoryCounts[1], total), "交易结果类", "关注新系统修复收益"},
+                new Object[]{"均失败错误码不一致", categoryCounts[2], rate(categoryCounts[2], total), "交易结果类", "确认错误码一致性"},
+                new Object[]{"响应码不一致", retIssue, rate(retIssue, total), "响应码类", "按服务码定位错误码映射"},
+                new Object[]{"字段差异流水", fieldDiff, rate(fieldDiff, total), "字段类", "进入字段差异摘要"}
+        );
+    }
+
+    private List<Object[]> aggregateByOwner(List<LeadershipServiceReportRow> rows) {
+        return aggregate(rows, LeadershipServiceReportRow::owner, true);
+    }
+
+    private List<Object[]> aggregateByModule(List<LeadershipServiceReportRow> rows, List<ModuleOwnerConfigRow> configs) {
+        Map<String, String> moduleOwners = new LinkedHashMap<>();
+        for (ModuleOwnerConfigRow config : configs) {
+            moduleOwners.put(config.moduleName(), config.primaryOwner());
+        }
+        return aggregate(rows, LeadershipServiceReportRow::moduleName, false).stream()
+                .map(row -> {
+                    row[1] = moduleOwners.getOrDefault((String) row[0], (String) row[1]);
+                    return row;
+                })
+                .toList();
+    }
+
+    private List<Object[]> aggregate(List<LeadershipServiceReportRow> rows,
+                                     java.util.function.Function<LeadershipServiceReportRow, String> classifier,
+                                     boolean ownerMode) {
+        Map<String, List<LeadershipServiceReportRow>> grouped = new LinkedHashMap<>();
+        for (LeadershipServiceReportRow row : rows) {
+            grouped.computeIfAbsent(blankToUnknown(classifier.apply(row)), key -> new ArrayList<>()).add(row);
+        }
+        List<Object[]> result = new ArrayList<>();
+        for (Map.Entry<String, List<LeadershipServiceReportRow>> entry : grouped.entrySet()) {
+            List<LeadershipServiceReportRow> groupRows = entry.getValue();
+            long total = groupRows.stream().mapToLong(LeadershipServiceReportRow::totalTranCount).sum();
+            long pass = groupRows.stream().mapToLong(LeadershipServiceReportRow::passTranCount).sum();
+            long tranIssue = groupRows.stream().mapToLong(LeadershipServiceReportRow::tranIssueCount).sum();
+            long retIssue = groupRows.stream().mapToLong(LeadershipServiceReportRow::returnCodeIssueCount).sum();
+            long fieldDiff = groupRows.stream().mapToLong(LeadershipServiceReportRow::fieldDiffTranCount).sum();
+            long fields = groupRows.stream().mapToLong(LeadershipServiceReportRow::issueFieldCount).sum();
+            String second = ownerMode
+                    ? distinctJoin(groupRows.stream().map(LeadershipServiceReportRow::moduleName).toList())
+                    : distinctJoin(groupRows.stream().map(LeadershipServiceReportRow::owner).toList());
+            String topServices = distinctJoin(groupRows.stream()
+                    .sorted(Comparator.comparingLong(LeadershipServiceReportRow::tranIssueCount).reversed())
+                    .limit(3)
+                    .map(LeadershipServiceReportRow::serviceCode)
+                    .toList());
+            result.add(new Object[]{entry.getKey(), second, total, pass, rate(pass, total), tranIssue, rate(tranIssue, total),
+                    retIssue, rate(retIssue, total), fieldDiff, rate(fieldDiff, total), fields, rate(fields, total), topServices});
+        }
+        result.sort(Comparator.comparingDouble((Object[] row) -> (Double) row[6]).reversed());
+        return result;
+    }
+
+    private String distinctJoin(List<String> values) {
+        return values.stream().filter(v -> v != null && !v.isBlank()).distinct().reduce((a, b) -> a + "," + b).orElse("");
+    }
+
+    private String blankToUnknown(String value) {
+        return value == null || value.isBlank() ? "未配置" : value;
+    }
+
+    private double rate(long numerator, long denominator) {
+        return denominator == 0 ? 0.0d : numerator / (double) denominator;
+    }
+
+    private String percentText(double value) {
+        return String.format(java.util.Locale.ROOT, "%.1f%%", value * 100);
+    }
+
+    private String formatLong(long value) {
+        return String.format(java.util.Locale.ROOT, "%,d", value);
     }
 
     private Styles createStyles(org.apache.poi.ss.usermodel.Workbook workbook, ExportStyle exportStyle) {
@@ -503,6 +896,21 @@ public class SampleExcelExportService {
         private boolean useAlternate(int rowIndex) {
             return (rowIndex - 2) % 2 == 1;
         }
+    }
+
+    private record LeadershipStyles(CellStyle title,
+                                    CellStyle subtitle,
+                                    CellStyle section,
+                                    CellStyle header,
+                                    CellStyle body,
+                                    CellStyle alternate,
+                                    CellStyle number,
+                                    CellStyle percent,
+                                    CellStyle note,
+                                    CellStyle kpiBlue,
+                                    CellStyle kpiGreen,
+                                    CellStyle kpiOrange,
+                                    CellStyle kpiRed) {
     }
 
     private enum ExportStyle {
