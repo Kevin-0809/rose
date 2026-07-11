@@ -68,6 +68,12 @@ public class ConfigImportController {
         return listImportTaskService.progress(id);
     }
 
+    @PostMapping("/config/import/list-tasks/{id}/resume")
+    public String resumeListImport(@PathVariable long id) {
+        listImportTaskService.resume(id);
+        return "redirect:/config/import/list-tasks/" + id;
+    }
+
     @PostMapping("/config/import/confirm")
     public String confirm(@RequestParam("file") MultipartFile[] files,
                           @RequestParam(required = false) String serviceCode,

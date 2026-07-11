@@ -64,26 +64,35 @@ public class TransactionListImportTaskRunner {
             log.error("Transaction list import task failed, taskId={}", taskId, ex);
             taskService.markFailed(taskId, ex.getMessage());
         } finally {
-            deleteTempFile(listFile);
+            TransactionListImportTaskRow latest = taskService.task(taskId);
+            if (latest != null && "COMPLETED".equals(latest.status())) {
+                deleteTempFile(listFile);
+            }
         }
     }
 
     private void runImport(long taskId, Path listFile) throws IOException {
         List<TransactionListEntry> entries = listParser.parse(listFile);
+        Set<String> alreadyImported = taskService.importedTranCodes(taskId);
+        List<TransactionListEntry> pendingEntries = entries.stream()
+                .filter(entry -> !alreadyImported.contains(entry.tranCode()))
+                .toList();
         List<List<String>> batches = mappingDocumentClient.partitionCodes(
-                entries.stream().map(TransactionListEntry::tranCode).toList()
+                pendingEntries.stream().map(TransactionListEntry::tranCode).toList()
         );
         taskService.updatePlannedCounts(taskId, entries.size(), batches.size());
 
-        List<Workbook> workbooks = new ArrayList<>();
         List<String> failures = new ArrayList<>();
-        int successBatchCount = 0;
         for (int i = 0; i < batches.size(); i++) {
             List<String> batch = batches.get(i);
             int batchNumber = i + 1;
             try {
-                workbooks.add(downloadWorkbookWithRetry(taskId, batchNumber, batches.size(), batch));
-                successBatchCount++;
+                Workbook workbook = downloadWorkbookWithRetry(taskId, batchNumber, batches.size(), batch);
+                ConfigImportBatchResult chunkResult = importDownloadedWorkbooks(
+                        pendingEntriesForBatch(pendingEntries, batch),
+                        List.of(workbook)
+                );
+                taskService.recordSuccessfulImportChunk(taskId, chunkResult);
                 taskService.incrementCompletedBatch(taskId);
             } catch (RuntimeException | IOException ex) {
                 String failure = String.join(",", batch) + ": " + ex.getMessage();
@@ -94,13 +103,14 @@ public class TransactionListImportTaskRunner {
             }
         }
 
-        int existingFailureCount = failures.size();
-        TransactionListImportResult result = importDownloadedWorkbooks(entries, batches.size(), successBatchCount, workbooks, failures);
-        String finalFailureMessage = String.join("\n", result.failures().subList(existingFailureCount, result.failures().size()));
+        if (!failures.isEmpty()) {
+            throw new IllegalStateException(String.join("\n", failures));
+        }
+        String finalFailureMessage = String.join("\n", failures);
         taskService.markCompleted(
                 taskId,
-                result.importResult(),
-                result.importResult().results().size(),
+                new ConfigImportBatchResult(0, 0, 0, 0, 0, List.of()),
+                taskService.progress(taskId).importedCount(),
                 finalFailureMessage
         );
     }
@@ -128,34 +138,34 @@ public class TransactionListImportTaskRunner {
         throw runtimeFailure;
     }
 
-    private TransactionListImportResult importDownloadedWorkbooks(List<TransactionListEntry> entries,
-                                                                  int requestBatchCount,
-                                                                  int successBatchCount,
-                                                                  List<Workbook> workbooks,
-                                                                  List<String> failures) {
-        ConfigImportBatchResult importResult;
+    private ConfigImportBatchResult importDownloadedWorkbooks(List<TransactionListEntry> entries,
+                                                              List<Workbook> workbooks) {
         try {
-            importResult = configImportService.importParsedWorkbooks(workbooks, entries);
+            ConfigImportBatchResult importResult = configImportService.importParsedWorkbooks(workbooks, entries);
+            Set<String> importedTranCodes = new HashSet<>();
+            for (ConfigImportResult result : importResult.results()) {
+                importedTranCodes.add(result.parsed().tran().tranCode());
+            }
+            List<String> missing = new ArrayList<>();
+            for (TransactionListEntry entry : entries) {
+                if (!importedTranCodes.contains(entry.tranCode())) {
+                    missing.add(entry.tranCode() + ": 未在映射文档中找到交易码");
+                }
+            }
+            if (!missing.isEmpty()) {
+                throw new IllegalStateException(String.join("\n", missing));
+            }
+            return importResult;
         } finally {
             close(workbooks);
         }
-        Set<String> importedTranCodes = new HashSet<>();
-        for (ConfigImportResult result : importResult.results()) {
-            importedTranCodes.add(result.parsed().tran().tranCode());
-        }
-        for (TransactionListEntry entry : entries) {
-            if (!importedTranCodes.contains(entry.tranCode())) {
-                failures.add(entry.tranCode() + ": 未在映射文档中找到交易码");
-            }
-        }
-        return new TransactionListImportResult(
-                entries.size(),
-                requestBatchCount,
-                successBatchCount,
-                requestBatchCount - successBatchCount,
-                importResult,
-                failures
-        );
+    }
+
+    private List<TransactionListEntry> pendingEntriesForBatch(List<TransactionListEntry> pendingEntries, List<String> batch) {
+        Set<String> batchCodes = new HashSet<>(batch);
+        return pendingEntries.stream()
+                .filter(entry -> batchCodes.contains(entry.tranCode()))
+                .toList();
     }
 
     private void close(List<Workbook> workbooks) {

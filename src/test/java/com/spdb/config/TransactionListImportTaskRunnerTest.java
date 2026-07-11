@@ -48,6 +48,7 @@ class TransactionListImportTaskRunnerTest {
                     field_inserted integer not null default 0,
                     field_updated integer not null default 0,
                     field_skipped integer not null default 0,
+                    imported_tran_codes clob,
                     failure_message varchar(4000),
                     created_time timestamp default current_timestamp,
                     started_time timestamp,
@@ -124,6 +125,62 @@ class TransactionListImportTaskRunnerTest {
     }
 
     @Test
+    void failedTaskCanResumeAfterSuccessfulTenTransactionCommit() throws Exception {
+        List<String> tranCodes = java.util.stream.IntStream.rangeClosed(1, 11)
+                .mapToObj(i -> "A%03d".formatted(i))
+                .toList();
+        Path listWorkbook = TransactionListImportServiceTestData.writeTransactionListWorkbook(tranCodes);
+        RecordingBatchMappingDocumentClient client = new RecordingBatchMappingDocumentClient();
+        ConfigImportService configImportService = new ConfigImportService(new ConfigWorkbookParser(), jdbc);
+        TransactionListImportService importService = new TransactionListImportService(
+                new TransactionListWorkbookParser(),
+                client,
+                configImportService
+        );
+        TransactionListImportTaskRunner runner = new TransactionListImportTaskRunner(
+                taskService,
+                new TransactionListWorkbookParser(),
+                client,
+                importService,
+                configImportService,
+                false
+        );
+        long taskId = taskService.createTask(listWorkbook, "list.xlsx");
+
+        client.failBatchContaining("A011");
+        runner.run(taskId);
+
+        TransactionListImportProgressRow failedProgress = taskService.progress(taskId);
+        assertThat(failedProgress.status()).isEqualTo("FAILED");
+        assertThat(failedProgress.importedCount()).isEqualTo(10);
+        assertThat(taskService.importedTranCodes(taskId)).containsExactlyInAnyOrderElementsOf(tranCodes.subList(0, 10));
+        assertThat(client.downloadedBatches()).containsExactly(
+                tranCodes.subList(0, 10),
+                List.of("A011"),
+                List.of("A011"),
+                List.of("A011")
+        );
+
+        client.clearFailures();
+        runner.run(taskId);
+
+        TransactionListImportProgressRow completedProgress = taskService.progress(taskId);
+        assertThat(completedProgress.status()).isEqualTo("COMPLETED");
+        assertThat(completedProgress.importedCount()).isEqualTo(11);
+        assertThat(completedProgress.requestBatchCount()).isEqualTo(1);
+        assertThat(completedProgress.completedBatchCount()).isEqualTo(1);
+        assertThat(completedProgress.failedBatchCount()).isZero();
+        assertThat(taskService.importedTranCodes(taskId)).containsExactlyInAnyOrderElementsOf(tranCodes);
+        assertThat(client.downloadedBatches()).containsExactly(
+                tranCodes.subList(0, 10),
+                List.of("A011"),
+                List.of("A011"),
+                List.of("A011"),
+                List.of("A011")
+        );
+    }
+
+    @Test
     void productionConstructorIsMarkedForSpringInjection() throws Exception {
         Constructor<TransactionListImportTaskRunner> constructor = TransactionListImportTaskRunner.class.getConstructor(
                 TransactionListImportTaskService.class,
@@ -197,18 +254,75 @@ class TransactionListImportTaskRunnerTest {
 
     private static class TransactionListImportServiceTestData {
         static Path writeTransactionListWorkbook(String tranCode) throws Exception {
+            return writeTransactionListWorkbook(List.of(tranCode));
+        }
+
+        static Path writeTransactionListWorkbook(List<String> tranCodes) throws Exception {
             Path file = Files.createTempFile("transaction-list", ".xlsx");
             try (Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
                  var out = Files.newOutputStream(file)) {
                 var sheet = workbook.createSheet("mapping");
-                var row = sheet.createRow(2);
-                row.createCell(0).setCellValue("module");
-                row.createCell(3).setCellValue(tranCode);
-                row.createCell(7).setCellValue("dev");
-                row.createCell(8).setCellValue("biz");
+                for (int i = 0; i < tranCodes.size(); i++) {
+                    var row = sheet.createRow(i + 2);
+                    row.createCell(0).setCellValue("module");
+                    row.createCell(3).setCellValue(tranCodes.get(i));
+                    row.createCell(7).setCellValue("dev");
+                    row.createCell(8).setCellValue("biz");
+                }
                 workbook.write(out);
             }
             return file;
+        }
+    }
+
+    private static class RecordingBatchMappingDocumentClient extends MappingDocumentClient {
+        private final List<List<String>> downloadedBatches = new java.util.ArrayList<>();
+        private String failedTranCode;
+
+        RecordingBatchMappingDocumentClient() {
+            super(RestClient.builder().build(), new MappingDocumentProperties("http://server/download?param=multi,{codes},MAPPING9", 10));
+        }
+
+        @Override
+        public byte[] download(List<String> tranCodes) {
+            downloadedBatches.add(List.copyOf(tranCodes));
+            if (failedTranCode != null && tranCodes.contains(failedTranCode)) {
+                throw new IllegalStateException("download failed for " + failedTranCode);
+            }
+            return mappingWorkbookBytes(tranCodes);
+        }
+
+        void failBatchContaining(String tranCode) {
+            this.failedTranCode = tranCode;
+        }
+
+        void clearFailures() {
+            this.failedTranCode = null;
+        }
+
+        List<List<String>> downloadedBatches() {
+            return downloadedBatches;
+        }
+
+        private byte[] mappingWorkbookBytes(List<String> tranCodes) {
+            try (Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                for (String tranCode : tranCodes) {
+                    var sheet = workbook.createSheet(tranCode);
+                    sheet.createRow(0).createCell(1).setCellValue(tranCode);
+                    sheet.createRow(1).createCell(1).setCellValue("tran " + tranCode);
+                    var outputHeader = sheet.createRow(3);
+                    outputHeader.createCell(0).setCellValue("输出");
+                    var fieldRow = sheet.createRow(4);
+                    fieldRow.createCell(0).setCellValue("sop_" + tranCode);
+                    fieldRow.createCell(1).setCellValue("field " + tranCode);
+                    fieldRow.createCell(10).setCellValue("biz_" + tranCode);
+                }
+                workbook.write(out);
+                return out.toByteArray();
+            } catch (Exception ex) {
+                throw new AssertionError(ex);
+            }
         }
     }
 }

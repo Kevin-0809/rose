@@ -46,6 +46,8 @@ class ConfigImportTemplateTest {
         assertThat(html).contains("progressText()");
         assertThat(html).contains("completionPercent()");
         assertThat(html).contains("/config/import/list-tasks/");
+        assertThat(html).contains("/resume");
+        assertThat(html).contains("继续导入");
         assertThat(html).contains("setTimeout(pollProgress");
         assertThat(html).contains("失败信息");
     }

@@ -393,12 +393,16 @@ create table if not exists ana_transaction_list_import_task (
     field_inserted integer not null default 0,
     field_updated integer not null default 0,
     field_skipped integer not null default 0,
+    imported_tran_codes text,
     failure_message varchar(4000),
     created_time timestamp not null default current_timestamp,
     started_time timestamp,
     ended_time timestamp,
     updated_at timestamp not null default current_timestamp
 );
+
+alter table ana_transaction_list_import_task
+    add column if not exists imported_tran_codes text;
 
 alter table ana_transaction_list_import_task drop constraint if exists ck_ana_transaction_list_import_task_status;
 alter table ana_transaction_list_import_task add constraint ck_ana_transaction_list_import_task_status
@@ -407,6 +411,7 @@ check (status in ('CREATED','RUNNING','COMPLETED','FAILED'));
 comment on table ana_transaction_list_import_task is '金融业务交易信息登记表导入任务表';
 comment on column ana_transaction_list_import_task.status is '导入任务状态';
 comment on column ana_transaction_list_import_task.list_file_path is '上传清单临时文件路径';
+comment on column ana_transaction_list_import_task.imported_tran_codes is '已成功导入交易码，按行分隔，用于失败续跑跳过已完成交易';
 comment on column ana_transaction_list_import_task.failure_message is '失败批次或缺失交易码摘要';
 
 create index if not exists idx_ana_transaction_list_import_task_status

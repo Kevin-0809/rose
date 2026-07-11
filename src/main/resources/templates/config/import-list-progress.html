@@ -17,6 +17,9 @@
     </div>
     <div class="actions">
       <a class="btn" href="/config/import">返回导入页</a>
+      <form th:if="${progress != null and progress.status() == 'FAILED'}" method="post" th:action="@{/config/import/list-tasks/{id}/resume(id=${progress.taskId()})}" style="display:inline">
+        <button class="btn primary" type="submit">继续导入</button>
+      </form>
     </div>
   </div>
 

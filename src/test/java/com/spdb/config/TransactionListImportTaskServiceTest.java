@@ -42,6 +42,7 @@ class TransactionListImportTaskServiceTest {
                     field_inserted integer not null default 0,
                     field_updated integer not null default 0,
                     field_skipped integer not null default 0,
+                    imported_tran_codes clob,
                     failure_message varchar(4000),
                     created_time timestamp default current_timestamp,
                     started_time timestamp,
@@ -73,9 +74,13 @@ class TransactionListImportTaskServiceTest {
         service.updatePlannedCounts(taskId, 25, 3);
         service.incrementCompletedBatch(taskId);
         service.incrementFailedBatch(taskId, "A001,A002: timeout");
-        service.markCompleted(taskId, new ConfigImportBatchResult(
-                2, 1, 7, 3, 4, java.util.List.of()
-        ), 3, "C999: missing");
+        service.recordSuccessfulImportChunk(taskId, new ConfigImportBatchResult(
+                2, 1, 7, 3, 4, java.util.List.of(
+                resultFor("A001"),
+                resultFor("A002"),
+                resultFor("A003")
+        )));
+        service.markCompleted(taskId, new ConfigImportBatchResult(0, 0, 0, 0, 0, java.util.List.of()), 3, "C999: missing");
 
         TransactionListImportProgressRow progress = service.progress(taskId);
         assertThat(progress.status()).isEqualTo("COMPLETED");
@@ -87,6 +92,34 @@ class TransactionListImportTaskServiceTest {
         assertThat(progress.tranInserted()).isEqualTo(2);
         assertThat(progress.fieldInserted()).isEqualTo(7);
         assertThat(progress.failureMessage()).contains("timeout").contains("missing");
+    }
+
+    @Test
+    void successfulImportChunksAreRecordedForResume() {
+        long taskId = service.createTask(Path.of("C:/tmp/list.xlsx"), "list.xlsx");
+
+        assertThat(service.markRunning(taskId)).isTrue();
+        service.recordSuccessfulImportChunk(taskId, new ConfigImportBatchResult(
+                2, 1, 7, 3, 4, java.util.List.of(
+                resultFor("A001"),
+                resultFor("A002"),
+                resultFor("A003")
+        )));
+        service.markFailed(taskId, "A004: failed");
+
+        assertThat(service.importedTranCodes(taskId)).containsExactlyInAnyOrder("A001", "A002", "A003");
+        TransactionListImportProgressRow progress = service.progress(taskId);
+        assertThat(progress.status()).isEqualTo("FAILED");
+        assertThat(progress.importedCount()).isEqualTo(3);
+        assertThat(progress.tranInserted()).isEqualTo(2);
+        assertThat(progress.tranUpdated()).isEqualTo(1);
+        assertThat(progress.fieldInserted()).isEqualTo(7);
+        assertThat(progress.fieldUpdated()).isEqualTo(3);
+        assertThat(progress.fieldSkipped()).isEqualTo(4);
+
+        assertThat(service.markRunning(taskId)).isTrue();
+        assertThat(service.importedTranCodes(taskId)).containsExactlyInAnyOrder("A001", "A002", "A003");
+        assertThat(service.progress(taskId).importedCount()).isEqualTo(3);
     }
 
     @Test
@@ -127,6 +160,21 @@ class TransactionListImportTaskServiceTest {
                 return launcher;
             }
         };
+    }
+
+    private ConfigImportResult resultFor(String tranCode) {
+        return new ConfigImportResult(
+                1,
+                0,
+                1,
+                0,
+                0,
+                new ParsedConfigImport(
+                        new ParsedTranImport(tranCode, "SVC_" + tranCode, "tran", "module", "owner", "remark"),
+                        java.util.List.of(),
+                        java.util.List.of()
+                )
+        );
     }
 
     private static class RecordingLauncher implements TransactionListImportTaskLauncher {

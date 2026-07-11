@@ -17,6 +17,7 @@ public record TransactionListImportTaskRow(
         int fieldInserted,
         int fieldUpdated,
         int fieldSkipped,
+        String importedTranCodes,
         String failureMessage,
         LocalDateTime createdTime,
         LocalDateTime startedTime,

@@ -36,7 +36,7 @@ import java.util.zip.ZipOutputStream;
 public class SampleExcelExportService {
     private final Clock clock;
 
-    private static final String TXT_DELIMITER = "!";
+    private static final String TXT_DELIMITER = "|^";
     private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
     private static final String[] TRANSACTION_DIFF_TEXT_HEADERS = {
@@ -108,7 +108,6 @@ public class SampleExcelExportService {
             }
             writeLeadershipWorkbook(queryService, criteria, counts, leadershipFile);
             try (ZipOutputStream zip = new ZipOutputStream(outputStream, StandardCharsets.UTF_8)) {
-                writeTransactionStatEntry(zip, timestamp, counts);
                 writeZipFile(zip, ccbsFile);
                 writeZipFile(zip, cbspFile);
                 writeZipFile(zip, bothFile);
@@ -664,15 +663,6 @@ public class SampleExcelExportService {
         return new Styles(title, header, body, bodyAlternate, number, numberAlternate, percent, 21, 22, 26);
     }
 
-    private void writeTransactionStatEntry(ZipOutputStream zip, String timestamp, long[] counts) throws IOException {
-        StringBuilder text = new StringBuilder();
-        appendTextLine(text, "类型", "数量");
-        appendTextLine(text, "528成功CCBS失败", counts[0]);
-        appendTextLine(text, "CCBS成功528失败", counts[1]);
-        appendTextLine(text, "528与CCBS均失败但错误码不一致", counts[2]);
-        writeZipText(zip, "transdiff_stat_" + timestamp + ".txt", text);
-    }
-
     private void writeTransactionTextRow(SampleDetailRow row, BufferedWriter ccbs, BufferedWriter cbsp,
                                          BufferedWriter both, long[] counts) {
         try {
@@ -733,26 +723,10 @@ public class SampleExcelExportService {
         }
     }
 
-    private void writeZipText(ZipOutputStream zip, String filename, CharSequence text) throws IOException {
-        zip.putNextEntry(new ZipEntry(filename));
-        zip.write(text.toString().getBytes(StandardCharsets.UTF_8));
-        zip.closeEntry();
-    }
-
     private void writeZipFile(ZipOutputStream zip, Path file) throws IOException {
         zip.putNextEntry(new ZipEntry(file.getFileName().toString()));
         Files.copy(file, zip);
         zip.closeEntry();
-    }
-
-    private void appendTextLine(StringBuilder text, Object... columns) {
-        for (int i = 0; i < columns.length; i++) {
-            if (i > 0) {
-                text.append(TXT_DELIMITER);
-            }
-            text.append(columns[i] == null ? "" : columns[i]);
-        }
-        text.append('\n');
     }
 
     private void appendTextLine(BufferedWriter writer, Object... columns) throws IOException {

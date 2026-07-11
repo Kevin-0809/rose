@@ -67,6 +67,19 @@ class ConfigImportControllerTest {
         assertThat(taskService.progressTaskId()).isEqualTo(42L);
     }
 
+    @Test
+    void resumeListImportRelaunchesTaskAndRedirectsToProgressPage() {
+        ConfigImportService importService = null;
+        FakeTaskService taskService = new FakeTaskService(42L, progressRow());
+        ConfigImportController controller = new ConfigImportController(importService, taskService);
+
+        String view = controller.resumeListImport(42L);
+
+        assertThat(view).isEqualTo("redirect:/config/import/list-tasks/42");
+        assertThat(taskService.resumedTaskId()).isEqualTo(42L);
+    }
+
+
     private TransactionListImportProgressRow progressRow() {
         return new TransactionListImportProgressRow(
                 42L,
@@ -95,6 +108,7 @@ class ConfigImportControllerTest {
         private Path createdPath;
         private String createdOriginalFilename;
         private long progressTaskId;
+        private long resumedTaskId;
 
         FakeTaskService(long taskId, TransactionListImportProgressRow progress) {
             super(new NamedParameterJdbcTemplate(new DriverManagerDataSource("jdbc:h2:mem:fake_task_service", "sa", "")), emptyProvider());
@@ -115,6 +129,11 @@ class ConfigImportControllerTest {
             return progress;
         }
 
+        @Override
+        public void resume(long taskId) {
+            this.resumedTaskId = taskId;
+        }
+
         Path createdPath() {
             return createdPath;
         }
@@ -125,6 +144,10 @@ class ConfigImportControllerTest {
 
         long progressTaskId() {
             return progressTaskId;
+        }
+
+        long resumedTaskId() {
+            return resumedTaskId;
         }
     }
 
