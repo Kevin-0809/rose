@@ -7,8 +7,11 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<main class="shell layout-frame">
-  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
   <section class="page-head">
     <div>
       <div class="eyebrow">Replay Sampling Console</div>
@@ -130,6 +133,9 @@
     <a class="card entry" href="/config/fields"><strong>字段映射配置</strong><span>维护 SOP、SOAP、BizJSON 字段映射和中文名。</span></a>
   </section>
 </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
 <script src="/vendor/echarts.min.js"></script>
 <script th:inline="javascript">
   const summaryChartData = /*[[${summaryChart}]]*/ [];
