@@ -2,6 +2,7 @@
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <body>
 <aside th:fragment="sidebar(active)" id="app-sidebar" class="app-sidebar" aria-label="主导航">
+    <button class="sidebar-close" type="button" aria-label="关闭菜单">关闭</button>
     <a class="brand" href="/">
       <span class="brand-mark">R</span>
       <span>Rose Diff Studio</span>
@@ -68,10 +69,17 @@
     });
 
     const sidebarToggle = shell.querySelector('.sidebar-toggle');
+    const sidebarClose = shell.querySelector('.sidebar-close');
+    const closeSidebar = () => {
+      shell.classList.remove('sidebar-open');
+      sidebarToggle?.setAttribute('aria-expanded', 'false');
+    };
+
     sidebarToggle?.addEventListener('click', () => {
       const expanded = shell.classList.toggle('sidebar-open');
       sidebarToggle.setAttribute('aria-expanded', String(expanded));
     });
+    sidebarClose?.addEventListener('click', closeSidebar);
   })();
 </script>
 

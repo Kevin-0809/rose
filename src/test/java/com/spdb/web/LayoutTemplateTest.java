@@ -18,6 +18,8 @@ class LayoutTemplateTest {
         );
 
         assertThat(hasClassToken(html, "aside", "app-sidebar")).isTrue();
+        assertThat(html).contains("class=\"sidebar-close\"")
+                .contains("aria-label=\"关闭菜单\"");
         assertThat(hasClassToken(html, "section", "nav-group")).isTrue();
         assertThat(html).contains("数据准备");
         assertThat(html).contains("执行分析");
@@ -40,6 +42,9 @@ class LayoutTemplateTest {
                 .contains("/migration/commands")
                 .contains("/migration/sql-commands");
         assertThat(hasClassToken(html, "nav", "nav")).isFalse();
+        assertThat(html).contains("shell.classList.remove('sidebar-open')")
+                .contains("sidebarToggle?.setAttribute('aria-expanded', 'false')")
+                .contains("classList.toggle('is-expanded', expanded)");
     }
 
     private boolean hasClassToken(String html, String tagName, String className) {
