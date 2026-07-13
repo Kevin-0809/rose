@@ -7,8 +7,11 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<main class="shell layout-frame">
-  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
   <div class="page-head"><div><div class="eyebrow">Field Mapping</div><h1>字段映射配置</h1></div></div>
   <form class="panel form-grid" method="post" action="/config/fields" th:object="${fieldForm}">
     <input type="hidden" th:field="*{mappingId}">
@@ -53,5 +56,8 @@
     </table>
   </section>
 </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
 </body>
 </html>

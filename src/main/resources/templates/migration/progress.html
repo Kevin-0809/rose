@@ -7,8 +7,11 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<main class="shell layout-frame">
-  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
   <div class="page-head">
     <div>
       <div class="eyebrow">Migration Progress</div>
@@ -77,6 +80,9 @@
     </section>
   </section>
 </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
 <script th:if="${progress != null and (progress.status == 'RUNNING' or progress.status == 'CANCEL_REQUESTED')}" th:inline="javascript">
   /*<![CDATA[*/
   const commandId = /*[[${progress.commandId}]]*/ 0;

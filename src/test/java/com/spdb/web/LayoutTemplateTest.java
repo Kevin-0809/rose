@@ -76,4 +76,38 @@ class LayoutTemplateTest {
                     .doesNotContain("name=\"page\" value=\"1\"");
         }
     }
+
+    @Test
+    void pagesComposeTheSidebarAndWorkspaceWithoutCrossFragmentMarkup() throws Exception {
+        List<String> templates = List.of(
+                "/templates/home.html",
+                "/templates/config/import.html",
+                "/templates/config/import-list-progress.html",
+                "/templates/config/trans.html",
+                "/templates/config/fields.html",
+                "/templates/config/recording.html",
+                "/templates/sampling/commands.html",
+                "/templates/sampling/summaries.html",
+                "/templates/samples/transaction-diffs.html",
+                "/templates/samples/field-diffs.html",
+                "/templates/messages/flow-logs.html",
+                "/templates/messages/flow-log-entry.html",
+                "/templates/migration/commands.html",
+                "/templates/migration/sql-commands.html",
+                "/templates/migration/progress.html"
+        );
+
+        for (String template : templates) {
+            String html = new String(getClass().getResourceAsStream(template).readAllBytes(), StandardCharsets.UTF_8);
+
+            assertThat(html)
+                    .as(template)
+                    .contains("<div class=\"app-shell\" th:attr=\"data-active=${active}\">")
+                    .contains("fragments/layout :: sidebar(${active})")
+                    .contains("<div class=\"app-workspace\">")
+                    .contains("fragments/layout :: workspaceBar")
+                    .contains("fragments/layout :: sidebarScript")
+                    .doesNotContain("fragments/layout :: topbar");
+        }
+    }
 }

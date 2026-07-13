@@ -8,8 +8,11 @@
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css">
 </head>
 <body>
-<main class="shell layout-frame">
-  <div th:replace="~{fragments/layout :: topbar(${active})}"></div>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
   <div class="page-head">
     <div>
       <div class="eyebrow">Message Flow Migration</div>
@@ -122,6 +125,9 @@
     </form>
   </section>
 </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
 <script src="/vendor/flatpickr/flatpickr.min.js"></script>
 <script src="/vendor/flatpickr/l10n/zh.js"></script>
 <script>

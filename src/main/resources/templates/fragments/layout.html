@@ -1,27 +1,79 @@
 <!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <body>
-<header th:fragment="topbar(active)" class="topbar">
-  <a class="brand" href="/">
-    <span class="brand-mark">R</span>
-    <span>Rose Diff Studio</span>
-  </a>
-  <nav class="nav">
-    <a th:classappend="${active == 'home'} ? 'active'" href="/">首页</a>
-    <a th:classappend="${active == 'sampling-commands'} ? 'active'" href="/sampling/commands">采样指令</a>
-    <a th:classappend="${active == 'sampling-summaries'} ? 'active'" href="/sampling/summaries">统计历史</a>
-    <a th:classappend="${active == 'transaction-diffs'} ? 'active'" href="/samples/transaction-diffs">交易级差异</a>
-    <a th:classappend="${active == 'field-diffs'} ? 'active'" href="/samples/field-diffs">字段级差异</a>
-    <a th:classappend="${active == 'message-flow-logs'} ? 'active'" href="/messages/flow-logs">报文查询</a>
-    <a th:classappend="${active == 'message-flow-log-entry'} ? 'active'" href="/messages/flow-logs/new">报文录入</a>
-    <a th:classappend="${active == 'migration'} ? 'active'" href="/migration/commands">数据迁移</a>
-    <a th:classappend="${active == 'migration-sql'} ? 'active'" href="/migration/sql-commands">SQL迁移</a>
-    <a th:classappend="${active == 'recording'} ? 'active'" href="/config/recording">录制配置</a>
-    <a th:classappend="${active == 'configImport'} ? 'active'" href="/config/import">交易导入</a>
-    <a th:classappend="${active == 'trans'} ? 'active'" href="/config/trans">交易配置</a>
-    <a th:classappend="${active == 'fields'} ? 'active'" href="/config/fields">字段映射</a>
-  </nav>
+<aside th:fragment="sidebar(active)" id="app-sidebar" class="app-sidebar" aria-label="主导航">
+    <a class="brand" href="/">
+      <span class="brand-mark">R</span>
+      <span>Rose Diff Studio</span>
+    </a>
+    <a class="sidebar-home" th:classappend="${active == 'home'} ? 'active'" href="/">首页</a>
+
+    <section class="nav-group" data-group="setup">
+      <button class="nav-group-toggle" type="button" aria-controls="nav-group-setup" aria-expanded="false">数据准备</button>
+      <div id="nav-group-setup" class="nav-group-links">
+        <a th:classappend="${active == 'configImport'} ? 'active'" th:attr="aria-current=${active == 'configImport'} ? 'page' : null" href="/config/import">交易导入</a>
+        <a th:classappend="${active == 'trans'} ? 'active'" th:attr="aria-current=${active == 'trans'} ? 'page' : null" href="/config/trans">交易配置</a>
+        <a th:classappend="${active == 'fields'} ? 'active'" th:attr="aria-current=${active == 'fields'} ? 'page' : null" href="/config/fields">字段映射</a>
+        <a th:classappend="${active == 'recording'} ? 'active'" th:attr="aria-current=${active == 'recording'} ? 'page' : null" href="/config/recording">录制配置</a>
+      </div>
+    </section>
+
+    <section class="nav-group" data-group="analysis">
+      <button class="nav-group-toggle" type="button" aria-controls="nav-group-analysis" aria-expanded="false">执行分析</button>
+      <div id="nav-group-analysis" class="nav-group-links">
+        <a th:classappend="${active == 'sampling-commands'} ? 'active'" th:attr="aria-current=${active == 'sampling-commands'} ? 'page' : null" href="/sampling/commands">采样指令</a>
+        <a th:classappend="${active == 'sampling-summaries'} ? 'active'" th:attr="aria-current=${active == 'sampling-summaries'} ? 'page' : null" href="/sampling/summaries">统计历史</a>
+        <a th:classappend="${active == 'transaction-diffs'} ? 'active'" th:attr="aria-current=${active == 'transaction-diffs'} ? 'page' : null" href="/samples/transaction-diffs">交易级差异</a>
+        <a th:classappend="${active == 'field-diffs'} ? 'active'" th:attr="aria-current=${active == 'field-diffs'} ? 'page' : null" href="/samples/field-diffs">字段级差异</a>
+      </div>
+    </section>
+
+    <section class="nav-group" data-group="operations">
+      <button class="nav-group-toggle" type="button" aria-controls="nav-group-operations" aria-expanded="false">运维工具</button>
+      <div id="nav-group-operations" class="nav-group-links">
+        <a th:classappend="${active == 'message-flow-logs'} ? 'active'" th:attr="aria-current=${active == 'message-flow-logs'} ? 'page' : null" href="/messages/flow-logs">报文查询</a>
+        <a th:classappend="${active == 'message-flow-log-entry'} ? 'active'" th:attr="aria-current=${active == 'message-flow-log-entry'} ? 'page' : null" href="/messages/flow-logs/new">报文录入</a>
+        <a th:classappend="${active == 'migration'} ? 'active'" th:attr="aria-current=${active == 'migration'} ? 'page' : null" href="/migration/commands">数据迁移</a>
+        <a th:classappend="${active == 'migration-sql'} ? 'active'" th:attr="aria-current=${active == 'migration-sql'} ? 'page' : null" href="/migration/sql-commands">SQL迁移</a>
+      </div>
+    </section>
+  </aside>
+
+<header th:fragment="workspaceBar" class="workspace-bar">
+  <button class="sidebar-toggle" type="button" aria-controls="app-sidebar" aria-expanded="false" aria-label="切换导航">菜单</button>
 </header>
+
+<script th:fragment="sidebarScript">
+  (() => {
+    const shell = document.querySelector('.app-shell');
+    if (!shell) return;
+
+    const groups = [...shell.querySelectorAll('.nav-group')];
+    const activeGroup = document.querySelector('.nav-group-links a.active')?.closest('.nav-group');
+
+    const setExpandedGroup = (group) => {
+      groups.forEach((item) => {
+        const expanded = item.dataset.group === group;
+        item.classList.toggle('is-expanded', expanded);
+        item.querySelector('.nav-group-toggle')?.setAttribute('aria-expanded', String(expanded));
+      });
+    };
+
+    setExpandedGroup(activeGroup?.dataset.group ?? null);
+    groups.forEach((group) => {
+      const groupToggle = group.querySelector('.nav-group-toggle');
+      groupToggle?.addEventListener('click', () => {
+        setExpandedGroup(group.classList.contains('is-expanded') ? null : group.dataset.group);
+      });
+    });
+
+    const sidebarToggle = shell.querySelector('.sidebar-toggle');
+    sidebarToggle?.addEventListener('click', () => {
+      const expanded = shell.classList.toggle('sidebar-open');
+      sidebarToggle.setAttribute('aria-expanded', String(expanded));
+    });
+  })();
+</script>
 
 <div th:fragment="pager(result)" class="pager">
   <span class="muted" th:text="'共 ' + ${result.total()} + ' 条，第 ' + ${result.page()} + ' / ' + ${result.totalPages()} + ' 页'">共 0 条</span>

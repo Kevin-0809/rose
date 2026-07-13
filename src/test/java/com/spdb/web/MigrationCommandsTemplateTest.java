@@ -15,7 +15,10 @@ class MigrationCommandsTemplateTest {
                 StandardCharsets.UTF_8
         );
 
-        assertThat(html).contains("fragments/layout :: topbar");
+        assertThat(html).contains("class=\"app-shell\"");
+        assertThat(html).contains("fragments/layout :: sidebar(${active})");
+        assertThat(html).contains("fragments/layout :: workspaceBar");
+        assertThat(html).contains("fragments/layout :: sidebarScript");
         assertThat(html).contains("创建迁移指令");
         assertThat(html).contains("/vendor/flatpickr/flatpickr.min.css");
         assertThat(html).contains("/vendor/flatpickr/flatpickr.min.js");

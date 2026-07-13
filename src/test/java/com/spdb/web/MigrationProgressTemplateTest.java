@@ -15,7 +15,10 @@ class MigrationProgressTemplateTest {
                 StandardCharsets.UTF_8
         );
 
-        assertThat(html).contains("fragments/layout :: topbar");
+        assertThat(html).contains("class=\"app-shell\"");
+        assertThat(html).contains("fragments/layout :: sidebar(${active})");
+        assertThat(html).contains("fragments/layout :: workspaceBar");
+        assertThat(html).contains("fragments/layout :: sidebarScript");
         assertThat(html).contains("迁移进度");
         assertThat(html).contains("progress-bar");
         assertThat(html).contains("progressText()");
