@@ -20,6 +20,7 @@ class LayoutTemplateTest {
         assertThat(hasClassToken(html, "aside", "app-sidebar")).isTrue();
         assertThat(html).contains("class=\"sidebar-close\"")
                 .contains("aria-label=\"关闭菜单\"");
+        assertThat(html).contains("th:attr=\"aria-current=${active == 'home'} ? 'page' : null\"");
         assertThat(hasClassToken(html, "section", "nav-group")).isTrue();
         assertThat(html).contains("数据准备");
         assertThat(html).contains("执行分析");
@@ -44,7 +45,15 @@ class LayoutTemplateTest {
         assertThat(hasClassToken(html, "nav", "nav")).isFalse();
         assertThat(html).contains("shell.classList.remove('sidebar-open')")
                 .contains("sidebarToggle?.setAttribute('aria-expanded', 'false')")
-                .contains("classList.toggle('is-expanded', expanded)");
+                .contains("classList.toggle('is-expanded', expanded)")
+                .contains("const syncSidebarAccessibility = () => {")
+                .contains("const mobile = window.matchMedia('(max-width: 720px)').matches;")
+                .contains("sidebar.toggleAttribute('inert', mobile && !open)")
+                .contains("sidebar.setAttribute('aria-hidden', String(mobile && !open))")
+                .contains("sidebarClose?.focus()")
+                .contains("sidebarToggle?.focus()")
+                .contains("event.key === 'Escape'")
+                .contains("window.addEventListener('resize', syncSidebarAccessibility)");
     }
 
     private boolean hasClassToken(String html, String tagName, String className) {

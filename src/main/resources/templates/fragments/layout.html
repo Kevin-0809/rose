@@ -7,7 +7,7 @@
       <span class="brand-mark">R</span>
       <span>Rose Diff Studio</span>
     </a>
-    <a class="sidebar-home" th:classappend="${active == 'home'} ? 'active'" href="/">首页</a>
+    <a class="sidebar-home" th:classappend="${active == 'home'} ? 'active'" th:attr="aria-current=${active == 'home'} ? 'page' : null" href="/">首页</a>
 
     <section class="nav-group" data-group="setup">
       <button class="nav-group-toggle" type="button" aria-controls="nav-group-setup" aria-expanded="false">数据准备</button>
@@ -68,18 +68,37 @@
       });
     });
 
+    const sidebar = shell.querySelector('.app-sidebar');
     const sidebarToggle = shell.querySelector('.sidebar-toggle');
     const sidebarClose = shell.querySelector('.sidebar-close');
+    if (!sidebar) return;
+
+    const syncSidebarAccessibility = () => {
+      const mobile = window.matchMedia('(max-width: 720px)').matches;
+      const open = shell.classList.contains('sidebar-open');
+      sidebar.toggleAttribute('inert', mobile && !open);
+      sidebar.setAttribute('aria-hidden', String(mobile && !open));
+    };
+
     const closeSidebar = () => {
       shell.classList.remove('sidebar-open');
       sidebarToggle?.setAttribute('aria-expanded', 'false');
+      syncSidebarAccessibility();
+      sidebarToggle?.focus();
     };
 
     sidebarToggle?.addEventListener('click', () => {
       const expanded = shell.classList.toggle('sidebar-open');
       sidebarToggle.setAttribute('aria-expanded', String(expanded));
+      syncSidebarAccessibility();
+      if (expanded) sidebarClose?.focus();
     });
     sidebarClose?.addEventListener('click', closeSidebar);
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && shell.classList.contains('sidebar-open')) closeSidebar();
+    });
+    window.addEventListener('resize', syncSidebarAccessibility);
+    syncSidebarAccessibility();
   })();
 </script>
 
