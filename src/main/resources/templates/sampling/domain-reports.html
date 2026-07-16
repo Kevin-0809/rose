@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>批次领域报表</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Batch Domain Report</div>
+          <h1>批次领域报表</h1>
+          <p class="muted">按采样批次汇总模块交易结果、字段统计和配置缺口。</p>
+        </div>
+      </div>
+
+      <div class="tag green" th:if="${message}" th:text="${message}"></div>
+      <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
+
+      <form class="panel form-grid" method="get" action="/sampling/domain-reports">
+        <div class="span-2">
+          <label for="report-batch-id">采样批次</label>
+          <input id="report-batch-id" name="batchId" th:value="${batchId}" placeholder="输入已完成的采样批次号">
+        </div>
+        <div class="actions"><button class="btn primary" type="submit">查询报表</button></div>
+      </form>
+
+      <form class="panel form-grid" method="post" action="/sampling/domain-reports">
+        <input type="hidden" name="batchId" th:value="${batchId}">
+        <div class="span-2">
+          <div class="field-label">生成批次</div>
+          <div class="muted" th:text="${batchId} ?: '请先输入采样批次号并查询'">请先输入采样批次号并查询</div>
+        </div>
+        <div class="actions"><button class="btn primary" type="submit" th:disabled="${batchId == null or batchId.isBlank()}">生成报表</button></div>
+      </form>
+
+      <section class="panel" th:if="${command != null}">
+        <div class="page-head compact-head">
+          <div>
+            <h2>生成状态</h2>
+            <p class="muted" th:text="${command.batchId()}"></p>
+          </div>
+          <span id="report-status" class="tag" role="status" aria-live="polite" aria-atomic="true" th:classappend="${command.status() == 'SUCCEEDED'} ? 'green' : (${command.status() == 'FAILED'} ? 'yellow' : '')" th:text="${command.status()}"></span>
+        </div>
+        <p class="muted" th:if="${command.errorMessage() != null}" th:text="${command.errorMessage()}"></p>
+      </section>
+
+      <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
+        <h2>模块交易结果</h2>
+        <table class="domain-report-table">
+          <thead><tr><th>模块</th><th>覆盖服务</th><th>发送交易</th><th>comp_result=1</th><th>comp_result=2</th><th>comp_result=3</th><th>comp_result=4</th><th>comp_result=8</th></tr></thead>
+          <tbody><tr th:each="row : ${transactionStats}"><td th:text="${row.moduleName()}"></td><td th:text="${row.coveredServiceCount()}"></td><td th:text="${row.sentTransactionCount()}"></td><td th:text="${row.compResult1Count()}"></td><td th:text="${row.compResult2Count()}"></td><td th:text="${row.compResult3Count()}"></td><td th:text="${row.compResult4Count()}"></td><td th:text="${row.compResult8Count()}"></td></tr></tbody>
+        </table>
+      </section>
+
+      <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
+        <h2>字段统计</h2>
+        <table><thead><tr><th>模块</th><th>字段总数</th><th>差异字段</th><th>无差异字段</th></tr></thead>
+          <tbody><tr th:each="row : ${fieldStats}"><td th:text="${row.moduleName()}"></td><td th:text="${row.totalFieldCount()}"></td><td th:text="${row.diffFieldCount()}"></td><td th:text="${row.noDiffFieldCount()}"></td></tr></tbody>
+        </table>
+      </section>
+
+      <section class="panel" th:if="${command != null and command.status() == 'SUCCEEDED'}">
+        <h2>配置缺口</h2>
+        <p class="muted gap-note">展示未配置服务/交易或未映射字段，以及受影响记录数。</p>
+        <div class="gap-list">
+          <div class="gap-row" th:each="gap : ${gaps}">
+            <span class="tag yellow" th:text="${gap.gapType()}"></span>
+            <small th:text="${gap.serviceCode() + ' / ' + gap.messageType() + ' / ' + gap.fieldKey() + '，影响 ' + gap.affectedCount() + ' 条'}"></small>
+          </div>
+          <p class="muted" th:if="${gaps.isEmpty()}">无配置缺口。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
+<script th:if="${command != null and (command.status() == 'PENDING' or command.status() == 'RUNNING')}" th:inline="javascript">
+  (() => {
+    const progressUrl = /*[[@{/sampling/domain-reports/{batchId}/progress(batchId=${command.batchId()})}]]*/ '';
+    const poll = () => fetch(progressUrl).then(response => response.json()).then((command) => {
+      if (!command) {
+        stopPolling();
+        return;
+      }
+      if (command.status === 'SUCCEEDED' || command.status === 'FAILED') {
+        stopPolling();
+        window.location.reload();
+        return;
+      }
+      else document.querySelector('#report-status').textContent = command.status;
+    }).catch(stopPolling);
+    const intervalId = window.setInterval(poll, 3000);
+    const stopPolling = () => window.clearInterval(intervalId);
+    window.addEventListener('pagehide', stopPolling);
+    window.addEventListener('unload', stopPolling);
+  })();
+</script>
+</body>
+</html>

@@ -417,6 +417,65 @@ comment on column ana_transaction_list_import_task.failure_message is '失败批
 create index if not exists idx_ana_transaction_list_import_task_status
 on ana_transaction_list_import_task(status, created_time desc);
 
+-- Batch domain report materialization tables.
+create table if not exists ana_batch_domain_report_command (
+    command_id bigserial primary key,
+    batch_id varchar(64) not null,
+    status varchar(32) not null default 'PENDING',
+    started_time timestamp,
+    ended_time timestamp,
+    error_message varchar(4000),
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_batch_domain_report_command_batch unique (batch_id),
+    constraint ck_ana_batch_domain_report_command_status
+        check (status in ('PENDING','RUNNING','SUCCEEDED','FAILED'))
+);
+
+create table if not exists ana_batch_domain_transaction_stat (
+    stat_id bigserial primary key,
+    batch_id varchar(64) not null,
+    module_name varchar(100) not null,
+    covered_service_count bigint not null default 0,
+    sent_transaction_count bigint not null default 0,
+    comp_result_1_count bigint not null default 0,
+    comp_result_2_count bigint not null default 0,
+    comp_result_3_count bigint not null default 0,
+    comp_result_4_count bigint not null default 0,
+    comp_result_8_count bigint not null default 0,
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_batch_domain_transaction_stat unique (batch_id, module_name)
+);
+
+create table if not exists ana_batch_domain_field_stat (
+    stat_id bigserial primary key,
+    batch_id varchar(64) not null,
+    module_name varchar(100) not null,
+    total_field_count bigint not null default 0,
+    diff_field_count bigint not null default 0,
+    no_diff_field_count bigint not null default 0,
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_batch_domain_field_stat unique (batch_id, module_name)
+);
+
+create table if not exists ana_batch_report_gap (
+    gap_id bigserial primary key,
+    batch_id varchar(64) not null,
+    gap_type varchar(32) not null,
+    service_code varchar(200),
+    message_type varchar(32),
+    field_key varchar(500),
+    affected_count bigint not null default 0,
+    created_time timestamp not null default current_timestamp,
+    constraint ck_ana_batch_report_gap_type
+        check (gap_type in ('UNCONFIGURED_SERVICE','UNMAPPED_FIELD'))
+);
+
+create index if not exists idx_ana_batch_report_gap_batch_type
+on ana_batch_report_gap(batch_id, gap_type);
+
 create index if not exists idx_ana_field_mapping_lookup
 on ana_field_mapping(tran_code, service_code, sop_field_name, soap_field_name, bizjson_field_name);
 
@@ -520,3 +579,6 @@ on ana_module_owner_config(status, module_name);
 
 create index if not exists idx_ana_field_mapping_sampling
 on ana_field_mapping(service_code, sop_field_name, bizjson_field_name, tran_code);
+
+create index if not exists idx_msg_flow_log_response_report_time_trans
+on msg_flow_log_response(response_time, trans_id);
