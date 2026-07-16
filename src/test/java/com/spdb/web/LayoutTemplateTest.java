@@ -35,6 +35,8 @@ class LayoutTemplateTest {
         assertThat(sectionForGroup(html, "analysis"))
                 .contains("/sampling/commands")
                 .contains("/sampling/summaries")
+                .contains("/sampling/domain-reports")
+                .contains("批次领域报表")
                 .contains("/samples/transaction-diffs")
                 .contains("/samples/field-diffs");
         assertThat(sectionForGroup(html, "operations"))

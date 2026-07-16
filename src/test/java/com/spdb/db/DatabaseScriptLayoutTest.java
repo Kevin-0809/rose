@@ -185,4 +185,37 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("ck_ana_transaction_list_import_task_status");
         assertThat(ddl).contains("idx_ana_transaction_list_import_task_status");
     }
+
+    @Test
+    void ddlContainsBatchDomainReportTablesAndIndexes() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(ddl).contains("create table if not exists ana_batch_domain_report_command");
+        assertThat(ddl).contains("create table if not exists ana_batch_domain_transaction_stat");
+        assertThat(ddl).contains("create table if not exists ana_batch_domain_field_stat");
+        assertThat(ddl).contains("create table if not exists ana_batch_report_gap");
+        assertThat(ddl).contains("batch_id varchar(64) not null");
+        assertThat(ddl).contains("check (status in ('pending','running','succeeded','failed'))");
+        assertThat(ddl).contains("module_name varchar(100) not null");
+        assertThat(ddl).contains("covered_service_count bigint not null default 0");
+        assertThat(ddl).contains("sent_transaction_count bigint not null default 0");
+        assertThat(ddl).contains("comp_result_1_count bigint not null default 0");
+        assertThat(ddl).contains("comp_result_2_count bigint not null default 0");
+        assertThat(ddl).contains("comp_result_3_count bigint not null default 0");
+        assertThat(ddl).contains("comp_result_4_count bigint not null default 0");
+        assertThat(ddl).contains("comp_result_8_count bigint not null default 0");
+        assertThat(ddl).contains("total_field_count bigint not null default 0");
+        assertThat(ddl).contains("diff_field_count bigint not null default 0");
+        assertThat(ddl).contains("no_diff_field_count bigint not null default 0");
+        assertThat(ddl).contains("gap_type varchar(32) not null");
+        assertThat(ddl).contains("service_code varchar(200)");
+        assertThat(ddl).contains("message_type varchar(32)");
+        assertThat(ddl).contains("field_key varchar(500)");
+        assertThat(ddl).contains("affected_count bigint not null default 0");
+        assertThat(ddl).contains("constraint uk_ana_batch_domain_transaction_stat unique (batch_id, module_name)");
+        assertThat(ddl).contains("constraint uk_ana_batch_domain_field_stat unique (batch_id, module_name)");
+        assertThat(ddl).contains("idx_ana_batch_report_gap_batch_type");
+        assertThat(ddl).contains("idx_msg_flow_log_response_report_time_trans");
+        assertThat(ddl).contains("on msg_flow_log_response(response_time, trans_id)");
+    }
 }

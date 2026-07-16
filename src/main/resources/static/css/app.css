@@ -1036,6 +1036,30 @@ td {
   white-space: nowrap;
 }
 
+.domain-report-table {
+  min-width: 980px;
+}
+
+.compact-head {
+  margin-bottom: 10px;
+}
+
+.gap-note,
+.gap-row small {
+  font-size: 12px;
+}
+
+.gap-list {
+  display: grid;
+  gap: 8px;
+}
+
+.gap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 tbody tr:hover {
   background: rgba(56, 189, 248, 0.08);
 }

@@ -24,6 +24,7 @@
       <div id="nav-group-analysis" class="nav-group-links">
         <a th:classappend="${active == 'sampling-commands'} ? 'active'" th:attr="aria-current=${active == 'sampling-commands'} ? 'page' : null" href="/sampling/commands">采样指令</a>
         <a th:classappend="${active == 'sampling-summaries'} ? 'active'" th:attr="aria-current=${active == 'sampling-summaries'} ? 'page' : null" href="/sampling/summaries">统计历史</a>
+        <a th:classappend="${active == 'batch-domain-reports'} ? 'active'" th:attr="aria-current=${active == 'batch-domain-reports'} ? 'page' : null" href="/sampling/domain-reports">批次领域报表</a>
         <a th:classappend="${active == 'transaction-diffs'} ? 'active'" th:attr="aria-current=${active == 'transaction-diffs'} ? 'page' : null" href="/samples/transaction-diffs">交易级差异</a>
         <a th:classappend="${active == 'field-diffs'} ? 'active'" th:attr="aria-current=${active == 'field-diffs'} ? 'page' : null" href="/samples/field-diffs">字段级差异</a>
       </div>
