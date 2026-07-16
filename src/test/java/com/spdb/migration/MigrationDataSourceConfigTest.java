@@ -1,9 +1,11 @@
 package com.spdb.migration;
 
+import com.ulisesbocchio.jasyptspringbootstarter.JasyptSpringBootAutoConfiguration;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -32,12 +34,42 @@ class MigrationDataSourceConfigTest {
                     "rose.datasource.bxds.driver-class-name=org.h2.Driver"
             );
 
+    private final ApplicationContextRunner encryptedContextRunner = new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(
+                    DataSourceAutoConfiguration.class,
+                    JdbcTemplateAutoConfiguration.class,
+                    JasyptSpringBootAutoConfiguration.class
+            ))
+            .withUserConfiguration(MigrationDataSourceConfig.class)
+            .withPropertyValues(
+                    "jasypt.encryptor.password=test-master-password",
+                    "spring.datasource.url=jdbc:h2:mem:encrypted_primary;DB_CLOSE_DELAY=-1",
+                    "spring.datasource.username=sa",
+                    "spring.datasource.password=ENC(R2tWJpCAl9tCxSdugKhz2YDjpExsiX9kvyO1zxMbJhQkGSb+XEKOYFD6rn9RVYjn)",
+                    "spring.datasource.driver-class-name=org.h2.Driver",
+                    "rose.datasource.bxds.url=jdbc:h2:mem:encrypted_bxds;DB_CLOSE_DELAY=-1",
+                    "rose.datasource.bxds.username=sa",
+                    "rose.datasource.bxds.password=ENC(sN62lIeF0afH0UAM9tlRpYWd8iSIlP/564Kc9w1dHRQ80nlCeqQpC8Ow86GolkwY)",
+                    "rose.datasource.bxds.driver-class-name=org.h2.Driver"
+            );
+
     @Test
     void primaryDataSourceDoesNotBindSchema() {
         MigrationDataSourceConfig config = new MigrationDataSourceConfig();
 
         assertThat(config.sourceDataSourceName()).isEqualTo("bxds");
         assertThat(config.targetDataSourceName()).isEqualTo("primary");
+    }
+
+    @Test
+    void decryptsPasswordsBeforeBindingBothDataSources() {
+        encryptedContextRunner.run(context -> {
+            DataSourceProperties primary = context.getBean("primaryDataSourceProperties", DataSourceProperties.class);
+            DataSourceProperties bxds = context.getBean("bxdsDataSourceProperties", DataSourceProperties.class);
+
+            assertThat(primary.getPassword()).isEqualTo("primary-secret");
+            assertThat(bxds.getPassword()).isEqualTo("bxds-secret");
+        });
     }
 
     @Test
@@ -49,8 +81,12 @@ class MigrationDataSourceConfigTest {
                 .isEqualTo("${BXDS_DATASOURCE_URL:jdbc:postgresql://localhost:15432/postgres}");
         assertThat(properties.getProperty("rose.datasource.bxds.username"))
                 .isEqualTo("${BXDS_DATASOURCE_USERNAME:adp}");
+        assertThat(properties.getProperty("spring.datasource.password"))
+                .startsWith("ENC(")
+                .endsWith(")");
         assertThat(properties.getProperty("rose.datasource.bxds.password"))
-                .isEqualTo("${BXDS_DATASOURCE_PASSWORD:OpenGauss@123}");
+                .startsWith("${BXDS_DATASOURCE_PASSWORD:ENC(")
+                .endsWith(")}");
         assertThat(properties).doesNotContainKey("spring.jpa.properties.hibernate.default_schema");
     }
 
