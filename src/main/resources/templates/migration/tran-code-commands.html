@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>交易码迁移</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Transaction Code Migration</div>
+          <h1>交易码迁移</h1>
+          <p class="muted" th:text="'从 ' + ${sourceDataSource} + ' 最近五天的报文日志中，按交易码迁移完整请求/响应交易对至 ' + ${targetDataSource}">按交易码迁移完整请求/响应交易对。</p>
+        </div>
+        <div class="actions"><a class="btn" href="/migration/commands">时间范围迁移</a></div>
+      </div>
+
+      <div class="section-title"><div><div class="eyebrow">Create</div><h2>创建交易码迁移指令</h2></div></div>
+      <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
+      <form class="panel form-grid" method="post" action="/migration/tran-code-commands" th:object="${form}">
+        <div>
+          <label>源数据源</label>
+          <input th:value="${sourceDataSource}" readonly class="muted-input">
+        </div>
+        <div>
+          <label>目标数据源</label>
+          <input th:value="${targetDataSource}" readonly class="muted-input">
+        </div>
+        <div class="span-2">
+          <label>交易码</label>
+          <input name="tranCodes" th:value="*{tranCodes}" placeholder="多个交易码用英文逗号分隔，例如：A001,B002,C003" required>
+        </div>
+        <div>
+          <label>每类报文迁移笔数</label>
+          <input name="sampleSize" type="number" th:value="*{sampleSize}" min="1" required>
+        </div>
+        <div>
+          <label>并行度</label>
+          <input name="parallelism" type="number" th:value="*{parallelism}" min="1" max="8" required>
+        </div>
+        <div class="span-2">
+          <label>备注</label>
+          <input name="remark" th:value="*{remark}" placeholder="可选，记录本次迁移用途">
+        </div>
+        <div class="span-2">
+          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 个完整请求/响应交易对；从当天起向前查找五个自然日，无数据的交易码自动忽略。</p>
+        </div>
+        <div class="span-2 actions">
+          <button class="btn primary" type="submit">创建交易码迁移</button>
+          <span class="muted" style="font-size:12px;align-self:center">创建后异步执行，可在进度页查看每个交易码的结果。</span>
+        </div>
+      </form>
+
+      <section class="panel table-wrap">
+        <div class="section-title"><div><div class="eyebrow">History</div><h2>交易码迁移指令列表</h2></div></div>
+        <table class="command-table">
+          <thead>
+          <tr>
+            <th>指令ID</th><th>状态</th><th>交易码</th><th>每类笔数</th><th>并行度</th><th>进度</th>
+            <th>已迁移交易笔数</th><th>丢弃数</th><th>跳过数</th><th>耗时</th><th>创建时间</th><th>操作</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr th:each="row : ${result.rows()}">
+            <td th:text="${row.commandId}"></td>
+            <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
+            <td th:text="${row.tranCodes}"></td>
+            <td th:text="${row.sampleSize}"></td>
+            <td th:text="${row.parallelism}"></td>
+            <td th:text="${row.progressText()}"></td>
+            <td th:text="${row.migratedRows}"></td>
+            <td th:text="${row.droppedRows}"></td>
+            <td th:text="${row.skippedRows}"></td>
+            <td th:text="${row.durationText}"></td>
+            <td th:text="${row.createdTime}"></td>
+            <td><a class="btn" th:href="@{/migration/commands/{id}(id=${row.commandId})}">进度</a></td>
+          </tr>
+          </tbody>
+        </table>
+        <form method="get"><div th:replace="~{fragments/layout :: pager(${result})}"></div></form>
+      </section>
+    </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
+</body>
+</html>

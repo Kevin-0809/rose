@@ -4,6 +4,7 @@ import com.spdb.migration.MigrationCommandForm;
 import com.spdb.migration.MigrationCommandService;
 import com.spdb.migration.MigrationProgressRow;
 import com.spdb.migration.MigrationSqlCommandForm;
+import com.spdb.migration.MigrationTranCodeCommandForm;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -72,6 +73,31 @@ public class MigrationController {
         }
     }
 
+    @GetMapping("/migration/tran-code-commands")
+    public String tranCodeCommandsPage(@RequestParam(required = false) Integer page,
+                                       @RequestParam(required = false) Integer size,
+                                       Model model) {
+        PageRequestParams params = PageRequestParams.of(page, size);
+        model.addAttribute("active", "migration-tran-code");
+        model.addAttribute("result", migrationCommandService.searchTranCode(params));
+        model.addAttribute("form", MigrationTranCodeCommandForm.empty());
+        model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
+        model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());
+        return "migration/tran-code-commands";
+    }
+
+    @PostMapping("/migration/tran-code-commands")
+    public String createTranCodeCommand(@ModelAttribute MigrationTranCodeCommandForm form, Model model) {
+        try {
+            long createdId = migrationCommandService.createTranCodeCommand(form);
+            return "redirect:/migration/commands/" + createdId;
+        } catch (IllegalArgumentException ex) {
+            addTranCodeCommandsPageModel(model, form);
+            model.addAttribute("error", ex.getMessage());
+            return "migration/tran-code-commands";
+        }
+    }
+
     @GetMapping("/migration/commands/{id}")
     public String progressPage(@PathVariable long id, Model model) {
         model.addAttribute("active", "migration");
@@ -108,6 +134,14 @@ public class MigrationController {
     private void addSqlCommandsPageModel(Model model, MigrationSqlCommandForm form) {
         model.addAttribute("active", "migration-sql");
         model.addAttribute("result", migrationCommandService.searchSql(PageRequestParams.of(null, null)));
+        model.addAttribute("form", form);
+        model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
+        model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());
+    }
+
+    private void addTranCodeCommandsPageModel(Model model, MigrationTranCodeCommandForm form) {
+        model.addAttribute("active", "migration-tran-code");
+        model.addAttribute("result", migrationCommandService.searchTranCode(PageRequestParams.of(null, null)));
         model.addAttribute("form", form);
         model.addAttribute("sourceDataSource", migrationCommandService.sourceDataSource());
         model.addAttribute("targetDataSource", migrationCommandService.targetDataSource());

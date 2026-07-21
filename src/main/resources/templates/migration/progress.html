@@ -46,6 +46,14 @@
       <div class="card"><div class="label">失败分片数</div><div class="value" th:text="${progress.failedShardCount}"></div></div>
     </div>
 
+    <div class="panel" style="margin-top:16px" th:if="${progress.commandType == 'TRAN_CODE'}">
+      <div class="section-title"><div><div class="eyebrow">Transaction Code</div><h2>交易码迁移参数</h2></div></div>
+      <div class="cards">
+        <div class="card"><div class="label">交易码</div><div class="value" th:text="${progress.tranCodes}"></div></div>
+        <div class="card"><div class="label">每类报文迁移笔数</div><div class="value" th:text="${progress.sampleSize}"></div></div>
+      </div>
+    </div>
+
     <div class="panel" style="margin-top:16px">
       <div class="section-title"><div><div class="eyebrow">Progress</div><h2>完成度</h2></div></div>
       <div class="progress-bar" style="background:rgba(97,128,165,.18);border-radius:6px;overflow:hidden;height:24px;position:relative">
@@ -59,14 +67,15 @@
       <table class="command-table">
         <thead>
         <tr>
-          <th>序号</th><th>响应时间窗口</th><th>状态</th><th>迁移笔数</th>
+          <th>序号</th><th th:if="${progress.commandType == 'TRAN_CODE'}">交易码</th><th th:unless="${progress.commandType == 'TRAN_CODE'}">响应时间窗口</th><th>状态</th><th>迁移笔数</th>
           <th>丢弃数</th><th>跳过数</th><th>尝试次数</th><th>耗时(秒)</th><th>错误信息</th>
         </tr>
         </thead>
         <tbody>
         <tr th:each="shard : ${progress.shards}">
           <td th:text="${shard.shardSeq}"></td>
-          <td th:text="${shard.timeFrom} + ' → ' + ${shard.timeTo}"></td>
+          <td th:if="${progress.commandType == 'TRAN_CODE'}" th:text="${shard.tranCode}"></td>
+          <td th:unless="${progress.commandType == 'TRAN_CODE'}" th:text="${shard.timeFrom} + ' → ' + ${shard.timeTo}"></td>
           <td><span class="tag" th:classappend="${shard.status == 'COMPLETED' or shard.status == 'SKIPPED'} ? 'green' : (${shard.status == 'FAILED' or shard.status == 'RUNNING'} ? 'yellow' : '')" th:text="${shard.status}"></span></td>
           <td th:text="${shard.migratedRows}"></td>
           <td th:text="${shard.droppedRows}"></td>

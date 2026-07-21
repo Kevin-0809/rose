@@ -37,6 +37,7 @@
         <a th:classappend="${active == 'message-flow-log-entry'} ? 'active'" th:attr="aria-current=${active == 'message-flow-log-entry'} ? 'page' : null" href="/messages/flow-logs/new">报文录入</a>
         <a th:classappend="${active == 'migration'} ? 'active'" th:attr="aria-current=${active == 'migration'} ? 'page' : null" href="/migration/commands">数据迁移</a>
         <a th:classappend="${active == 'migration-sql'} ? 'active'" th:attr="aria-current=${active == 'migration-sql'} ? 'page' : null" href="/migration/sql-commands">SQL迁移</a>
+        <a th:classappend="${active == 'migration-tran-code'} ? 'active'" th:attr="aria-current=${active == 'migration-tran-code'} ? 'page' : null" href="/migration/tran-code-commands">交易码迁移</a>
       </div>
     </section>
   </aside>

@@ -178,6 +178,26 @@ class MigrationBatchRunnerTest {
     }
 
     @Test
+    void runTranCodeCommandUsesTranCodeExecutionPathAndSkipsEmptyResult() {
+        long commandId = commandService.createTranCodeCommand(new MigrationTranCodeCommandForm(
+                "TRAN001", 3, 1, "tran code command"
+        ));
+        Long shardId = shardIds(commandId).get(0);
+        when(shardRunner.runTranCode(shardId, "TRAN001", 3))
+                .thenReturn(new MigrationShardResult(0L, 0L, 0L));
+
+        batchRunner.run(commandId);
+
+        MigrationProgressRow progress = commandService.progress(commandId);
+        assertThat(progress.status()).isEqualTo("COMPLETED");
+        assertThat(progress.completedShardCount()).isEqualTo(1L);
+        assertThat(progress.shards()).extracting(MigrationShardRow::status).containsExactly("SKIPPED");
+        verify(shardRunner).runTranCode(shardId, "TRAN001", 3);
+        verify(shardRunner, never()).run(anyLong(), anyLong(), anyLong(), anyInt());
+        verify(shardRunner, never()).runSql(anyLong(), org.mockito.ArgumentMatchers.anyString(), anyInt());
+    }
+
+    @Test
     void runMarksCancelRequestedCommandCancelledWithoutRunningShards() {
         long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 200_000L, 50L, 2, "cancel"));
         commandService.requestCancel(commandId);

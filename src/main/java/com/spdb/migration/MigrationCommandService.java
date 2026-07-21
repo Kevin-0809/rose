@@ -282,6 +282,20 @@ public class MigrationCommandService {
         markShardCompleted(shardId, result.migratedRows(), result.skippedRows(), result.droppedRows());
     }
 
+    void markShardSkipped(long shardId) {
+        jdbc.update("""
+                update ana_migration_shard
+                   set status = 'SKIPPED',
+                       migrated_rows = 0,
+                       skipped_rows = 0,
+                       dropped_rows = 0,
+                       ended_time = current_timestamp,
+                       error_message = null,
+                       updated_at = current_timestamp
+                 where shard_id = :shardId
+                """, new MapSqlParameterSource("shardId", shardId));
+    }
+
     void markShardFailed(long shardId, String errorMessage) {
         jdbc.update("""
                 update ana_migration_shard

@@ -13,6 +13,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -23,6 +26,8 @@ import java.util.Set;
 @Component
 public class MigrationShardRunner {
     private static final int MAX_TARGET_CHUNK_SIZE = 500;
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
+    private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap");
     private static final String SOURCE_QUERY = """
             select req.source_ip,
                    req.trans_id,
@@ -50,13 +55,22 @@ public class MigrationShardRunner {
     private final NamedParameterJdbcTemplate sourceJdbc;
     private final NamedParameterJdbcTemplate targetJdbc;
     private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
 
     public MigrationShardRunner(@Qualifier("bxdsJdbcTemplate") NamedParameterJdbcTemplate sourceJdbc,
                                 NamedParameterJdbcTemplate targetJdbc,
                                 PlatformTransactionManager transactionManager) {
+        this(sourceJdbc, targetJdbc, transactionManager, Clock.system(SHANGHAI));
+    }
+
+    MigrationShardRunner(@Qualifier("bxdsJdbcTemplate") NamedParameterJdbcTemplate sourceJdbc,
+                         NamedParameterJdbcTemplate targetJdbc,
+                         PlatformTransactionManager transactionManager,
+                         Clock clock) {
         this.sourceJdbc = sourceJdbc;
         this.targetJdbc = targetJdbc;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.clock = clock;
     }
 
     public MigrationShardResult run(long shardId, long timeFrom, long timeTo, int fetchSize) {
@@ -92,6 +106,94 @@ public class MigrationShardRunner {
         }
 
         return new MigrationShardResult(accumulator.migratedRows, accumulator.skippedRows, accumulator.droppedRows);
+    }
+
+    public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType) {
+        if (maxRowsPerMessageType <= 0) {
+            return new MigrationShardResult(0L, 0L, 0L);
+        }
+        List<String> serviceCodes = loadServiceCodes(tranCode);
+        if (serviceCodes.isEmpty()) {
+            return new MigrationShardResult(0L, 0L, 0L);
+        }
+
+        BatchResult total = new BatchResult();
+        LocalDate today = LocalDate.now(clock.withZone(SHANGHAI));
+        for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
+            List<String> txnCodes = serviceCodes.stream()
+                    .map(serviceCode -> serviceCode.replace(".", "") + "&" + messageType)
+                    .distinct()
+                    .toList();
+            long migratedRows = 0L;
+            for (int dayOffset = 0; dayOffset < 5 && migratedRows < maxRowsPerMessageType; dayOffset++) {
+                long dayFrom = today.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                long dayTo = today.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                int offset = 0;
+                while (migratedRows < maxRowsPerMessageType) {
+                    int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
+                    List<MigrationSourceRow> rows = loadTranCodeRows(txnCodes, dayFrom, dayTo, remainingRows, offset);
+                    if (rows.isEmpty()) {
+                        break;
+                    }
+                    BatchResult result = transactionTemplate.execute(status -> writeBatch(rows));
+                    BatchResult batchResult = result == null ? new BatchResult() : result;
+                    total.add(batchResult);
+                    migratedRows += batchResult.migratedRows;
+                    offset += rows.size();
+                }
+            }
+        }
+        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L);
+    }
+
+    private List<String> loadServiceCodes(String tranCode) {
+        return targetJdbc.queryForList("""
+                select esf_service_code
+                from tp_online_service_in
+                where tran_code = :tranCode
+                """, new MapSqlParameterSource("tranCode", tranCode), String.class);
+    }
+
+    private List<MigrationSourceRow> loadTranCodeRows(List<String> txnCodes,
+                                                       long timeFrom,
+                                                       long timeTo,
+                                                       int limit,
+                                                       int offset) {
+        if (txnCodes.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("txnCodes", txnCodes)
+                .addValue("timeFrom", timeFrom)
+                .addValue("timeTo", timeTo)
+                .addValue("limit", limit)
+                .addValue("offset", offset);
+        return sourceJdbc.query("""
+                select req.source_ip,
+                       req.trans_id,
+                       req.txn_code as request_txn_code,
+                       req.txn_time,
+                       req.message_type as request_message_type,
+                       req.request_message,
+                       req.global_seq_no,
+                       req.tran_teller_no,
+                       resp.txn_code as response_txn_code,
+                       resp.response_time,
+                       resp.message_type as response_message_type,
+                       resp.response_message,
+                       resp.return_code,
+                       resp.return_msg
+                from msg_flow_log_response resp
+                join msg_flow_log_request req
+                  on req.trans_id = resp.trans_id
+                 and req.source_ip = resp.source_ip
+                where resp.txn_code in (:txnCodes)
+                  and resp.response_time >= :timeFrom
+                  and resp.response_time < :timeTo
+                order by resp.response_time desc, resp.source_ip, resp.trans_id
+                limit :limit
+                offset :offset
+                """, params, (rs, rowNum) -> mapSourceRow(rs));
     }
 
     private void streamPairedRows(long timeFrom,
