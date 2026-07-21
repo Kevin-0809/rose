@@ -75,6 +75,22 @@ public class TpOnlineServiceInSyncScriptTest {
     }
 
     @Test
+    void syncScriptDeletesEquivalentUndottedRowWhenDottedRowAlreadyExists() throws Exception {
+        jdbc.update("insert into tss_tran_comp(dest_trcd) values (?)", "S030030014FcyCollCrspBnkLkgQry&bzjson");
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code) values (?, ?)",
+                "A825", "S030030014FcyCollCrspBnkLkgQry");
+        jdbc.update("insert into tp_online_service_in(tran_code, esf_service_code) values (?, ?)",
+                "A825", "S030030014FcyCollCrspBnkLkgQry");
+        jdbc.update("insert into tp_online_service_in(tran_code, esf_service_code) values (?, ?)",
+                "A825", "S03003001.4FcyCollCrspBnkLkgQry");
+
+        executeSyncScript();
+
+        assertThat(countTargetRows("A825", "S03003001.4FcyCollCrspBnkLkgQry")).isEqualTo(1);
+        assertThat(countTargetRows("A825", "S030030014FcyCollCrspBnkLkgQry")).isZero();
+    }
+
+    @Test
     void syncScriptIsRepeatableWithoutDuplicateTargetRows() throws Exception {
         jdbc.update("insert into tss_tran_comp(dest_trcd) values (?)", "S030030014FcyCollCrspBnkLkgQry&bzjson");
         jdbc.update("insert into ana_tran_catalog(tran_code, service_code) values (?, ?)",
