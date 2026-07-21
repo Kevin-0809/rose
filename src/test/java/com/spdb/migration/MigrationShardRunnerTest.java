@@ -14,6 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -23,6 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MigrationShardRunnerTest {
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-07-21T04:00:00Z"), SHANGHAI);
+
     private JdbcTemplate sourceJdbc;
     private JdbcTemplate targetJdbc;
     private MigrationShardRunner runner;
@@ -120,6 +127,72 @@ class MigrationShardRunnerTest {
         assertThat(targetExists("msg_flow_log_response", "10.0.0.20", "TXN-SQL-PAIR")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.0.21", "TXN-SQL-REQUEST-ONLY")).isFalse();
         assertThat(targetExists("msg_flow_log_response", "10.0.0.22", "TXN-SQL-RESPONSE-ONLY")).isFalse();
+    }
+
+    @Test
+    void tranCodeMigrationTakesAtMostNCompletePairsPerMessageTypeFromNewestDayFirst() {
+        insertServiceCode("TRAN001", "ABC.DEF");
+        long today = dayStartMillis(0);
+        long yesterday = dayStartMillis(-1);
+        long sixDaysAgo = dayStartMillis(-6);
+
+        insertSourcePair("10.0.1.1", "BZ-TODAY", "ABCDEF&bzjson", today, today + 10_000L);
+        insertSourcePair("10.0.1.2", "BZ-YESTERDAY-NEW", "ABCDEF&bzjson", yesterday, yesterday + 20_000L);
+        insertSourcePair("10.0.1.3", "BZ-YESTERDAY-OLD", "ABCDEF&bzjson", yesterday, yesterday + 10_000L);
+        insertSourcePair("10.0.1.4", "BZ-OUTSIDE", "ABCDEF&bzjson", sixDaysAgo, sixDaysAgo + 10_000L);
+        insertSourcePair("10.0.2.1", "SOP-NEW", "ABCDEF&sop", today, today + 20_000L);
+        insertSourcePair("10.0.2.2", "SOP-OLD", "ABCDEF&sop", today, today + 10_000L);
+        insertSourcePair("10.0.2.3", "SOP-NOT-TAKEN", "ABCDEF&sop", today, today + 5_000L);
+        insertSourcePair("10.0.3.1", "SOAP-TODAY", "ABCDEF&soap", today, today + 10_000L);
+        insertSourcePair("10.0.3.2", "SOAP-YESTERDAY", "ABCDEF&soap", yesterday, yesterday + 10_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(10L, "TRAN001", 2);
+
+        assertThat(result.migratedRows()).isEqualTo(6L);
+        assertThat(result.skippedRows()).isZero();
+        assertThat(result.droppedRows()).isZero();
+        assertThat(targetExists("msg_flow_log_response", "10.0.1.1", "BZ-TODAY")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.1.2", "BZ-YESTERDAY-NEW")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.1.3", "BZ-YESTERDAY-OLD")).isFalse();
+        assertThat(targetExists("msg_flow_log_response", "10.0.1.4", "BZ-OUTSIDE")).isFalse();
+        assertThat(targetExists("msg_flow_log_response", "10.0.2.1", "SOP-NEW")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.2.2", "SOP-OLD")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.2.3", "SOP-NOT-TAKEN")).isFalse();
+        assertThat(targetCount("msg_flow_log_request")).isEqualTo(6L);
+        assertThat(targetCount("msg_flow_log_response")).isEqualTo(6L);
+    }
+
+    @Test
+    void tranCodeMigrationReturnsZeroWhenServiceIsMissingOrNoCompletePairExists() {
+        insertServiceCode("TRAN002", "ABC.DEF");
+        insertSourceResponseOnly("10.0.4.1", "ORPHAN", "ABCDEF&bzjson", dayStartMillis(0) + 1_000L);
+
+        MigrationShardResult missingService = runnerWithFixedClock().runTranCode(11L, "UNKNOWN", 3);
+        MigrationShardResult noCompletePair = runnerWithFixedClock().runTranCode(12L, "TRAN002", 3);
+
+        assertThat(missingService).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
+        assertThat(noCompletePair).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
+        assertThat(targetCount("msg_flow_log_request")).isZero();
+        assertThat(targetCount("msg_flow_log_response")).isZero();
+    }
+
+    @Test
+    void tranCodeMigrationBackfillsFromEarlierDaysWhenNewestCandidateIsAlreadyMigrated() {
+        insertServiceCode("TRAN003", "ABC.DEF");
+        long today = dayStartMillis(0);
+        long yesterday = dayStartMillis(-1);
+        insertSourcePair("10.0.5.1", "BZ-EXISTING", "ABCDEF&bzjson", today, today + 10_000L);
+        insertSourcePair("10.0.5.2", "BZ-TODAY-NEW", "ABCDEF&bzjson", today, today + 9_000L);
+        insertSourcePair("10.0.5.3", "BZ-YESTERDAY-NEW", "ABCDEF&bzjson", yesterday, yesterday + 10_000L);
+        insertTargetRequest("10.0.5.1", "BZ-EXISTING", "ABCDEF&bzjson", today);
+        insertTargetResponse("10.0.5.1", "BZ-EXISTING", "ABCDEF&bzjson", today + 10_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(13L, "TRAN003", 2);
+
+        assertThat(result.migratedRows()).isEqualTo(2L);
+        assertThat(result.skippedRows()).isEqualTo(1L);
+        assertThat(targetExists("msg_flow_log_response", "10.0.5.2", "BZ-TODAY-NEW")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.5.3", "BZ-YESTERDAY-NEW")).isTrue();
     }
 
     @Test
@@ -317,6 +390,7 @@ class MigrationShardRunnerTest {
     private void createSchema(JdbcTemplate jdbc) {
         jdbc.execute("drop table if exists msg_flow_log_request");
         jdbc.execute("drop table if exists msg_flow_log_response");
+        jdbc.execute("drop table if exists tp_online_service_in");
         jdbc.execute("""
                 create table msg_flow_log_request (
                     source_ip varchar(64) not null,
@@ -327,6 +401,12 @@ class MigrationShardRunnerTest {
                     request_message bytea,
                     global_seq_no varchar(64),
                     tran_teller_no varchar(32)
+                )
+                """);
+        jdbc.execute("""
+                create table tp_online_service_in (
+                    tran_code varchar(64) not null,
+                    esf_service_code varchar(128) not null
                 )
                 """);
         jdbc.execute("""
@@ -341,6 +421,23 @@ class MigrationShardRunnerTest {
                     return_msg varchar(512)
                 )
                 """);
+    }
+
+    private MigrationShardRunner runnerWithFixedClock() {
+        return new MigrationShardRunner(
+                new NamedParameterJdbcTemplate(sourceJdbc),
+                new NamedParameterJdbcTemplate(targetJdbc),
+                new JdbcTransactionManager(targetJdbc.getDataSource()),
+                FIXED_CLOCK
+        );
+    }
+
+    private long dayStartMillis(int dayOffset) {
+        return LocalDate.now(FIXED_CLOCK).plusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+    }
+
+    private void insertServiceCode(String tranCode, String serviceCode) {
+        targetJdbc.update("insert into tp_online_service_in (tran_code, esf_service_code) values (?, ?)", tranCode, serviceCode);
     }
 
     private void insertSourcePair(String sourceIp, String transId, String txnCode, long txnTime, long responseTime) {

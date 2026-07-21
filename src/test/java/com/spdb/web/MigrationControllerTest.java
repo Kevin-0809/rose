@@ -5,6 +5,7 @@ import com.spdb.migration.MigrationCommandRow;
 import com.spdb.migration.MigrationCommandService;
 import com.spdb.migration.MigrationProgressRow;
 import com.spdb.migration.MigrationSqlCommandForm;
+import com.spdb.migration.MigrationTranCodeCommandForm;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ConcurrentModel;
 
@@ -148,6 +149,49 @@ class MigrationControllerTest {
         assertThat(model.getAttribute("form")).isSameAs(form);
         assertThat(model.getAttribute("error")).isEqualTo("Response SQL不能为空");
         verify(service).createSqlCommand(form);
+    }
+
+    @Test
+    void tranCodeCommandsPageUsesSeparateTemplateAndModel() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(commandRow(9L)), 1, PageRequestParams.of(1, 20));
+        when(service.searchTranCode(PageRequestParams.of(1, 20))).thenReturn(result);
+        when(service.sourceDataSource()).thenReturn("bxds");
+        when(service.targetDataSource()).thenReturn("primary");
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.tranCodeCommandsPage(1, 20, model);
+
+        assertThat(view).isEqualTo("migration/tran-code-commands");
+        assertThat(model.getAttribute("active")).isEqualTo("migration-tran-code");
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(model.getAttribute("form")).isEqualTo(MigrationTranCodeCommandForm.empty());
+        assertThat(model.getAttribute("sourceDataSource")).isEqualTo("bxds");
+        assertThat(model.getAttribute("targetDataSource")).isEqualTo("primary");
+        verify(service).searchTranCode(PageRequestParams.of(1, 20));
+    }
+
+    @Test
+    void createTranCodeCommandReturnsPageWithErrorWhenValidationFails() {
+        MigrationCommandService service = mock(MigrationCommandService.class);
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm("", 0, 2, "");
+        PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
+        when(service.createTranCodeCommand(form)).thenThrow(new IllegalArgumentException("交易码不能为空"));
+        when(service.searchTranCode(PageRequestParams.of(null, null))).thenReturn(result);
+        when(service.sourceDataSource()).thenReturn("bxds");
+        when(service.targetDataSource()).thenReturn("primary");
+        MigrationController controller = new MigrationController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.createTranCodeCommand(form, model);
+
+        assertThat(view).isEqualTo("migration/tran-code-commands");
+        assertThat(model.getAttribute("active")).isEqualTo("migration-tran-code");
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(model.getAttribute("form")).isSameAs(form);
+        assertThat(model.getAttribute("error")).isEqualTo("交易码不能为空");
+        verify(service).createTranCodeCommand(form);
     }
 
     @Test

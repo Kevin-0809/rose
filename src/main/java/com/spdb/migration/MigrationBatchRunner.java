@@ -97,14 +97,24 @@ public class MigrationBatchRunner {
             MigrationShardResult result;
             if ("SQL".equals(command.commandType())) {
                 result = shardRunner.runSql(shardId, command.responseSql(), FETCH_SIZE);
+            } else if ("TRAN_CODE".equals(command.commandType())) {
+                result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize());
             } else {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             }
-            commandService.markShardCompleted(shardId, result);
+            if ("TRAN_CODE".equals(command.commandType()) && isEmpty(result)) {
+                commandService.markShardSkipped(shardId);
+            } else {
+                commandService.markShardCompleted(shardId, result);
+            }
         } catch (Exception e) {
             log.error("Migration shard execution failed, commandId={}, shardId={}", commandId, shardId, e);
             commandService.markShardFailed(shardId, e.getMessage());
         }
+    }
+
+    private boolean isEmpty(MigrationShardResult result) {
+        return result.migratedRows() == 0 && result.skippedRows() == 0 && result.droppedRows() == 0;
     }
 
     private void finishCommand(long commandId) {

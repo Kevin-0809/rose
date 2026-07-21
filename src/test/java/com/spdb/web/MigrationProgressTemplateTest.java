@@ -30,4 +30,17 @@ class MigrationProgressTemplateTest {
         assertThat(html).contains("/progress");
         assertThat(html).contains("setTimeout(pollProgress");
     }
+
+    @Test
+    void progressTemplateShowsTranCodeDetailsForTranCodeCommands() throws Exception {
+        String html = new String(
+                getClass().getResourceAsStream("/templates/migration/progress.html").readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(html).contains("${progress.commandType == 'TRAN_CODE'}");
+        assertThat(html).contains("${progress.tranCodes}");
+        assertThat(html).contains("${progress.sampleSize}");
+        assertThat(html).contains("${shard.tranCode}");
+    }
 }
