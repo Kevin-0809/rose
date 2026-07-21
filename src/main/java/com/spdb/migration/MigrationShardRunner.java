@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -119,8 +120,18 @@ public class MigrationShardRunner {
             return new MigrationShardResult(0L, 0L, 0L);
         }
 
+        List<String> allTxnCodes = serviceCodes.stream()
+                .flatMap(serviceCode -> TRAN_CODE_MESSAGE_TYPES.stream()
+                        .map(messageType -> serviceCode.replace(".", "") + "&" + messageType))
+                .distinct()
+                .toList();
+        Long latestResponseTime = latestResponseTime(allTxnCodes);
+        if (latestResponseTime == null) {
+            return new MigrationShardResult(0L, 0L, 0L);
+        }
+
         BatchResult total = new BatchResult();
-        LocalDate today = LocalDate.now(clock.withZone(SHANGHAI));
+        LocalDate latestResponseDate = Instant.ofEpochMilli(latestResponseTime).atZone(SHANGHAI).toLocalDate();
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
             List<String> txnCodes = serviceCodes.stream()
                     .map(serviceCode -> serviceCode.replace(".", "") + "&" + messageType)
@@ -128,8 +139,8 @@ public class MigrationShardRunner {
                     .toList();
             long migratedRows = 0L;
             for (int dayOffset = 0; dayOffset < 5 && migratedRows < maxRowsPerMessageType; dayOffset++) {
-                long dayFrom = today.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                long dayTo = today.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                long dayFrom = latestResponseDate.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                long dayTo = latestResponseDate.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 int offset = 0;
                 while (migratedRows < maxRowsPerMessageType) {
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
@@ -146,6 +157,14 @@ public class MigrationShardRunner {
             }
         }
         return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L);
+    }
+
+    private Long latestResponseTime(List<String> txnCodes) {
+        return sourceJdbc.queryForObject("""
+                select max(response_time)
+                from msg_flow_log_response
+                where txn_code in (:txnCodes)
+                """, new MapSqlParameterSource("txnCodes", txnCodes), Long.class);
     }
 
     private List<String> loadServiceCodes(String tranCode) {
@@ -618,7 +637,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long txnTime,
             String messageType,
-            byte[] requestMessage,
+            String requestMessage,
             String globalSeqNo,
             String tranTellerNo
     ) {
@@ -629,7 +648,7 @@ public class MigrationShardRunner {
                     row.requestTxnCode(),
                     row.txnTime(),
                     row.requestMessageType(),
-                    (row.requestMessage()),
+                    encodeBlobText(row.requestMessage()),
                     row.globalSeqNo(),
                     row.tranTellerNo()
             );
@@ -642,7 +661,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long responseTime,
             String messageType,
-            byte[] responseMessage,
+            String responseMessage,
             String returnCode,
             String returnMsg
     ) {
@@ -653,7 +672,7 @@ public class MigrationShardRunner {
                     row.responseTxnCode(),
                     row.responseTime(),
                     row.responseMessageType(),
-                    (row.responseMessage()),
+                    encodeBlobText(row.responseMessage()),
                     row.returnCode(),
                     row.returnMsg()
             );

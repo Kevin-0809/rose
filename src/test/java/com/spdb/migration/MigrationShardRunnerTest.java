@@ -196,6 +196,21 @@ class MigrationShardRunnerTest {
     }
 
     @Test
+    void tranCodeMigrationUsesLatestResponseDateAsFiveDayWindowAnchor() {
+        insertServiceCode("TRAN004", "ABC.DEF");
+        long latestDay = dayStartMillis(-14);
+        insertSourcePair("10.0.6.1", "BZ-HISTORICAL", "ABCDEF&bzjson", latestDay, latestDay + 2_000L);
+        insertSourcePair("10.0.6.2", "SOP-HISTORICAL", "ABCDEF&sop", latestDay, latestDay + 4_000L);
+        insertSourcePair("10.0.6.3", "SOAP-HISTORICAL", "ABCDEF&soap", latestDay, latestDay + 6_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(14L, "TRAN004", 1);
+
+        assertThat(result.migratedRows()).isEqualTo(3L);
+        assertThat(targetCount("msg_flow_log_request")).isEqualTo(3L);
+        assertThat(targetCount("msg_flow_log_response")).isEqualTo(3L);
+    }
+
+    @Test
     void responseTimeWindowIsHalfOpen() {
         insertSourcePair("10.0.0.7", "TXN-AT-FROM", "PAY007", 900L, 1000L);
         insertSourcePair("10.0.0.8", "TXN-AT-TO", "PAY008", 900L, 2000L);
