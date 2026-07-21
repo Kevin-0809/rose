@@ -27,14 +27,26 @@ catalog_service as (
       and trim(c.tran_code) <> ''
       and c.service_code is not null
       and length(c.service_code) >= 9
+),
+updated_service as (
+    update tp_online_service_in t
+    set esf_service_code = c.esf_service_code
+    from catalog_service c
+    where t.tran_code = c.tran_code
+      and replace(t.esf_service_code, '.', '') = c.service_code
+    returning t.tran_code, t.esf_service_code
 )
 insert into tp_online_service_in (
     tran_code,
     esf_service_code
 )
 select
-    tran_code,
-    esf_service_code
-from catalog_service
-on conflict (tran_code, esf_service_code) do update
-set esf_service_code = excluded.esf_service_code;
+    c.tran_code,
+    c.esf_service_code
+from catalog_service c
+where not exists (
+    select 1
+    from tp_online_service_in t
+    where t.tran_code = c.tran_code
+      and t.esf_service_code = c.esf_service_code
+);

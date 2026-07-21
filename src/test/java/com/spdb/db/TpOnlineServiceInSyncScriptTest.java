@@ -18,7 +18,9 @@ class TpOnlineServiceInSyncScriptTest {
         assertThat(sql).contains("ana_tran_catalog");
         assertThat(sql).contains("split_part(trim(dest_trcd), '&', 1)");
         assertThat(sql).contains("substring(c.service_code from 1 for 8) || '.' || substring(c.service_code from 9)");
-        assertThat(sql).contains("on conflict (tran_code, esf_service_code) do update");
+        assertThat(sql).contains("update tp_online_service_in t");
+        assertThat(sql).contains("replace(t.esf_service_code, '.', '') = c.service_code");
+        assertThat(sql).contains("where not exists");
         assertThat(sql).contains("where position('&' in trim(dest_trcd)) > 0");
     }
 }
