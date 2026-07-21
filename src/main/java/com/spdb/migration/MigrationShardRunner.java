@@ -1,6 +1,7 @@
 package com.spdb.migration;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -57,6 +58,7 @@ public class MigrationShardRunner {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
+    @Autowired
     public MigrationShardRunner(@Qualifier("bxdsJdbcTemplate") NamedParameterJdbcTemplate sourceJdbc,
                                 NamedParameterJdbcTemplate targetJdbc,
                                 PlatformTransactionManager transactionManager) {
@@ -616,7 +618,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long txnTime,
             String messageType,
-            String requestMessage,
+            byte[] requestMessage,
             String globalSeqNo,
             String tranTellerNo
     ) {
@@ -627,7 +629,7 @@ public class MigrationShardRunner {
                     row.requestTxnCode(),
                     row.txnTime(),
                     row.requestMessageType(),
-                    encodeBlobText(row.requestMessage()),
+                    (row.requestMessage()),
                     row.globalSeqNo(),
                     row.tranTellerNo()
             );
@@ -640,7 +642,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long responseTime,
             String messageType,
-            String responseMessage,
+            byte[] responseMessage,
             String returnCode,
             String returnMsg
     ) {
@@ -651,7 +653,7 @@ public class MigrationShardRunner {
                     row.responseTxnCode(),
                     row.responseTime(),
                     row.responseMessageType(),
-                    encodeBlobText(row.responseMessage()),
+                    (row.responseMessage()),
                     row.returnCode(),
                     row.returnMsg()
             );
