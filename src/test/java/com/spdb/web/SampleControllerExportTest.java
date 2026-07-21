@@ -11,6 +11,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 class SampleControllerExportTest {
 
     @Test
@@ -29,7 +30,7 @@ class SampleControllerExportTest {
     }
 
     @Test
-    void fieldDiffExportStreamsCombinedRowsToResponseWithoutBuildingListFirst() throws Exception {
+    void fieldDiffExportStreamsExcelAndTxtAsZipWithoutBuildingListFirst() throws Exception {
         SampleQueryService queryService = new SampleQueryService(null);
         RecordingExportService excelExportService = new RecordingExportService();
         SampleController controller = new SampleController(queryService, excelExportService);
@@ -37,10 +38,10 @@ class SampleControllerExportTest {
 
         controller.exportFieldDiffs(null, null, null, null, null, null, null, null, null, null, response);
 
-        assertThat(response.getContentType()).isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        assertThat(decodedFilename(response)).startsWith("字段级差异_").endsWith(".xlsx");
-        assertThat(decodedFilename(response)).doesNotContain("瀛", "鐎");
-        assertThat(excelExportService.fieldDiffExportCalled).isTrue();
+        assertThat(response.getContentType()).isEqualTo("application/zip");
+        assertThat(decodedFilename(response)).startsWith("fielddiff_").endsWith(".zip");
+        assertThat(excelExportService.fieldDiffZipExportCalled).isTrue();
+        assertThat(excelExportService.fieldDiffExportCalled).isFalse();
         assertThat(excelExportService.transactionDiffExportCalled).isFalse();
     }
 
@@ -54,6 +55,7 @@ class SampleControllerExportTest {
     private static class RecordingExportService extends SampleExcelExportService {
         boolean transactionDiffExportCalled;
         boolean fieldDiffExportCalled;
+        boolean fieldDiffZipExportCalled;
 
         @Override
         public void streamTransactionDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
@@ -63,6 +65,11 @@ class SampleControllerExportTest {
         @Override
         public void streamFieldDiffExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
             fieldDiffExportCalled = true;
+        }
+
+        @Override
+        public void streamFieldDiffZipExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
+            fieldDiffZipExportCalled = true;
         }
     }
 }

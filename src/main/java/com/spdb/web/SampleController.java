@@ -112,8 +112,8 @@ public class SampleController {
                 batchId, origCdate, FIELD_DIFF, tranCode, serviceCode, messageType, configStatus, mappingStatus,
                 semanticFieldName, owner, tranSeqNo
         );
-        prepareExcel(response, FIELD_DIFF_EXPORT_FILENAME_PREFIX + LocalDateTime.now().format(EXPORT_TIMESTAMP) + ".xlsx");
-        sampleExcelExportService.streamFieldDiffExport(sampleQueryService, criteria, response.getOutputStream());
+        prepareZip(response, "fielddiff_" + LocalDateTime.now().format(EXPORT_TIMESTAMP) + ".zip");
+        sampleExcelExportService.streamFieldDiffZipExport(sampleQueryService, criteria, response.getOutputStream());
     }
 
 

@@ -36,6 +36,7 @@ class SampleDetailTemplateTest {
         );
 
         assertThat(html).contains("/samples/field-diffs/export");
+        assertThat(html).contains("导出ZIP");
         assertThat(html).doesNotContain("/samples/detail-fields/export");
         assertThat(html).contains("table-wrap table-wrap-wide");
         assertThat(html).contains("class=\"table-compact field-diff-table\"");

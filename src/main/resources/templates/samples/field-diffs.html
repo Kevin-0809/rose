@@ -25,7 +25,7 @@
       <div><label>字段名</label><input name="semanticFieldName" th:value="${criteria.semanticFieldName()}"></div>
       <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
       <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/field-diffs/export">导出Excel</button><a class="btn" href="/samples/field-diffs">重置</a></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/field-diffs/export">导出ZIP</button><a class="btn" href="/samples/field-diffs">重置</a></div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>

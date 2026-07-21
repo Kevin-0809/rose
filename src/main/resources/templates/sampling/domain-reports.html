@@ -54,7 +54,7 @@
       <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
         <h2>模块交易结果</h2>
         <table class="domain-report-table">
-          <thead><tr><th>模块</th><th>覆盖服务</th><th>发送交易</th><th>comp_result=1</th><th>comp_result=2</th><th>comp_result=3</th><th>comp_result=4</th><th>comp_result=8</th></tr></thead>
+          <thead><tr><th>模块</th><th>覆盖服务</th><th>发送交易</th><th>528失败/CCBS成功</th><th>528成功/CCBS失败</th><th>均失败码一致</th><th>均成功</th><th>均失败码不一致</th></tr></thead>
           <tbody><tr th:each="row : ${transactionStats}"><td th:text="${row.moduleName()}"></td><td th:text="${row.coveredServiceCount()}"></td><td th:text="${row.sentTransactionCount()}"></td><td th:text="${row.compResult1Count()}"></td><td th:text="${row.compResult2Count()}"></td><td th:text="${row.compResult3Count()}"></td><td th:text="${row.compResult4Count()}"></td><td th:text="${row.compResult8Count()}"></td></tr></tbody>
         </table>
       </section>

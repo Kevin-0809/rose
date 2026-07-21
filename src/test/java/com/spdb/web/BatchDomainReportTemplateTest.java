@@ -45,6 +45,23 @@ class BatchDomainReportTemplateTest {
                 .contains("window.addEventListener('unload', stopPolling)");
     }
 
+    @Test
+    void rendersChineseTransactionResultHeaders() {
+        String html = render("SUCCEEDED");
+
+        assertThat(html)
+                .contains("528失败/CCBS成功")
+                .contains("528成功/CCBS失败")
+                .contains("均失败码一致")
+                .contains("均成功")
+                .contains("均失败码不一致")
+                .doesNotContain("comp_result=1")
+                .doesNotContain("comp_result=2")
+                .doesNotContain("comp_result=3")
+                .doesNotContain("comp_result=4")
+                .doesNotContain("comp_result=8");
+    }
+
     private String render(String status) {
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
         resolver.setPrefix("templates/");

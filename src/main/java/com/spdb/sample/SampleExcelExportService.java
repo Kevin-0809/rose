@@ -36,7 +36,7 @@ import java.util.zip.ZipOutputStream;
 public class SampleExcelExportService {
     private final Clock clock;
 
-    private static final String TXT_DELIMITER = "|^";
+    private static final String TXT_DELIMITER = "!^";
     private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
     private static final String[] TRANSACTION_DIFF_TEXT_HEADERS = {
@@ -127,6 +127,31 @@ public class SampleExcelExportService {
             int[] rowIndex = {2};
             queryService.streamFieldDiffExport(criteria, row -> writeFieldDiffExportRow(sheet, styles, rowIndex[0]++, row));
         });
+    }
+
+    public void streamFieldDiffZipExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
+        String timestamp = LocalDateTime.now(clock).format(EXPORT_TIMESTAMP);
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("fielddiff-export-");
+            Path excelFile = tempDir.resolve("fielddiff_detail_" + timestamp + ".xlsx");
+            Path txtFile = tempDir.resolve("fielddiff_detail_" + timestamp + ".txt");
+            try (OutputStream excel = Files.newOutputStream(excelFile);
+                 BufferedWriter txt = Files.newBufferedWriter(txtFile, StandardCharsets.UTF_8)) {
+                streamFieldDiffExport(queryService, criteria, excel);
+                appendTextLine(txt, (Object[]) FIELD_DIFF_EXPORT_HEADERS);
+                queryService.streamFieldDiffExport(criteria, row -> writeFieldDiffTextRow(txt, row));
+            }
+            try (ZipOutputStream zip = new ZipOutputStream(outputStream, StandardCharsets.UTF_8)) {
+                writeZipFile(zip, excelFile);
+                writeZipFile(zip, txtFile);
+                zip.finish();
+            }
+        } catch (IOException | UncheckedIOException e) {
+            throw new IllegalStateException("生成字段级差异压缩导出文件失败", e);
+        } finally {
+            deleteDirectoryQuietly(tempDir);
+        }
     }
 
     public void streamServiceReport(SampleQueryService queryService, SamplingSummarySearchCriteria criteria, OutputStream outputStream) {
@@ -721,6 +746,38 @@ public class SampleExcelExportService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    private void writeFieldDiffTextRow(BufferedWriter writer, SampleFieldDiffRow row) {
+        try {
+            appendTextLine(writer,
+                    row.origCdate(),
+                    row.batchId(),
+                    row.tranCode(),
+                    row.serviceCode(),
+                    row.messageType(),
+                    row.sopFieldName(),
+                    row.soapFieldName(),
+                    row.bizjsonFieldName(),
+                    row.fieldCnName(),
+                    mappingStatusText(row.mappingStatus()),
+                    row.sampleTranSeqNo(),
+                    valuePresence(row.origFieldValue()),
+                    valuePresence(row.destFieldValue()),
+                    row.owner(),
+                    row.affectedTranCount(),
+                    "",
+                    "否",
+                    "",
+                    ""
+            );
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private String valuePresence(String value) {
+        return value == null || value.isBlank() ? "\u65e0\u503c" : "\u6709\u503c";
     }
 
     private void writeZipFile(ZipOutputStream zip, Path file) throws IOException {

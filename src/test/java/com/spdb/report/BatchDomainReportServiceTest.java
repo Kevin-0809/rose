@@ -8,6 +8,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.task.TaskRejectedException;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.List;
@@ -37,7 +38,8 @@ public class BatchDomainReportServiceTest {
         assertThat(service.findTransactionStats("BATCH-1")).singleElement().satisfies(row -> {
             assertThat(row.moduleName()).isEqualTo("存款");
             assertThat(row.coveredServiceCount()).isEqualTo(2);
-            assertThat(row.sentTransactionCount()).isEqualTo(3);
+            assertThat(row.sentTransactionCount()).isEqualTo(4);
+            assertThat(row.compResult1Count()).isEqualTo(1);
             assertThat(row.compResult2Count()).isEqualTo(1);
             assertThat(row.compResult8Count()).isEqualTo(1);
         });
@@ -76,7 +78,7 @@ public class BatchDomainReportServiceTest {
 
         assertThat(service.findCommand("BATCH-1").status()).isEqualTo("SUCCEEDED");
         assertThat(service.findTransactionStats("BATCH-1")).singleElement()
-                .extracting(BatchDomainReportRow::sentTransactionCount).isEqualTo(3L);
+                .extracting(BatchDomainReportRow::sentTransactionCount).isEqualTo(4L);
         assertThatThrownBy(() -> service.generate("BATCH-1"))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("历史");
         assertThatThrownBy(() -> service.createAndStartCommand("BATCH-1"))
@@ -91,6 +93,7 @@ public class BatchDomainReportServiceTest {
         assertThat(service.findCommand("BATCH-1").status()).isEqualTo("SUCCEEDED");
 
         jdbc.update("insert into ana_sampling_command values ('BATCH-EMPTY', '20260715', 'COMPLETED')");
+        jdbc.update("delete from msg_flow_log_response");
         service.createAndStartCommand("BATCH-EMPTY");
         new BatchDomainReportRunner(service).run("BATCH-EMPTY");
         assertThat(service.findCommand("BATCH-EMPTY").status()).isEqualTo("FAILED");
@@ -138,6 +141,21 @@ public class BatchDomainReportServiceTest {
         assertThat(service.findCommand("BATCH-1").status()).isEqualTo("FAILED");
     }
 
+    @Test
+    void springContextCanCreateServiceWithAsyncLauncherProvider() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:batch_domain_report_context;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa", "");
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(NamedParameterJdbcTemplate.class, () -> new NamedParameterJdbcTemplate(dataSource));
+            context.registerBean(JdbcTransactionManager.class, () -> new JdbcTransactionManager(dataSource));
+            context.registerBean(BatchDomainReportService.class);
+            context.refresh();
+
+            assertThat(context.getBean(BatchDomainReportService.class)).isNotNull();
+        }
+    }
+
     private static <T> ObjectProvider<T> provider(T value) {
         return new ObjectProvider<>() {
             @Override public T getObject(Object... args) { return value; }
@@ -160,7 +178,7 @@ public class BatchDomainReportServiceTest {
         jdbc.execute("drop table if exists ana_batch_domain_report_command");
         jdbc.execute("create alias if not exists split_part for \"com.spdb.report.BatchDomainReportServiceTest.splitPart\"");
         jdbc.execute("create table ana_sampling_command(batch_id varchar(64) primary key, orig_cdate varchar(8), status varchar(32))");
-        jdbc.execute("create table msg_flow_log_response(trans_id varchar(64), txn_code varchar(200), response_time timestamp)");
+        jdbc.execute("create table msg_flow_log_response(source_ip varchar(64), trans_id varchar(64), txn_code varchar(200), response_time bigint)");
         jdbc.execute("create table tss_tran_comp(mesg_seq varchar(64), orig_cdate varchar(8), dest_trcd varchar(200), comp_result varchar(1))");
         jdbc.execute("create table ana_tran_catalog(tran_code varchar(32), service_code varchar(200), module_name varchar(100))");
         jdbc.execute("create table ana_field_mapping(tran_code varchar(32), service_code varchar(200), std_field_name varchar(200), sop_field_name varchar(200), soap_field_name varchar(200), bizjson_field_name varchar(200))");
@@ -175,8 +193,8 @@ public class BatchDomainReportServiceTest {
         jdbc.update("insert into ana_sampling_command values ('BATCH-1', '20260714', 'COMPLETED')");
         jdbc.update("insert into ana_tran_catalog values ('T001', 'SVC1', '存款'), ('T009', 'SVC1', '存款'), ('T002', 'SVC2', '存款')");
         jdbc.update("insert into ana_field_mapping values ('T001', 'SVC1', 'account_std', 'accountSop', 'accountSoap', 'accountBiz'), ('T001', 'SVC1', 'currency_std', 'currencySop', 'currencySoap', 'currencyBiz')");
-        jdbc.update("insert into msg_flow_log_response values ('1', 'SVC1&bizjson', timestamp '2026-07-14 09:00:00'), ('2', 'SVC1&sop', timestamp '2026-07-14 09:01:00'), ('3', 'SVC2&bizjson', timestamp '2026-07-14 09:02:00'), ('4', 'UNKNOWN&bizjson', timestamp '2026-07-14 09:03:00')");
-        jdbc.update("insert into tss_tran_comp values ('1', '20260714', 'WRONG&bizjson', '2'), ('2', '20260714', 'WRONG&sop', '8'), ('3', '20260714', 'SVC2&bizjson', '4')");
+        jdbc.update("insert into msg_flow_log_response values ('10.0.0.1', '1', 'SVC1&bizjson', 1783990800000), ('10.0.0.1', '2', 'SVC1&sop', 1783990860000), ('10.0.0.1', '3', 'SVC2&bizjson', 1783990920000), ('10.0.0.1', '4', 'UNKNOWN&bizjson', 1783990980000), ('10.0.0.1', '5', 'SVC1&soap', 1)");
+        jdbc.update("insert into tss_tran_comp values ('100011', '20260714', 'WRONG&bizjson', '2'), ('100012', '20260714', 'WRONG&sop', '8'), ('100013', '20260714', 'SVC2&bizjson', '4'), ('100015', '20260714', 'SVC1&soap', '1')");
         jdbc.update("insert into ana_field_diff_result values ('BATCH-1', 'T001', 'SVC1', 'soap', null, 'accountSoap', null, 'MAPPED', 1), ('BATCH-1', 'T001', 'SVC1', 'soap', null, 'unknownSoap', null, 'UNMAPPED', 2), ('BATCH-1', 'T001', 'SVC1', 'bizjson', null, null, 'unknownBiz', 'UNMAPPED', 3)");
     }
 

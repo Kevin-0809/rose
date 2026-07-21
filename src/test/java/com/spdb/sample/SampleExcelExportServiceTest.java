@@ -84,6 +84,51 @@ class SampleExcelExportServiceTest {
         }
     }
 
+    @Test
+    void streamsFieldDiffExportAsZipWithExcelAndTxtDetail() throws Exception {
+        SampleExcelExportService service = new SampleExcelExportService(
+                Clock.fixed(Instant.parse("2026-07-06T02:14:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+        SampleFieldDiffRow row = new SampleFieldDiffRow(
+                "20260609", "B20260609", "A001", "S001", "bizjson",
+                "SOP_NAME", "SOAP_NAME", "BIZJSON_NAME", "FIELD_CN", "MAPPED",
+                "SEQ001", "528_VALUE", "CCBS_VALUE", "OWNER", 12L
+        );
+        SampleFieldDiffRow emptyValueRow = new SampleFieldDiffRow(
+                "20260609", "B20260609", "A002", "S002", "soap",
+                "SOP_EMPTY", "SOAP_EMPTY", "BIZJSON_EMPTY", "EMPTY_FIELD", "UNMAPPED",
+                "SEQ002", "", null, "OWNER", 1L
+        );
+        SampleQueryService queryService = new SampleQueryService(null) {
+            @Override
+            public void streamFieldDiffExport(SampleSearchCriteria criteria, SampleFieldDiffExportConsumer consumer) {
+                consumer.accept(row);
+                consumer.accept(emptyValueRow);
+            }
+        };
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        service.streamFieldDiffZipExport(queryService, new SampleSearchCriteria(null, null, null, null, null, null, null, null, null, null, null), out);
+
+        Map<String, byte[]> entries = unzipBytes(out.toByteArray());
+        assertThat(entries.keySet()).containsExactly(
+                "fielddiff_detail_202607061014.xlsx",
+                "fielddiff_detail_202607061014.txt"
+        );
+        String text = new String(entries.get("fielddiff_detail_202607061014.txt"), StandardCharsets.UTF_8);
+        String[] lines = text.split("\\R");
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).contains("!^SOP", "!^SOAP", "!^BizJSON", "!^528", "!^CCBS");
+        assertThat(lines[1]).startsWith("20260609!^B20260609!^A001!^S001!^bizjson!^SOP_NAME!^SOAP_NAME!^BIZJSON_NAME!^FIELD_CN!^");
+        assertThat(lines[1]).contains("!^SEQ001!^有值!^有值!^OWNER!^12!^!^");
+        assertThat(lines[1]).doesNotContain("528_VALUE", "CCBS_VALUE");
+        assertThat(lines[2]).contains("!^SEQ002!^无值!^无值!^OWNER!^1!^!^");
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(entries.get("fielddiff_detail_202607061014.xlsx")))) {
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(1);
+        }
+    }
+
     private void assertAllThinBorders(CellStyle style) {
         assertThat(style.getBorderTop()).isEqualTo(BorderStyle.THIN);
         assertThat(style.getBorderRight()).isEqualTo(BorderStyle.THIN);
@@ -146,11 +191,11 @@ class SampleExcelExportServiceTest {
                 "leadership_summary_202607061014.xlsx"
         );
         assertThat(entries.get("transdiff_ccbs_202607061014.txt")).contains("""
-                业务日期|^批次|^交易码|^服务码|^报文类型|^流水号|^交易结果|^528响应码|^528响应描述|^CCBS响应码|^CCBS响应描述|^责任人|^数量
-                20260609|^B20260609|^A001|^S001|^bizjson|^SEQ_528_OK_CCBS_FAIL|^8|^000000000000|^528 response|^C0002|^CCBS response|^owner|^12
+                业务日期!^批次!^交易码!^服务码!^报文类型!^流水号!^交易结果!^528响应码!^528响应描述!^CCBS响应码!^CCBS响应描述!^责任人!^数量
+                20260609!^B20260609!^A001!^S001!^bizjson!^SEQ_528_OK_CCBS_FAIL!^8!^000000000000!^528 response!^C0002!^CCBS response!^owner!^12
                 """);
-        assertThat(entries.get("transdiff_cbsp_202607061014.txt")).contains("SEQ_528_FAIL_CCBS_OK|^8|^E0001|^528 response|^AAAAAAA");
-        assertThat(entries.get("transdiff_both_202607061014.txt")).contains("SEQ_BOTH_FAIL|^8|^E0001|^528 response|^C0002");
+        assertThat(entries.get("transdiff_cbsp_202607061014.txt")).contains("SEQ_528_FAIL_CCBS_OK!^8!^E0001!^528 response!^AAAAAAA");
+        assertThat(entries.get("transdiff_both_202607061014.txt")).contains("SEQ_BOTH_FAIL!^8!^E0001!^528 response!^C0002");
         assertThat(entries.get("transdiff_both_202607061014.txt")).doesNotContain("SEQ_BOTH_OK");
     }
 
@@ -188,8 +233,8 @@ class SampleExcelExportServiceTest {
         Map<String, String> entries = unzipUtf8(out.toByteArray());
         assertThat(entries.keySet()).contains("transdiff_success_202607061014.txt");
         assertThat(entries.get("transdiff_success_202607061014.txt")).isEqualTo("""
-                业务日期|^批次|^交易码|^服务码|^报文类型|^成功数量|^接口字段总数|^比对字段总数|^差异字段数|^比对字段差异总数|^单字段差异>=1%|^单字段差异<1%|^领域|^责任人
-                20260703|^BATCH_01|^C000|^aaa|^bzjson|^1000|^34|^34000|^10|^10000|^7|^3|^存款|^张三,李四
+                业务日期!^批次!^交易码!^服务码!^报文类型!^成功数量!^接口字段总数!^比对字段总数!^差异字段数!^比对字段差异总数!^单字段差异>=1%!^单字段差异<1%!^领域!^责任人
+                20260703!^BATCH_01!^C000!^aaa!^bzjson!^1000!^34!^34000!^10!^10000!^7!^3!^存款!^张三,李四
                 """);
     }
 

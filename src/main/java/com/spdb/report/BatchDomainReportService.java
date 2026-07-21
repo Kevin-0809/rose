@@ -1,6 +1,7 @@
 package com.spdb.report;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -9,14 +10,11 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.Timestamp;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
 public class BatchDomainReportService {
-    private static final DateTimeFormatter BUSINESS_DATE = DateTimeFormatter.BASIC_ISO_DATE;
     private static final int MAX_ERROR_LENGTH = 4000;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -27,6 +25,7 @@ public class BatchDomainReportService {
         this(jdbc, transactionManager, null);
     }
 
+    @Autowired
     public BatchDomainReportService(NamedParameterJdbcTemplate jdbc,
                                     PlatformTransactionManager transactionManager,
                                     ObjectProvider<BatchDomainReportTaskLauncher> launcherProvider) {
@@ -184,7 +183,6 @@ public class BatchDomainReportService {
                 with response_services as (
                     select split_part(r.txn_code, '&', 1) as service_code, count(*) as sent_count
                     from msg_flow_log_response r
-                    where r.response_time >= :startTime and r.response_time < :endTime
                     group by split_part(r.txn_code, '&', 1)
                 ), comparison_counts as (
                     select split_part(r.txn_code, '&', 1) as service_code,
@@ -194,9 +192,9 @@ public class BatchDomainReportService {
                            sum(case when t.comp_result = '4' then 1 else 0 end) as comp4,
                            sum(case when t.comp_result = '8' then 1 else 0 end) as comp8
                     from tss_tran_comp t
-                    join msg_flow_log_response r on r.trans_id = t.mesg_seq
+                    join msg_flow_log_response r
+                      on replace(coalesce(r.source_ip, '') || coalesce(r.trans_id, ''), '.', '') = t.mesg_seq
                     where t.orig_cdate = :origCdate
-                      and r.response_time >= :startTime and r.response_time < :endTime
                     group by split_part(r.txn_code, '&', 1)
                 ), catalog_services as (
                     select lower(service_code) as service_code, min(module_name) as module_name
@@ -229,8 +227,7 @@ public class BatchDomainReportService {
                     where c.module_name is not null
                       and exists (
                           select 1 from msg_flow_log_response r
-                          where r.response_time >= :startTime and r.response_time < :endTime
-                            and lower(split_part(r.txn_code, '&', 1)) = lower(m.service_code)
+                          where lower(split_part(r.txn_code, '&', 1)) = lower(m.service_code)
                       )
                 )
                 select :batchId, m.module_name, count(*),
@@ -264,7 +261,7 @@ public class BatchDomainReportService {
                        nullif(split_part(r.txn_code, '&', 2), ''), null, count(*)
                 from msg_flow_log_response r
                 left join ana_tran_catalog c on lower(c.service_code) = lower(split_part(r.txn_code, '&', 1))
-                where r.response_time >= :startTime and r.response_time < :endTime and c.service_code is null
+                where c.service_code is null
                 group by split_part(r.txn_code, '&', 1), nullif(split_part(r.txn_code, '&', 2), '')
                 """, p);
     }
@@ -307,16 +304,12 @@ public class BatchDomainReportService {
     private boolean hasRetainedResponseDetails(BatchContext context) {
         Long count = jdbc.queryForObject("""
                 select count(*) from msg_flow_log_response
-                where response_time >= :startTime and response_time < :endTime
-                """, sourceParams(context), Long.class);
+                """, params(context.batchId()), Long.class);
         return count != null && count > 0;
     }
 
     private MapSqlParameterSource sourceParams(BatchContext context) {
-        LocalDate date = LocalDate.parse(context.origCdate(), BUSINESS_DATE);
-        return params(context.batchId()).addValue("origCdate", context.origCdate())
-                .addValue("startTime", Timestamp.valueOf(date.atStartOfDay()))
-                .addValue("endTime", Timestamp.valueOf(date.plusDays(1).atStartOfDay()));
+        return params(context.batchId()).addValue("origCdate", context.origCdate());
     }
 
     private MapSqlParameterSource params(String batchId) {
