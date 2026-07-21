@@ -18,14 +18,17 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class MigrationCommandService {
     static final long MAX_SHARD_COUNT = 10_000L;
     static final int MAX_PARALLELISM = 8;
+    static final int MAX_TRAN_CODE_LENGTH = 32;
     private static final long MILLIS_PER_SECOND = 1000L;
     private static final int MAX_ERROR_LENGTH = 2000;
 
@@ -101,12 +104,41 @@ public class MigrationCommandService {
         return commandId;
     }
 
+    public long createTranCodeCommand(MigrationTranCodeCommandForm form) {
+        List<String> tranCodes = validateTranCode(form);
+        Long createdCommandId = transactionTemplate.execute(status -> {
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbc.update("""
+                    insert into ana_migration_command (
+                        source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
+                        status, total_shard_count, tran_codes, sample_size, remark, created_by
+                    ) values (
+                        :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :remark, '绯荤粺'
+                    )
+                    """, tranCodeParams(form, tranCodes), keyHolder, new String[]{"command_id"});
+            long commandId = generatedLongKey(keyHolder, "command_id");
+            insertTranCodeShards(commandId, tranCodes);
+            return commandId;
+        });
+        if (createdCommandId == null) {
+            throw new IllegalStateException("Transaction-code migration command was not created");
+        }
+        long commandId = createdCommandId;
+        launch(commandId);
+        return commandId;
+    }
+
     public PagedResult<MigrationCommandRow> search(PageRequestParams page) {
         return searchByType(page, "TIME_RANGE");
     }
 
     public PagedResult<MigrationCommandRow> searchSql(PageRequestParams page) {
         return searchByType(page, "SQL");
+    }
+
+    public PagedResult<MigrationCommandRow> searchTranCode(PageRequestParams page) {
+        return searchByType(page, "TRAN_CODE");
     }
 
     private PagedResult<MigrationCommandRow> searchByType(PageRequestParams page, String commandType) {
@@ -367,6 +399,46 @@ public class MigrationCommandService {
         validateQuerySql(form.responseSql(), "Response SQL");
     }
 
+    private List<String> validateTranCode(MigrationTranCodeCommandForm form) {
+        if (form == null) {
+            throw new IllegalArgumentException("Transaction-code migration command must not be null");
+        }
+        List<String> tranCodes = parseTranCodes(form.tranCodes());
+        if (tranCodes.isEmpty()) {
+            throw new IllegalArgumentException("Transaction codes must not be blank");
+        }
+        if (tranCodes.size() > MAX_SHARD_COUNT) {
+            throw new IllegalArgumentException("Transaction-code count exceeds maximum " + MAX_SHARD_COUNT);
+        }
+        if (tranCodes.stream().anyMatch(tranCode -> tranCode.length() > MAX_TRAN_CODE_LENGTH)) {
+            throw new IllegalArgumentException("Transaction-code length must not exceed " + MAX_TRAN_CODE_LENGTH);
+        }
+        if (form.sampleSize() <= 0) {
+            throw new IllegalArgumentException("Sample size must be greater than 0");
+        }
+        if (form.parallelism() <= 0) {
+            throw new IllegalArgumentException("Parallelism must be greater than 0");
+        }
+        if (form.parallelism() > MAX_PARALLELISM) {
+            throw new IllegalArgumentException("Parallelism must not exceed " + MAX_PARALLELISM);
+        }
+        return tranCodes;
+    }
+
+    private List<String> parseTranCodes(String value) {
+        if (!StringUtils.hasText(value)) {
+            return List.of();
+        }
+        Set<String> distinctCodes = new LinkedHashSet<>();
+        for (String part : value.split(",")) {
+            String tranCode = part.trim();
+            if (!tranCode.isEmpty()) {
+                distinctCodes.add(tranCode);
+            }
+        }
+        return List.copyOf(distinctCodes);
+    }
+
     private void validateQuerySql(String sql, String label) {
         if (!StringUtils.hasText(sql)) {
             throw new IllegalArgumentException(label + "不能为空");
@@ -407,6 +479,17 @@ public class MigrationCommandService {
                 .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
                 .addValue("targetDataSource", runtimeProperties.targetDataSource())
                 .addValue("responseSql", form.responseSql().trim())
+                .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
+    }
+
+    private MapSqlParameterSource tranCodeParams(MigrationTranCodeCommandForm form, List<String> tranCodes) {
+        return new MapSqlParameterSource()
+                .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
+                .addValue("targetDataSource", runtimeProperties.targetDataSource())
+                .addValue("parallelism", form.parallelism())
+                .addValue("totalShardCount", tranCodes.size())
+                .addValue("tranCodes", String.join(",", tranCodes))
+                .addValue("sampleSize", form.sampleSize())
                 .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
     }
 
@@ -454,6 +537,23 @@ public class MigrationCommandService {
                     command_id, shard_seq, time_from, time_to, status
                 ) values (
                     :commandId, :shardSeq, :timeFrom, :timeTo, 'PENDING'
+                )
+                """, shards.toArray(MapSqlParameterSource[]::new));
+    }
+
+    private void insertTranCodeShards(long commandId, List<String> tranCodes) {
+        List<MapSqlParameterSource> shards = new ArrayList<>();
+        for (int shardSeq = 0; shardSeq < tranCodes.size(); shardSeq++) {
+            shards.add(new MapSqlParameterSource()
+                    .addValue("commandId", commandId)
+                    .addValue("shardSeq", shardSeq)
+                    .addValue("tranCode", tranCodes.get(shardSeq)));
+        }
+        jdbc.batchUpdate("""
+                insert into ana_migration_shard (
+                    command_id, shard_seq, tran_code, time_from, time_to, status
+                ) values (
+                    :commandId, :shardSeq, :tranCode, 0, 0, 'PENDING'
                 )
                 """, shards.toArray(MapSqlParameterSource[]::new));
     }

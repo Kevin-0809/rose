@@ -16,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class MigrationCommandServiceTest {
@@ -155,6 +156,89 @@ class MigrationCommandServiceTest {
     }
 
     @Test
+    void createTranCodeCommandDeduplicatesCodesCreatesShardsAndLaunches() {
+        long commandId = service.createTranCodeCommand(new MigrationTranCodeCommandForm(
+                "A001, B002, A001", 3, 2, "tran code migration"
+        ));
+
+        assertThat(commandId).isPositive();
+        TranCodeCommandRow command = plainJdbc.queryForObject("""
+                select command_type, tran_codes, sample_size, parallelism, total_shard_count, remark
+                from ana_migration_command
+                where command_id = ?
+                """, (rs, i) -> new TranCodeCommandRow(
+                rs.getString("command_type"),
+                rs.getString("tran_codes"),
+                rs.getInt("sample_size"),
+                rs.getInt("parallelism"),
+                rs.getLong("total_shard_count"),
+                rs.getString("remark")
+        ), commandId);
+        assertThat(command).isEqualTo(new TranCodeCommandRow(
+                "TRAN_CODE", "A001,B002", 3, 2, 2L, "tran code migration"
+        ));
+        assertThat(plainJdbc.queryForList("""
+                select tran_code
+                from ana_migration_shard
+                where command_id = %d
+                order by shard_seq
+                """.formatted(commandId), String.class)).containsExactly("A001", "B002");
+        verify(launcher).launch(commandId);
+    }
+
+    @Test
+    void createTranCodeCommandRejectsInvalidForms() {
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("", 3, 2, "")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm(" ,  ", 3, 2, "")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A001", 0, 2, "")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A001", -1, 2, "")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A001", 3, 9, "")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A".repeat(33), 3, 2, "")))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_command", Long.class)).isZero();
+        verify(launcher, never()).launch(1L);
+    }
+
+    @Test
+    void createTranCodeCommandRollsBackWhenShardInsertFails() {
+        plainJdbc.execute("alter table ana_migration_shard add constraint ck_test_tran_code check (tran_code <> 'B002')");
+
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm(
+                "A001,B002", 3, 2, "rollback"
+        ))).isInstanceOf(RuntimeException.class);
+
+        assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_command", Long.class)).isZero();
+        assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_shard", Long.class)).isZero();
+        verifyNoInteractions(launcher);
+    }
+
+    @Test
+    void searchTranCodeReturnsOnlyTranCodeCommandsWithPageMetadata() {
+        for (int index = 0; index < 21; index++) {
+            service.createTranCodeCommand(new MigrationTranCodeCommandForm(
+                    "T%03d".formatted(index), 3, 2, "transaction code " + index
+            ));
+        }
+        service.createCommand(new MigrationCommandForm(100_000L, 160_000L, 60L, 2, "time range"));
+        service.createSqlCommand(new MigrationSqlCommandForm("select source_ip from msg_flow_log_response", "sql"));
+
+        PagedResult<MigrationCommandRow> result = service.searchTranCode(PageRequestParams.of(2, 20));
+
+        assertThat(result.total()).isEqualTo(21L);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(20);
+        assertThat(result.totalPages()).isEqualTo(2);
+        assertThat(result.rows()).hasSize(1);
+        assertThat(result.rows().get(0).commandType()).isEqualTo("TRAN_CODE");
+    }
+
+    @Test
     void createSqlCommandRejectsMissingAndUnsafeSql() {
         assertThatThrownBy(() -> service.createSqlCommand(null))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -193,6 +277,16 @@ class MigrationCommandServiceTest {
         assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 60L, 9, "demo")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("并行度");
+    }
+
+    private record TranCodeCommandRow(
+            String commandType,
+            String tranCodes,
+            int sampleSize,
+            int parallelism,
+            long totalShardCount,
+            String remark
+    ) {
     }
 
     @Test
