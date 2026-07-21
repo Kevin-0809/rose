@@ -158,7 +158,8 @@ public class MigrationCommandService {
                 command.startedTime() == null ? null : durationSeconds(
                         Timestamp.valueOf(command.startedTime()),
                         command.endedTime() == null ? null : Timestamp.valueOf(command.endedTime())),
-                command.startedTime(), command.endedTime(), command.errorMessage(), shards
+                command.startedTime(), command.endedTime(), command.errorMessage(), shards,
+                command.commandType(), command.tranCodes(), command.sampleSize()
         );
     }
 
@@ -495,6 +496,8 @@ public class MigrationCommandService {
                 rs.getString("error_message"),
                 rs.getString("request_sql"),
                 rs.getString("response_sql"),
+                rs.getString("tran_codes"),
+                rs.getObject("sample_size", Integer.class),
                 rs.getString("remark")
         );
     }
@@ -502,6 +505,7 @@ public class MigrationCommandService {
     private MigrationShardRow mapShard(ResultSet rs) throws SQLException {
         return new MigrationShardRow(
                 rs.getInt("shard_seq"),
+                rs.getString("tran_code"),
                 rs.getLong("time_from"),
                 rs.getLong("time_to"),
                 rs.getString("status"),

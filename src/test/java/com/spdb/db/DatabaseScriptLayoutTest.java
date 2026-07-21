@@ -89,6 +89,23 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlSupportsTransactionCodeMigrationCommands() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql")).toLowerCase();
+
+        assertThat(ddl).contains("command_type varchar(32) not null default 'time_range'");
+        assertThat(ddl).contains("check (command_type in ('time_range','sql','tran_code'))");
+        assertThat(ddl).contains("tran_codes text");
+        assertThat(ddl).contains("sample_size integer");
+        assertThat(ddl).contains("add column if not exists tran_codes text");
+        assertThat(ddl).contains("add column if not exists sample_size integer");
+        assertThat(ddl).contains("tran_code varchar(32)");
+        assertThat(ddl).contains("add column if not exists tran_code varchar(32)");
+        assertThat(ddl).contains("drop constraint if exists ck_ana_migration_command_tran_code_parameters");
+        assertThat(ddl).contains("constraint ck_ana_migration_command_tran_code_parameters");
+        assertThat(ddl).contains("command_type <> 'tran_code' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0)");
+    }
+
+    @Test
     void retcodeComparisonTableHasChineseCommentsAndSeedData() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
         String ddlLower = ddl.toLowerCase();
