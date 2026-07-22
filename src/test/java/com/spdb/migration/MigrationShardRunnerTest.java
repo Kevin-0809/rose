@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -29,6 +31,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class MigrationShardRunnerTest {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-07-21T04:00:00Z"), SHANGHAI);
+
+    @Test
+    void tranCodeQueryUsesTransactionKeyOrderInsteadOfResponseTimeOrder() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
+
+        assertThat(source).contains("order by resp.source_ip, resp.trans_id");
+        assertThat(source).doesNotContain("order by resp.response_time desc, resp.source_ip, resp.trans_id");
+    }
 
     private JdbcTemplate sourceJdbc;
     private JdbcTemplate targetJdbc;

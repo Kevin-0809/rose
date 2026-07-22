@@ -211,7 +211,7 @@ public class MigrationShardRunner {
                 where resp.txn_code in (:txnCodes)
                   and resp.response_time >= :timeFrom
                   and resp.response_time < :timeTo
-                order by resp.response_time desc, resp.source_ip, resp.trans_id
+                order by resp.source_ip, resp.trans_id
                 limit :limit
                 offset :offset
                 """, params, (rs, rowNum) -> mapSourceRow(rs));
