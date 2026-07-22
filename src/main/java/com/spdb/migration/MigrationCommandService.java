@@ -27,7 +27,7 @@ import java.util.Set;
 @Service
 public class MigrationCommandService {
     static final long MAX_SHARD_COUNT = 10_000L;
-    static final int MAX_PARALLELISM = 8;
+    static final int MAX_PARALLELISM = 16;
     static final int MAX_TRAN_CODE_LENGTH = 32;
     private static final long MILLIS_PER_SECOND = 1000L;
     private static final int MAX_ERROR_LENGTH = 2000;

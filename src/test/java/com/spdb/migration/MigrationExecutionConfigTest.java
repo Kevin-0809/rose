@@ -10,8 +10,8 @@ class MigrationExecutionConfigTest {
     void shardExecutorUsesWorkersImmediatelyInsteadOfQueueingMigrationShards() {
         var executor = new MigrationExecutionConfig().migrationTaskExecutor();
         try {
-            assertThat(executor.getCorePoolSize()).isEqualTo(8);
-            assertThat(executor.getMaxPoolSize()).isEqualTo(8);
+            assertThat(executor.getCorePoolSize()).isEqualTo(16);
+            assertThat(executor.getMaxPoolSize()).isEqualTo(16);
             assertThat(executor.getThreadPoolExecutor().getQueue().remainingCapacity()).isZero();
         } finally {
             executor.shutdown();

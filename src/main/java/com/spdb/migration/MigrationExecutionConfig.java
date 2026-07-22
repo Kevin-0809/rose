@@ -22,8 +22,8 @@ public class MigrationExecutionConfig {
     public ThreadPoolTaskExecutor migrationTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setThreadNamePrefix("migration-exec-");
-        executor.setCorePoolSize(8);
-        executor.setMaxPoolSize(8);
+        executor.setCorePoolSize(16);
+        executor.setMaxPoolSize(16);
         executor.setQueueCapacity(0);
         executor.initialize();
         return executor;

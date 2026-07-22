@@ -196,7 +196,7 @@ class MigrationCommandServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A001", -1, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A001", 3, 9, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A001", 3, 17, "")))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.createTranCodeCommand(new MigrationTranCodeCommandForm("A".repeat(33), 3, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -274,7 +274,7 @@ class MigrationCommandServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 60L, 0, "demo")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 60L, 9, "demo")))
+        assertThatThrownBy(() -> service.createCommand(new MigrationCommandForm(100_000L, 200_000L, 60L, 17, "demo")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("并行度");
     }
