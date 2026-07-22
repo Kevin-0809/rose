@@ -206,7 +206,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void tranCodeMigrationUsesLatestResponseDateAsFiveDayWindowAnchor() {
+    void tranCodeMigrationUsesApplicationDateAsFiveDayWindowAnchor() {
         insertServiceCode("TRAN004", "ABC.DEF");
         long latestDay = dayStartMillis(-14);
         insertSourcePair("10.0.6.1", "BZ-HISTORICAL", "ABCDEF&bzjson", latestDay, latestDay + 2_000L);
@@ -215,9 +215,9 @@ class MigrationShardRunnerTest {
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(14L, "TRAN004", 1);
 
-        assertThat(result.migratedRows()).isEqualTo(3L);
-        assertThat(targetCount("msg_flow_log_request")).isEqualTo(3L);
-        assertThat(targetCount("msg_flow_log_response")).isEqualTo(3L);
+        assertThat(result).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
+        assertThat(targetCount("msg_flow_log_request")).isZero();
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test
