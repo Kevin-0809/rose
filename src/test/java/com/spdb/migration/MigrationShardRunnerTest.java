@@ -40,6 +40,14 @@ class MigrationShardRunnerTest {
         assertThat(source).doesNotContain("order by resp.response_time desc, resp.source_ip, resp.trans_id");
     }
 
+    @Test
+    void migrationQueriesFilterResponsesBeforeJoiningRequests() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
+
+        assertThat(source).contains("with filtered_response as (");
+        assertThat(source).contains("from filtered_response resp");
+    }
+
     private JdbcTemplate sourceJdbc;
     private JdbcTemplate targetJdbc;
     private MigrationShardRunner runner;

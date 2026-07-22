@@ -30,6 +30,13 @@ public class MigrationShardRunner {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap");
     private static final String SOURCE_QUERY = """
+            with filtered_response as (
+                select source_ip, trans_id, txn_code, response_time, message_type,
+                       response_message, return_code, return_msg
+                from msg_flow_log_response
+                where response_time >= ?
+                  and response_time < ?
+            )
             select req.source_ip,
                    req.trans_id,
                    req.txn_code as request_txn_code,
@@ -44,12 +51,10 @@ public class MigrationShardRunner {
                    resp.response_message,
                    resp.return_code,
                    resp.return_msg
-            from msg_flow_log_response resp
+            from filtered_response resp
             join msg_flow_log_request req
               on req.trans_id = resp.trans_id
              and req.source_ip = resp.source_ip
-            where resp.response_time >= ?
-              and resp.response_time < ?
             order by resp.response_time, resp.source_ip, resp.trans_id
             """;
 
@@ -174,6 +179,14 @@ public class MigrationShardRunner {
                 .addValue("limit", limit)
                 .addValue("offset", offset);
         return sourceJdbc.query("""
+                with filtered_response as (
+                    select source_ip, trans_id, txn_code, response_time, message_type,
+                           response_message, return_code, return_msg
+                    from msg_flow_log_response
+                    where txn_code in (:txnCodes)
+                      and response_time >= :timeFrom
+                      and response_time < :timeTo
+                )
                 select req.source_ip,
                        req.trans_id,
                        req.txn_code as request_txn_code,
@@ -188,13 +201,10 @@ public class MigrationShardRunner {
                        resp.response_message,
                        resp.return_code,
                        resp.return_msg
-                from msg_flow_log_response resp
+                from filtered_response resp
                 join msg_flow_log_request req
                   on req.trans_id = resp.trans_id
                  and req.source_ip = resp.source_ip
-                where resp.txn_code in (:txnCodes)
-                  and resp.response_time >= :timeFrom
-                  and resp.response_time < :timeTo
                 order by resp.source_ip, resp.trans_id
                 limit :limit
                 offset :offset
