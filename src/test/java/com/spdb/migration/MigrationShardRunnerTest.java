@@ -221,6 +221,20 @@ class MigrationShardRunnerTest {
     }
 
     @Test
+    void tranCodeMigrationLimitsCurrentDayToTheCurrentTime() {
+        insertServiceCode("TRAN005", "ABC.DEF");
+        long today = dayStartMillis(0);
+        insertSourcePair("10.0.7.1", "FUTURE", "ABCDEF&bzjson", today + 13 * 60 * 60 * 1000L, today + 13 * 60 * 60 * 1000L);
+        insertSourcePair("10.0.7.2", "CURRENT", "ABCDEF&bzjson", today + 11 * 60 * 60 * 1000L, today + 11 * 60 * 60 * 1000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(15L, "TRAN005", 1);
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetExists("msg_flow_log_response", "10.0.7.1", "FUTURE")).isFalse();
+        assertThat(targetExists("msg_flow_log_response", "10.0.7.2", "CURRENT")).isTrue();
+    }
+
+    @Test
     void responseTimeWindowIsHalfOpen() {
         insertSourcePair("10.0.0.7", "TXN-AT-FROM", "PAY007", 900L, 1000L);
         insertSourcePair("10.0.0.8", "TXN-AT-TO", "PAY008", 900L, 2000L);

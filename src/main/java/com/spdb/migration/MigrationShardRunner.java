@@ -121,6 +121,7 @@ public class MigrationShardRunner {
 
         BatchResult total = new BatchResult();
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
+        long currentTime = clock.instant().toEpochMilli();
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
             List<String> txnCodes = serviceCodes.stream()
                     .map(serviceCode -> serviceCode.replace(".", "") + "&" + messageType)
@@ -129,7 +130,9 @@ public class MigrationShardRunner {
             long migratedRows = 0L;
             for (int dayOffset = 0; dayOffset < 5 && migratedRows < maxRowsPerMessageType; dayOffset++) {
                 long dayFrom = currentDate.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                long dayTo = currentDate.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                long dayTo = dayOffset == 0
+                        ? currentTime
+                        : currentDate.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 int offset = 0;
                 while (migratedRows < maxRowsPerMessageType) {
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
