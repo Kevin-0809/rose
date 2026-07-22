@@ -48,6 +48,14 @@ class MigrationShardRunnerTest {
         assertThat(source).contains("from filtered_response resp");
     }
 
+    @Test
+    void tranCodeMigrationUsesConfiguredLookbackDays() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
+
+        assertThat(source).contains("int lookbackDays");
+        assertThat(source).contains("dayOffset < lookbackDays");
+    }
+
     private JdbcTemplate sourceJdbc;
     private JdbcTemplate targetJdbc;
     private MigrationShardRunner runner;

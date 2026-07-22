@@ -314,6 +314,7 @@ create table if not exists ana_migration_command (
     response_sql text,
     tran_codes text,
     sample_size integer,
+    lookback_days integer,
     error_message varchar(2000),
     remark varchar(1000),
     created_by varchar(100),
@@ -337,6 +338,12 @@ alter table ana_migration_command
 add column if not exists tran_codes text;
 alter table ana_migration_command
 add column if not exists sample_size integer;
+alter table ana_migration_command
+add column if not exists lookback_days integer;
+update ana_migration_command
+set lookback_days = 5
+where command_type = 'TRAN_CODE'
+  and lookback_days is null;
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_status;
 alter table ana_migration_command add constraint ck_ana_migration_command_status
 check (status in ('CREATED','RUNNING','COMPLETED','FAILED','CANCEL_REQUESTED','CANCELLED'));
@@ -345,7 +352,7 @@ alter table ana_migration_command add constraint ck_ana_migration_command_type
 check (command_type in ('TIME_RANGE','SQL','TRAN_CODE'));
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_tran_code_parameters;
 alter table ana_migration_command add constraint ck_ana_migration_command_tran_code_parameters
-check (command_type <> 'TRAN_CODE' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0));
+check (command_type <> 'TRAN_CODE' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0 and lookback_days is not null and lookback_days > 0));
 
 create table if not exists ana_migration_shard (
     shard_id bigserial primary key,
@@ -382,6 +389,7 @@ comment on column ana_migration_command.request_sql is 'SQL迁移模式历史兼
 comment on column ana_migration_command.response_sql is 'SQL迁移模式的响应报文查询SQL';
 comment on column ana_migration_command.tran_codes is '交易码迁移模式的逗号分隔交易码';
 comment on column ana_migration_command.sample_size is '交易码迁移模式下每类报文的迁移笔数';
+comment on column ana_migration_command.lookback_days is '交易码迁移模式下从当天起向前回溯的自然日数';
 comment on table ana_migration_shard is '报文日志迁移分片表';
 
 create index if not exists idx_ana_migration_command_status

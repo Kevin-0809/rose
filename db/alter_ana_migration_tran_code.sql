@@ -8,6 +8,14 @@ alter table tss.ana_migration_command
 alter table tss.ana_migration_command
     add column if not exists sample_size integer;
 
+alter table tss.ana_migration_command
+    add column if not exists lookback_days integer;
+
+update tss.ana_migration_command
+set lookback_days = 5
+where command_type = 'TRAN_CODE'
+  and lookback_days is null;
+
 alter table tss.ana_migration_shard
     add column if not exists tran_code varchar(32);
 
@@ -30,5 +38,7 @@ alter table tss.ana_migration_command
             and length(trim(tran_codes)) > 0
             and sample_size is not null
             and sample_size > 0
+            and lookback_days is not null
+            and lookback_days > 0
         )
     );

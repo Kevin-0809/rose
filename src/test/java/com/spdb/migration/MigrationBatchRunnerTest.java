@@ -69,6 +69,7 @@ class MigrationBatchRunnerTest {
                     response_sql clob,
                     tran_codes clob,
                     sample_size integer,
+                    lookback_days integer,
                     error_message varchar(2000),
                     remark varchar(1000),
                     created_by varchar(100),
@@ -180,10 +181,10 @@ class MigrationBatchRunnerTest {
     @Test
     void runTranCodeCommandUsesTranCodeExecutionPathAndSkipsEmptyResult() {
         long commandId = commandService.createTranCodeCommand(new MigrationTranCodeCommandForm(
-                "TRAN001", 3, 1, "tran code command"
+                "TRAN001", 3, 5, 1, "tran code command"
         ));
         Long shardId = shardIds(commandId).get(0);
-        when(shardRunner.runTranCode(shardId, "TRAN001", 3))
+        when(shardRunner.runTranCode(shardId, "TRAN001", 3, 5))
                 .thenReturn(new MigrationShardResult(0L, 0L, 0L));
 
         batchRunner.run(commandId);

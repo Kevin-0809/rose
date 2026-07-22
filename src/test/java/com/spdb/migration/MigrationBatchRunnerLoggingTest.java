@@ -62,6 +62,7 @@ class MigrationBatchRunnerLoggingTest {
                     response_sql clob,
                     tran_codes clob,
                     sample_size integer,
+                    lookback_days integer,
                     error_message varchar(2000),
                     remark varchar(1000),
                     created_by varchar(100),
@@ -132,6 +133,30 @@ class MigrationBatchRunnerLoggingTest {
             assertThat(event.getThrowableProxy()).isNotNull();
             assertThat(event.getThrowableProxy().getMessage()).isEqualTo("source unavailable");
         });
+    }
+
+    @Test
+    void runLogsCommandAndShardProgress() {
+        long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 150_000L, 50L, 1, "progress log"));
+        Long shardId = shardIds(commandId).get(0);
+        MigrationBatchRunner runner = new MigrationBatchRunner(
+                commandService,
+                successfulShardRunner(),
+                executor
+        );
+
+        ListAppender<ILoggingEvent> appender = attachAppender();
+        try {
+            runner.run(commandId);
+        } finally {
+            detachAppender(appender);
+        }
+
+        assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage)
+                .anySatisfy(message -> assertThat(message).contains("Migration command started").contains("commandId=" + commandId))
+                .anySatisfy(message -> assertThat(message).contains("Migration shard started").contains("shardId=" + shardId))
+                .anySatisfy(message -> assertThat(message).contains("Migration shard completed").contains("migratedRows=2"))
+                .anySatisfy(message -> assertThat(message).contains("Migration command completed").contains("commandId=" + commandId));
     }
 
     @Test
@@ -247,6 +272,15 @@ class MigrationBatchRunnerLoggingTest {
             @Override
             public MigrationShardResult run(long shardId, long timeFrom, long timeTo, int fetchSize) {
                 throw failure;
+            }
+        };
+    }
+
+    private MigrationShardRunner successfulShardRunner() {
+        return new MigrationShardRunner(jdbc, jdbc, transactionManager) {
+            @Override
+            public MigrationShardResult run(long shardId, long timeFrom, long timeTo, int fetchSize) {
+                return new MigrationShardResult(2L, 0L, 0L);
             }
         };
     }

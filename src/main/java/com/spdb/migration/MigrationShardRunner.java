@@ -7,6 +7,8 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -26,6 +28,7 @@ import java.util.Set;
 
 @Component
 public class MigrationShardRunner {
+    private static final Logger log = LoggerFactory.getLogger(MigrationShardRunner.class);
     private static final int MAX_TARGET_CHUNK_SIZE = 500;
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap");
@@ -116,28 +119,48 @@ public class MigrationShardRunner {
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType) {
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS);
+    }
+
+    public MigrationShardResult runTranCode(long shardId,
+                                             String tranCode,
+                                             int maxRowsPerMessageType,
+                                             int lookbackDays) {
         if (maxRowsPerMessageType <= 0) {
+            log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=sample size is not positive",
+                    shardId, tranCode);
+            return new MigrationShardResult(0L, 0L, 0L);
+        }
+        if (lookbackDays <= 0) {
+            log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=lookback days is not positive",
+                    shardId, tranCode);
             return new MigrationShardResult(0L, 0L, 0L);
         }
         List<String> serviceCodes = loadServiceCodes(tranCode);
         if (serviceCodes.isEmpty()) {
+            log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=no service code mapping",
+                    shardId, tranCode);
             return new MigrationShardResult(0L, 0L, 0L);
         }
 
         BatchResult total = new BatchResult();
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
         long currentTime = clock.instant().toEpochMilli();
+        log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
+                shardId, tranCode, serviceCodes.size(), maxRowsPerMessageType, lookbackDays, currentDate);
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
             List<String> txnCodes = serviceCodes.stream()
                     .map(serviceCode -> serviceCode.replace(".", "") + "&" + messageType)
                     .distinct()
                     .toList();
             long migratedRows = 0L;
-            for (int dayOffset = 0; dayOffset < 5 && migratedRows < maxRowsPerMessageType; dayOffset++) {
+            for (int dayOffset = 0; dayOffset < lookbackDays && migratedRows < maxRowsPerMessageType; dayOffset++) {
                 long dayFrom = currentDate.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 long dayTo = dayOffset == 0
                         ? currentTime
                         : currentDate.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                log.info("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, dayOffset={}, timeFrom={}, timeTo={}, migratedRows={}",
+                        shardId, tranCode, messageType, dayOffset, dayFrom, dayTo, migratedRows);
                 int offset = 0;
                 while (migratedRows < maxRowsPerMessageType) {
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
@@ -152,7 +175,11 @@ public class MigrationShardRunner {
                     offset += rows.size();
                 }
             }
+            log.info("Transaction-code migration message type completed, shardId={}, tranCode={}, messageType={}, migratedRows={}, targetRows={}",
+                    shardId, tranCode, messageType, migratedRows, maxRowsPerMessageType);
         }
+        log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}",
+                shardId, tranCode, total.migratedRows, total.skippedRows);
         return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L);
     }
 

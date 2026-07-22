@@ -111,10 +111,10 @@ public class MigrationCommandService {
             jdbc.update("""
                     insert into ana_migration_command (
                         source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
-                        status, total_shard_count, tran_codes, sample_size, remark, created_by
+                        status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by
                     ) values (
                         :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
-                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :remark, '绯荤粺'
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :remark, '绯荤粺'
                     )
                     """, tranCodeParams(form, tranCodes), keyHolder, new String[]{"command_id"});
             long commandId = generatedLongKey(keyHolder, "command_id");
@@ -430,6 +430,9 @@ public class MigrationCommandService {
         if (form.sampleSize() <= 0) {
             throw new IllegalArgumentException("Sample size must be greater than 0");
         }
+        if (form.lookbackDays() <= 0) {
+            throw new IllegalArgumentException("Lookback days must be greater than 0");
+        }
         if (form.parallelism() <= 0) {
             throw new IllegalArgumentException("Parallelism must be greater than 0");
         }
@@ -504,6 +507,7 @@ public class MigrationCommandService {
                 .addValue("totalShardCount", tranCodes.size())
                 .addValue("tranCodes", String.join(",", tranCodes))
                 .addValue("sampleSize", form.sampleSize())
+                .addValue("lookbackDays", form.lookbackDays())
                 .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
     }
 
@@ -612,7 +616,8 @@ public class MigrationCommandService {
                 rs.getString("response_sql"),
                 rs.getString("tran_codes"),
                 rs.getObject("sample_size", Integer.class),
-                rs.getString("remark")
+                rs.getString("remark"),
+                rs.getObject("lookback_days", Integer.class)
         );
     }
 

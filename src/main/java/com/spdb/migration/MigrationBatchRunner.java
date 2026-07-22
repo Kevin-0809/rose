@@ -44,6 +44,8 @@ public class MigrationBatchRunner {
             }
             return;
         }
+        log.info("Migration command started, commandId={}, commandType={}, totalShardCount={}, parallelism={}",
+                commandId, command.commandType(), command.totalShardCount(), Math.max(command.parallelism(), 1));
         try {
             runRunnableShards(command, Math.max(command.parallelism(), 1));
             commandService.refreshCommandCounters(commandId);
@@ -93,19 +95,27 @@ public class MigrationBatchRunner {
             commandService.markShardFailed(shardId, "Migration shard not found: " + shardId);
             return;
         }
+        logShardStarted(command, shardId, shard);
         try {
             MigrationShardResult result;
             if ("SQL".equals(command.commandType())) {
                 result = shardRunner.runSql(shardId, command.responseSql(), FETCH_SIZE);
             } else if ("TRAN_CODE".equals(command.commandType())) {
-                result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize());
+                int lookbackDays = command.lookbackDays() == null
+                        ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS
+                        : command.lookbackDays();
+                result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays);
             } else {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             }
             if ("TRAN_CODE".equals(command.commandType()) && isEmpty(result)) {
                 commandService.markShardSkipped(shardId);
+                log.info("Migration shard skipped, commandId={}, shardId={}, shardSeq={}, reason=no eligible complete pairs",
+                        commandId, shardId, shard.shardSeq());
             } else {
                 commandService.markShardCompleted(shardId, result);
+                log.info("Migration shard completed, commandId={}, shardId={}, shardSeq={}, migratedRows={}, skippedRows={}, droppedRows={}",
+                        commandId, shardId, shard.shardSeq(), result.migratedRows(), result.skippedRows(), result.droppedRows());
             }
         } catch (Exception e) {
             log.error("Migration shard execution failed, commandId={}, shardId={}", commandId, shardId, e);
@@ -115,6 +125,17 @@ public class MigrationBatchRunner {
 
     private boolean isEmpty(MigrationShardResult result) {
         return result.migratedRows() == 0 && result.skippedRows() == 0 && result.droppedRows() == 0;
+    }
+
+    private void logShardStarted(MigrationCommandRow command, long shardId, MigrationShardRow shard) {
+        if ("TRAN_CODE".equals(command.commandType())) {
+            log.info("Migration shard started, commandId={}, shardId={}, shardSeq={}, commandType={}, tranCode={}, sampleSize={}, lookbackDays={}",
+                    command.commandId(), shardId, shard.shardSeq(), command.commandType(), shard.tranCode(), command.sampleSize(),
+                    command.lookbackDays() == null ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS : command.lookbackDays());
+            return;
+        }
+        log.info("Migration shard started, commandId={}, shardId={}, shardSeq={}, commandType={}, timeFrom={}, timeTo={}",
+                command.commandId(), shardId, shard.shardSeq(), command.commandType(), shard.timeFrom(), shard.timeTo());
     }
 
     private void finishCommand(long commandId) {
@@ -131,6 +152,12 @@ public class MigrationBatchRunner {
         }
         if (!terminalMarked && commandService.isCancelRequested(commandId)) {
             commandService.markCancelled(commandId);
+            return;
+        }
+        if (terminalMarked) {
+            log.info("Migration command completed, commandId={}, status={}, completedShardCount={}, failedShardCount={}, migratedRows={}, skippedRows={}, droppedRows={}",
+                    commandId, progress.failedShardCount() > 0 ? "FAILED" : "COMPLETED", progress.completedShardCount(),
+                    progress.failedShardCount(), progress.migratedRows(), progress.skippedRows(), progress.droppedRows());
         }
     }
 

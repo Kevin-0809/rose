@@ -175,7 +175,7 @@ class MigrationControllerTest {
     @Test
     void createTranCodeCommandReturnsPageWithErrorWhenValidationFails() {
         MigrationCommandService service = mock(MigrationCommandService.class);
-        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm("", 0, 2, "");
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm("", 0, 5, 2, "");
         PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
         when(service.createTranCodeCommand(form)).thenThrow(new IllegalArgumentException("交易码不能为空"));
         when(service.searchTranCode(PageRequestParams.of(null, null))).thenReturn(result);
