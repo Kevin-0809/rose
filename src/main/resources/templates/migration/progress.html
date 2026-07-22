@@ -49,7 +49,7 @@
     <div class="panel" style="margin-top:16px" th:if="${progress.commandType == 'TRAN_CODE'}">
       <div class="section-title"><div><div class="eyebrow">Transaction Code</div><h2>交易码迁移参数</h2></div></div>
       <div class="cards">
-        <div class="card"><div class="label">交易码</div><div class="value" th:text="${progress.tranCodes}"></div></div>
+        <div class="card migration-tran-codes"><div class="label">交易码</div><div class="value" th:text="${#strings.replace(progress.tranCodes, ',', ', ')}"></div></div>
         <div class="card"><div class="label">每类报文迁移笔数</div><div class="value" th:text="${progress.sampleSize}"></div></div>
       </div>
     </div>

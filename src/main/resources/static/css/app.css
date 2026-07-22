@@ -1361,3 +1361,16 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 }
+
+.migration-tran-codes {
+  grid-column: span 2;
+}
+
+.migration-tran-codes .value {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
