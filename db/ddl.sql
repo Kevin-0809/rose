@@ -627,6 +627,75 @@ create table if not exists ana_batch_report_gap (
 create index if not exists idx_ana_batch_report_gap_batch_type
 on ana_batch_report_gap(batch_id, gap_type);
 
+-- Report detail export persistence tables.
+create table if not exists ana_report_export_command (
+    command_id bigserial primary key,
+    batch_id varchar(64) not null,
+    report_date varchar(8) not null,
+    status varchar(32) not null default 'PENDING',
+    started_time timestamp,
+    ended_time timestamp,
+    error_message varchar(4000),
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_report_export_command_batch unique (batch_id),
+    constraint ck_ana_report_export_command_status
+        check (status in ('PENDING','RUNNING','SUCCEEDED','FAILED'))
+);
+
+comment on table ana_report_export_command is '报表明细导出指令表';
+comment on column ana_report_export_command.command_id is '导出指令主键';
+comment on column ana_report_export_command.batch_id is '导出批次号';
+comment on column ana_report_export_command.report_date is '报表日期，格式yyyymmdd';
+comment on column ana_report_export_command.status is '导出执行状态';
+comment on column ana_report_export_command.started_time is '导出开始时间';
+comment on column ana_report_export_command.ended_time is '导出结束时间';
+comment on column ana_report_export_command.error_message is '导出失败错误信息';
+comment on column ana_report_export_command.created_time is '创建时间';
+comment on column ana_report_export_command.updated_at is '更新时间';
+
+create table if not exists ana_report_export_summary (
+    summary_id bigserial primary key,
+    batch_id varchar(64) not null,
+    report_date varchar(8) not null,
+    module_name varchar(100) not null,
+    covered_528_interface_count bigint not null default 0,
+    sent_transaction_count bigint not null default 0,
+    comp_result_1_count bigint not null default 0,
+    comp_result_2_count bigint not null default 0,
+    comp_result_3_count bigint not null default 0,
+    comp_result_4_count bigint not null default 0,
+    comp_result_8_count bigint not null default 0,
+    diff_528_field_count bigint not null default 0,
+    success_rate numeric(12,8) not null default 0,
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_report_export_summary unique (batch_id, module_name)
+);
+
+comment on table ana_report_export_summary is '报表明细导出汇总表';
+comment on column ana_report_export_summary.summary_id is '导出汇总主键';
+comment on column ana_report_export_summary.batch_id is '导出批次号';
+comment on column ana_report_export_summary.report_date is '报表日期，格式yyyymmdd';
+comment on column ana_report_export_summary.module_name is '所属模块名称';
+comment on column ana_report_export_summary.covered_528_interface_count is '覆盖的528接口数量';
+comment on column ana_report_export_summary.sent_transaction_count is '已发送交易数量';
+comment on column ana_report_export_summary.comp_result_1_count is '比对结果1数量';
+comment on column ana_report_export_summary.comp_result_2_count is '比对结果2数量';
+comment on column ana_report_export_summary.comp_result_3_count is '比对结果3数量';
+comment on column ana_report_export_summary.comp_result_4_count is '比对结果4数量';
+comment on column ana_report_export_summary.comp_result_8_count is '比对结果8数量';
+comment on column ana_report_export_summary.diff_528_field_count is '差异528字段数量';
+comment on column ana_report_export_summary.success_rate is '比对成功率';
+comment on column ana_report_export_summary.created_time is '创建时间';
+comment on column ana_report_export_summary.updated_at is '更新时间';
+
+create index if not exists idx_ana_report_export_command_status
+on ana_report_export_command(status, created_time desc);
+
+create index if not exists idx_ana_report_export_summary_batch
+on ana_report_export_summary(batch_id, module_name);
+
 create index if not exists idx_ana_field_mapping_lookup
 on ana_field_mapping(tran_code, service_code, sop_field_name, soap_field_name, bizjson_field_name);
 

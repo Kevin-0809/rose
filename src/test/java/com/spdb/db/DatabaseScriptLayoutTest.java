@@ -365,4 +365,60 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("idx_msg_flow_log_response_report_time_trans");
         assertThat(ddl).contains("on msg_flow_log_response(response_time, trans_id)");
     }
+
+    @Test
+    void ddlContainsReportExportCommandAndSummaryTables() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
+        String ddlLower = ddl.toLowerCase().replace("\r\n", "\n");
+
+        assertThat(ddlLower).contains("create table if not exists ana_report_export_command");
+        assertThat(ddlLower).contains("command_id bigserial primary key");
+        assertThat(ddlLower).contains("batch_id varchar(64) not null");
+        assertThat(ddlLower).contains("report_date varchar(8) not null");
+        assertThat(ddlLower).contains("status varchar(32) not null default 'pending'");
+        assertThat(ddlLower).contains("constraint uk_ana_report_export_command_batch unique (batch_id)");
+        assertThat(ddlLower).contains("constraint ck_ana_report_export_command_status");
+        assertThat(ddlLower).contains("check (status in ('pending','running','succeeded','failed'))");
+        assertThat(ddlLower).contains("started_time timestamp");
+        assertThat(ddlLower).contains("ended_time timestamp");
+        assertThat(ddlLower).contains("error_message varchar(4000)");
+
+        assertThat(ddlLower).contains("create table if not exists ana_report_export_summary");
+        assertThat(ddlLower).contains("summary_id bigserial primary key");
+        assertThat(ddlLower).contains("module_name varchar(100) not null");
+        List<String> summaryColumns = List.of(
+                "covered_528_interface_count bigint not null default 0",
+                "sent_transaction_count bigint not null default 0",
+                "comp_result_1_count bigint not null default 0",
+                "comp_result_2_count bigint not null default 0",
+                "comp_result_3_count bigint not null default 0",
+                "comp_result_4_count bigint not null default 0",
+                "comp_result_8_count bigint not null default 0",
+                "diff_528_field_count bigint not null default 0",
+                "success_rate numeric(12,8) not null default 0",
+                "constraint uk_ana_report_export_summary unique (batch_id, module_name)");
+        summaryColumns.forEach(column -> assertThat(ddlLower).contains(column));
+
+        List<String> commandColumns = List.of(
+                "command_id", "batch_id", "report_date", "status", "started_time", "ended_time",
+                "error_message", "created_time", "updated_at");
+        List<String> summaryColumnNames = List.of(
+                "summary_id", "batch_id", "report_date", "module_name", "covered_528_interface_count",
+                "sent_transaction_count", "comp_result_1_count", "comp_result_2_count", "comp_result_3_count",
+                "comp_result_4_count", "comp_result_8_count", "diff_528_field_count", "success_rate",
+                "created_time", "updated_at");
+        assertThat(ddl).containsPattern("comment on table ana_report_export_command is '[\\p{IsHan}][^']*';");
+        assertThat(ddl).containsPattern("comment on table ana_report_export_summary is '[\\p{IsHan}][^']*';");
+        commandColumns.forEach(column -> assertThat(ddl).containsPattern(
+                "comment on column ana_report_export_command\\." + column + " is '[\\p{IsHan}][^']*';"));
+        summaryColumnNames.forEach(column -> assertThat(ddl).containsPattern(
+                "comment on column ana_report_export_summary\\." + column + " is '[\\p{IsHan}][^']*';"));
+
+        assertThat(ddlLower).contains("""
+                create index if not exists idx_ana_report_export_command_status
+                on ana_report_export_command(status, created_time desc);""");
+        assertThat(ddlLower).contains("""
+                create index if not exists idx_ana_report_export_summary_batch
+                on ana_report_export_summary(batch_id, module_name);""");
+    }
 }
