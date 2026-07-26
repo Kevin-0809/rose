@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>报表明细导出</title><link rel="stylesheet" href="/css/app.css"></head>
+<body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
+  <div class="page-head"><div><div class="eyebrow">Report Detail Export</div><h1>报表明细导出</h1><p class="muted">基于当前回放比对表生成汇总报表、字段级明细和交易级明细。</p></div></div>
+  <form class="panel form-grid" method="post" action="/report-exports"><div class="span-2"><div class="field-label">导出范围</div><div class="muted">读取当前 tss_retcode_comp、tss_tran_comp 和 tss_field_comp 的全部记录。</div></div><div class="actions"><button class="btn primary" type="submit">生成报表</button></div></form>
+</main></div></div><div th:replace="~{fragments/layout :: sidebarScript}"></div></body></html>

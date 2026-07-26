@@ -193,7 +193,7 @@ class MigrationBatchRunnerTest {
         assertThat(progress.status()).isEqualTo("COMPLETED");
         assertThat(progress.completedShardCount()).isEqualTo(1L);
         assertThat(progress.shards()).extracting(MigrationShardRow::status).containsExactly("SKIPPED");
-        verify(shardRunner).runTranCode(shardId, "TRAN001", 3);
+        verify(shardRunner).runTranCode(shardId, "TRAN001", 3, 5);
         verify(shardRunner, never()).run(anyLong(), anyLong(), anyLong(), anyInt());
         verify(shardRunner, never()).runSql(anyLong(), org.mockito.ArgumentMatchers.anyString(), anyInt());
     }

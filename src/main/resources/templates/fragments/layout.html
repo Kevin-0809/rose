@@ -30,6 +30,8 @@
       </div>
     </section>
 
+    <a class="sidebar-home" th:classappend="${active == 'report-exports'} ? 'active'" th:attr="aria-current=${active == 'report-exports'} ? 'page' : null" href="/report-exports">报表明细导出</a>
+
     <section class="nav-group" data-group="operations">
       <button class="nav-group-toggle" type="button" aria-controls="nav-group-operations" aria-expanded="false">运维工具</button>
       <div id="nav-group-operations" class="nav-group-links">

@@ -102,7 +102,7 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("add column if not exists tran_code varchar(32)");
         assertThat(ddl).contains("drop constraint if exists ck_ana_migration_command_tran_code_parameters");
         assertThat(ddl).contains("constraint ck_ana_migration_command_tran_code_parameters");
-        assertThat(ddl).contains("command_type <> 'tran_code' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0)");
+        assertThat(ddl).contains("command_type <> 'tran_code' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0 and lookback_days is not null and lookback_days > 0)");
     }
 
     @Test
