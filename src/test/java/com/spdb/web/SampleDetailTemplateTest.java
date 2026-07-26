@@ -40,6 +40,12 @@ class SampleDetailTemplateTest {
 
         assertThat(html).contains("/samples/field-diffs/export");
         assertThat(html).contains("导出ZIP");
+        assertThat(html).contains("/samples/field-diffs/tracking-export");
+        assertThat(html).contains("data-field-tracking-export");
+        assertThat(html).contains("导出问题跟踪表");
+        assertThat(html).contains("this.form.querySelector('[name=\"batchId\"]')");
+        assertThat(html).contains("window.alert('请选择批次后导出')");
+        assertThat(html).contains("batchId.focus()");
         assertThat(html).doesNotContain("/samples/detail-fields/export");
         assertThat(html).contains("table-wrap table-wrap-wide");
         assertThat(html).contains("class=\"table-compact field-diff-table\"");
