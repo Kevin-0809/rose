@@ -3,6 +3,7 @@ package com.spdb.report;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,7 @@ public class ReportExportAsyncExecutor implements ReportExportTaskLauncher {
     private final ThreadPoolTaskExecutor executor;
     private final Clock clock;
 
+    @Autowired
     public ReportExportAsyncExecutor(ObjectProvider<ReportExportCommandService> commandServiceProvider,
                                      ReportExportBatchRunner batchRunner,
                                      @Qualifier("samplingTaskExecutor") ThreadPoolTaskExecutor samplingTaskExecutor) {
