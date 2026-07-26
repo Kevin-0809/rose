@@ -1,6 +1,7 @@
 package com.spdb.sample;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -51,6 +52,7 @@ class TransactionDiffTrackingExportServiceTest {
     }
 
     @Test
+    @Disabled("旧版 18 列导出与 SQL 最终口径冲突")
     void exportsOnlyTheFirstRowOfEachBatchScopedResponseCodeTriple() {
         jdbc.getJdbcTemplate().update("""
                 insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner)
@@ -121,6 +123,65 @@ class TransactionDiffTrackingExportServiceTest {
     }
 
     @Test
+    void exportsSqlAcceptanceRowsWithCatalogSelectionAndProblemClassification() {
+        insertCatalog(20L, "CAT-20", "SVC-A", "错误目录交易", "错误目录组", "错误目录负责人");
+        insertCatalog(10L, "CAT-10", "SVC-A", "目录交易", "目录组", "目录负责人");
+        insertResult(10L, "BATCH-A", "SOURCE-CODE", "SVC-A", "AAAAAAA", "原!^\r\n描述", "DEST-FAIL", "目标\r\n描述", "源负责人", "SEQ-FAIL");
+        insertResult(11L, "BATCH-A", "LATER-CODE", "SVC-A", "AAAAAAA", "应被归一", "DEST-FAIL", "应被归一", "后续负责人", "SEQ-LATER");
+        insertResult(20L, "BATCH-A", "SOURCE-CODE", "SVC-A", "ORIG-FAIL", "原失败", "000000000000", "目标成功", "源负责人", "SEQ-DEST-SUCCESS");
+        insertResult(30L, "BATCH-A", "SOURCE-CODE", "SVC-A", "AAAAAAA", "原成功", "000000000000", "目标成功", "源负责人", "SEQ-BOTH-SUCCESS");
+        insertResult(40L, "BATCH-A", "SOURCE-CODE", "SVC-A", "ORIG-FAIL", "原失败", "DEST-FAIL", "目标失败", "源负责人", "SEQ-BOTH-FAIL");
+        insertResult(50L, "BATCH-A", "SOURCE-CODE", "SVC-NO-CATALOG", "AAAAAAA", "原成功", "DEST-FAIL", "目标失败", "源负责人", "SEQ-NO-CATALOG");
+        insertResult(5L, "BATCH-OTHER", "OTHER-CODE", "SVC-A", "AAAAAAA", "其他批次", "DEST-FAIL", "其他批次", "其他负责人", "SEQ-OTHER");
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        service.export("BATCH-A", output);
+
+        String[][] expected = {
+                {"20260724", "目录组", "1", "BATCH-A", "CAT-10", "目录交易", "交易级", "20260724", "528成功/ccbs成功", "528响应码：AAAAAAA；528响应描述：原成功；CCBS响应码：000000000000；CCBS响应描述：目标成功", "目录负责人", "", "", "", "", "", "", "SEQ-BOTH-SUCCESS", ""},
+                {"20260724", "目录组", "2", "BATCH-A", "CAT-10", "目录交易", "交易级", "20260724", "528成功/ccbs失败", "528响应码：AAAAAAA；528响应描述：原   描述；CCBS响应码：DEST-FAIL；CCBS响应描述：目标  描述", "目录负责人", "", "", "", "", "", "", "SEQ-FAIL", ""},
+                {"20260724", "目录组", "3", "BATCH-A", "CAT-10", "目录交易", "交易级", "20260724", "528失败/ccbs成功", "528响应码：ORIG-FAIL；528响应描述：原失败；CCBS响应码：000000000000；CCBS响应描述：目标成功", "目录负责人", "", "", "", "", "", "", "SEQ-DEST-SUCCESS", ""},
+                {"20260724", "目录组", "4", "BATCH-A", "CAT-10", "目录交易", "交易级", "20260724", "二者均失败", "528响应码：ORIG-FAIL；528响应描述：原失败；CCBS响应码：DEST-FAIL；CCBS响应描述：目标失败", "目录负责人", "", "", "", "", "", "", "SEQ-BOTH-FAIL", ""},
+                {"20260724", "", "5", "BATCH-A", "", "", "交易级", "20260724", "528成功/ccbs失败", "528响应码：AAAAAAA；528响应描述：原成功；CCBS响应码：DEST-FAIL；CCBS响应描述：目标失败", "", "", "", "", "", "", "", "SEQ-NO-CATALOG", ""}
+        };
+
+        String text = output.toString(StandardCharsets.UTF_8);
+        String[] lines = text.split("\\n", -1);
+        assertThat(lines).hasSize(7);
+        assertThat(lines[0].split(Pattern.quote("!^"), -1)).containsExactly(
+                "业务日期", "组别", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期", "字段名", "问题描述", "交易负责人",
+                "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协调", "解决人员", "流水号", "缺陷修复日期");
+        for (int index = 0; index < expected.length; index++) {
+            assertThat(lines[index + 1].split(Pattern.quote("!^"), -1)).containsExactly(expected[index]);
+        }
+        assertThat(text).doesNotContain("BATCH-OTHER", "SOURCE-CODE", "源负责人", "\r");
+
+        List<String[]> stored = jdbc.getJdbcTemplate().query("""
+                select business_date, module_name, row_no, source_batch_id, tran_code, tran_name,
+                       problem_level, registration_date, field_name, problem_description, transaction_owner,
+                       problem_type, preliminary_analysis, final_solution, resolution_date, coordination_required,
+                       resolver, tran_seq_no, defect_fix_date
+                  from ana_tran_diff_tracking_export
+                 order by row_no
+                """, (rs, rowNum) -> new String[]{
+                rs.getString("business_date"), rs.getString("module_name"), rs.getString("row_no"),
+                rs.getString("source_batch_id"), rs.getString("tran_code"), rs.getString("tran_name"),
+                rs.getString("problem_level"), rs.getString("registration_date"), rs.getString("field_name"),
+                rs.getString("problem_description"), rs.getString("transaction_owner"), rs.getString("problem_type"),
+                rs.getString("preliminary_analysis"), rs.getString("final_solution"), rs.getString("resolution_date"),
+                rs.getString("coordination_required"), rs.getString("resolver"), rs.getString("tran_seq_no"),
+                rs.getString("defect_fix_date")});
+        assertThat(stored).hasSize(expected.length);
+        for (int index = 0; index < expected.length; index++) {
+            assertThat(stored.get(index)).containsExactly(
+                    expected[index][0], emptyAsNull(expected[index][1]), expected[index][2], expected[index][3],
+                    emptyAsNull(expected[index][4]), emptyAsNull(expected[index][5]), expected[index][6], expected[index][7],
+                    expected[index][8], expected[index][9], emptyAsNull(expected[index][10]), null, null, null, null,
+                    null, null, expected[index][17], null);
+        }
+    }
+
+    @Test
     void rollsBackRowsAndDoesNotWriteOutputWhenTheSecondInsertFails() {
         insertResult(10L, "BATCH-ROLLBACK", "T001", "SVC-A", "ORIG-1", "原描述", "DEST-1", "目标描述", "负责人一", "SEQ-1");
         insertResult(20L, "BATCH-ROLLBACK", "T002", "SVC-A", "ORIG-2", "原描述", "DEST-1", "目标描述", "负责人二", "SEQ-2");
@@ -168,6 +229,7 @@ class TransactionDiffTrackingExportServiceTest {
     }
 
     @Test
+    @Disabled("旧版断言将源负责人作为目录负责人，与 SQL 最终口径冲突")
     void treatsEveryServiceAndResponseCodeDifferenceAsAnIndependentGroup() {
         insertResult(40L, "BATCH-GROUPS", "T001", "SVC-A", "ORIG-1", "原描述", "DEST-1", "目标描述", "A-首条负责人", "A-首条流水");
         insertResult(50L, "BATCH-GROUPS", "T001", "SVC-A", "ORIG-1", "原描述", "DEST-1", "目标描述", "A-后续负责人", "A-后续流水");
@@ -203,6 +265,7 @@ class TransactionDiffTrackingExportServiceTest {
     private void createTables() {
         jdbc.getJdbcTemplate().execute("""
                 create table ana_tran_catalog (
+                    catalog_id bigint generated by default as identity primary key,
                     tran_code varchar(32) not null,
                     service_code varchar(200) not null,
                     tran_name varchar(200),
@@ -266,6 +329,18 @@ class TransactionDiffTrackingExportServiceTest {
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, resultId, batchId, tranCode, serviceCode, sequenceNo,
                 origCode, origDesc, destCode, destDesc, owner);
+    }
+
+    private void insertCatalog(long catalogId, String tranCode, String serviceCode, String tranName,
+                               String moduleName, String owner) {
+        jdbc.getJdbcTemplate().update("""
+                insert into ana_tran_catalog(catalog_id, tran_code, service_code, tran_name, module_name, owner)
+                values (?, ?, ?, ?, ?, ?)
+                """, catalogId, tranCode, serviceCode, tranName, moduleName, owner);
+    }
+
+    private String emptyAsNull(String value) {
+        return value.isEmpty() ? null : value;
     }
 
     private static final class CommitAwareOutputStream extends ByteArrayOutputStream {
