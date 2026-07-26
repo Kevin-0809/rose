@@ -200,7 +200,10 @@ public class SamplingBatchRunner {
                         owner,
                         field_group_key,
                         coalesce(mapped_sop_field_name, case when message_type = 'sop' then orig_field_name end) as sop_field_name,
-                        coalesce(mapped_soap_field_name, case when message_type = 'soap' then orig_field_name end) as soap_field_name,
+                        case
+                            when mapping_id is null then dest_field_name
+                            else coalesce(mapped_soap_field_name, case when message_type = 'soap' then orig_field_name end)
+                        end as soap_field_name,
                         coalesce(mapped_bizjson_field_name, case when message_type = 'bizjson' then orig_field_name end) as bizjson_field_name,
                         mapped_field_cn_name as field_cn_name,
                         case when mapping_id is null then 'UNMAPPED' else 'MAPPED' end as mapping_status,

@@ -224,6 +224,37 @@ class SamplingBatchRunnerTest {
                 .containsExactlyInAnyOrder("联动信息", "币种");
     }
 
+    @Test
+    void unmappedFieldDisplaysSourceDestinationFieldNameAsSoapFieldName() {
+        jdbc.update("""
+                insert into tss_field_comp
+                (mesg_seq, orig_cdate, dest_trcd, conv_index, conv_cindex, redo_index, field_index,
+                 field_file_flag, orig_field_name, orig_field_value, dest_field_name, dest_field_value, comp_result)
+                values
+                ('11111111115', '20260611', 'S030030014FcyCollCrspBnkLkgQry&bizjson', 1, 1, null, 3,
+                 null, 'UnmappedBizjsonField', 'source-value', 'UnmappedSoapField', 'destination-value', '0')
+                """);
+        jdbc.update("""
+                insert into tss_tran_comp
+                (mesg_seq, orig_cdate, conv_index, conv_cindex, comp_date, dest_trcd, orig_tran_res, dest_tran_res, comp_result)
+                values
+                ('11111111115', '20260611', 1, 1, '20260611', 'S030030014FcyCollCrspBnkLkgQry&bizjson', '4', '4', '4')
+                """);
+
+        runner.run(command());
+
+        Map<String, Object> result = jdbc.queryForMap("""
+                select sop_field_name, soap_field_name, bizjson_field_name, mapping_status
+                from ana_field_diff_result
+                where batch_id = 'BATCH_A825'
+                  and sample_tran_seq_no = '11111111115'
+                """);
+        assertThat(result.get("sop_field_name")).isNull();
+        assertThat(result.get("soap_field_name")).isEqualTo("UnmappedSoapField");
+        assertThat(result.get("bizjson_field_name")).isEqualTo("UnmappedBizjsonField");
+        assertThat(result.get("mapping_status")).isEqualTo("UNMAPPED");
+    }
+
     private SamplingCommandRow command() {
         return new SamplingCommandRow(
                 1L,
