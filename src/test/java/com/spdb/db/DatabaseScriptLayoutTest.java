@@ -106,6 +106,16 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
+        String sql = Files.readString(Path.of("db/manual-create-ana-report-export.sql")).toLowerCase();
+
+        assertThat(sql).contains("create table if not exists ana_report_export_command");
+        assertThat(sql).contains("create table if not exists ana_report_export_summary");
+        assertThat(sql).contains("idx_ana_report_export_command_status");
+        assertThat(sql).contains("idx_ana_report_export_summary_batch");
+    }
+
+    @Test
     void retcodeComparisonTableHasChineseCommentsAndSeedData() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
         String ddlLower = ddl.toLowerCase();
