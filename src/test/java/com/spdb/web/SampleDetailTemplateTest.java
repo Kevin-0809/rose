@@ -19,6 +19,9 @@ class SampleDetailTemplateTest {
         );
 
         assertThat(html).contains("/samples/transaction-diffs/export");
+        assertThat(html).contains("/samples/transaction-diffs/tracking-export");
+        assertThat(html).contains("导出问题跟踪表");
+        assertThat(html).contains("data-tracking-export");
         assertThat(html).doesNotContain("formaction=\"/samples/transaction-diffs/export\">瀵煎嚭Excel");
         assertThat(html).contains("row.origErrorCode()");
         assertThat(html).contains("row.destErrorCode()");

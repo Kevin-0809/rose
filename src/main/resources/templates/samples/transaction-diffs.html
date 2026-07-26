@@ -23,7 +23,7 @@
       <div><label>配置状态</label><input name="configStatus" th:value="${criteria.configStatus()}"></div>
       <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
       <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/transaction-diffs/export">导出TXT</button><a class="btn" href="/samples/transaction-diffs">重置</a></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/transaction-diffs/export">导出TXT</button><button class="btn" type="submit" formaction="/samples/transaction-diffs/tracking-export" data-tracking-export>导出问题跟踪表</button><a class="btn" href="/samples/transaction-diffs">重置</a></div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>
@@ -54,5 +54,15 @@
   </div>
 </div>
 <div th:replace="~{fragments/layout :: sidebarScript}"></div>
+<script>
+  document.querySelector('[data-tracking-export]')?.addEventListener('click', function (event) {
+    const batchId = this.form.querySelector('[name="batchId"]');
+    if (!batchId.value.trim()) {
+      event.preventDefault();
+      window.alert('请选择批次后导出');
+      batchId.focus();
+    }
+  });
+</script>
 </body>
 </html>
