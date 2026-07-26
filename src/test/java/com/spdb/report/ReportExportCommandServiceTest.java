@@ -33,19 +33,19 @@ class ReportExportCommandServiceTest {
 
     @Test
     void createsPendingCommandForReportDateAndLaunchesIt() {
-        String batchId = service.createAndStart("20260725");
+        String batchId = service.createAndStart();
 
         assertThat(batchId).matches("RPT20260726-010203-\\d{4}");
         assertThat(launchedBatchId).isEqualTo(batchId);
         assertThat(service.findByBatchId(batchId)).satisfies(row -> {
-            assertThat(row.reportDate()).isEqualTo("20260725");
+            assertThat(row.reportDate()).isEqualTo("20260726");
             assertThat(row.status()).isEqualTo("PENDING");
         });
     }
 
     @Test
     void transitionsOnlyThroughAllowedLifecycleStatesAndTruncatesFailure() {
-        String batchId = service.createAndStart("20260725");
+        String batchId = service.createAndStart();
 
         assertThat(service.markRunning(batchId)).isTrue();
         assertThat(service.markRunning(batchId)).isFalse();
@@ -53,7 +53,7 @@ class ReportExportCommandServiceTest {
         service.markFailed(batchId, "ignored");
         assertThat(service.findByBatchId(batchId).status()).isEqualTo("SUCCEEDED");
 
-        String failedBatch = service.createAndStart("20260724");
+        String failedBatch = service.createAndStart();
         service.markFailed(failedBatch, "x".repeat(5000));
         assertThat(service.findByBatchId(failedBatch)).satisfies(row -> {
             assertThat(row.status()).isEqualTo("FAILED");
@@ -63,9 +63,9 @@ class ReportExportCommandServiceTest {
 
     @Test
     void returnsOnlyExportSummaryRowsForTheRequestedBatch() {
-        String batchId = service.createAndStart("20260725");
+        String batchId = service.createAndStart();
         jdbc.update("insert into ana_report_export_summary(batch_id, report_date, module_name, sent_transaction_count) values (?, ?, ?, ?)",
-                batchId, "20260725", "模块A", 11L);
+                batchId, "20260726", "模块A", 11L);
         jdbc.update("insert into ana_report_export_summary(batch_id, report_date, module_name) values (?, ?, ?)",
                 "RPT-OTHER", "20260724", "模块B");
 

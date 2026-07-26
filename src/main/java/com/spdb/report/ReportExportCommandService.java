@@ -5,11 +5,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -38,13 +38,12 @@ public class ReportExportCommandService {
         this.clock = clock;
     }
 
-    public String createAndStart(String reportDate) {
-        String normalizedReportDate = normalizeReportDate(reportDate);
+    public String createAndStart() {
         String batchId = nextBatchId();
         jdbc.update("""
                 insert into ana_report_export_command(batch_id, report_date, status)
                 values (:batchId, :reportDate, 'PENDING')
-                """, params(batchId).addValue("reportDate", normalizedReportDate));
+                """, params(batchId).addValue("reportDate", LocalDate.now(clock).format(DateTimeFormatter.BASIC_ISO_DATE)));
         ReportExportTaskLauncher launcher = launcherProvider == null ? null : launcherProvider.getIfAvailable();
         if (launcher != null) {
             launcher.launch(batchId);
@@ -113,14 +112,6 @@ public class ReportExportCommandService {
                 """, params(batchId).addValue("errorMessage", abbreviate(errorMessage)));
     }
 
-    private String normalizeReportDate(String reportDate) {
-        String value = reportDate == null ? "" : reportDate.trim();
-        if (!value.matches("\\d{8}")) {
-            throw new IllegalArgumentException("report_date必须是8位日期，例如20260725");
-        }
-        return value;
-    }
-
     private MapSqlParameterSource params(String batchId) {
         return new MapSqlParameterSource("batchId", batchId);
     }
@@ -130,7 +121,7 @@ public class ReportExportCommandService {
     }
 
     private String abbreviate(String errorMessage) {
-        if (!StringUtils.hasText(errorMessage)) {
+        if (errorMessage == null || errorMessage.trim().isEmpty()) {
             return null;
         }
         String value = errorMessage.trim();
