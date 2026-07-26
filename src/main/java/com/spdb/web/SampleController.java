@@ -1,6 +1,7 @@
 package com.spdb.web;
 
 import com.spdb.sample.SampleExcelExportService;
+import com.spdb.sample.FieldDiffTrackingExportService;
 import com.spdb.sample.SampleQueryService;
 import com.spdb.sample.SampleSearchCriteria;
 import com.spdb.sample.TransactionDiffTrackingExportService;
@@ -28,17 +29,25 @@ public class SampleController {
     private final SampleQueryService sampleQueryService;
     private final SampleExcelExportService sampleExcelExportService;
     private final TransactionDiffTrackingExportService transactionDiffTrackingExportService;
+    private final FieldDiffTrackingExportService fieldDiffTrackingExportService;
 
     public SampleController(SampleQueryService sampleQueryService, SampleExcelExportService sampleExcelExportService) {
-        this(sampleQueryService, sampleExcelExportService, null);
+        this(sampleQueryService, sampleExcelExportService, null, null);
+    }
+
+    public SampleController(SampleQueryService sampleQueryService, SampleExcelExportService sampleExcelExportService,
+                            TransactionDiffTrackingExportService transactionDiffTrackingExportService) {
+        this(sampleQueryService, sampleExcelExportService, transactionDiffTrackingExportService, null);
     }
 
     @Autowired
     public SampleController(SampleQueryService sampleQueryService, SampleExcelExportService sampleExcelExportService,
-                            TransactionDiffTrackingExportService transactionDiffTrackingExportService) {
+                            TransactionDiffTrackingExportService transactionDiffTrackingExportService,
+                            FieldDiffTrackingExportService fieldDiffTrackingExportService) {
         this.sampleQueryService = sampleQueryService;
         this.sampleExcelExportService = sampleExcelExportService;
         this.transactionDiffTrackingExportService = transactionDiffTrackingExportService;
+        this.fieldDiffTrackingExportService = fieldDiffTrackingExportService;
     }
 
     @GetMapping("/samples/transaction-diffs")
@@ -125,6 +134,16 @@ public class SampleController {
         );
         prepareZip(response, "fielddiff_" + LocalDateTime.now().format(EXPORT_TIMESTAMP) + ".zip");
         sampleExcelExportService.streamFieldDiffZipExport(sampleQueryService, criteria, response.getOutputStream());
+    }
+
+    @GetMapping("/samples/field-diffs/tracking-export")
+    public void exportFieldDiffTracking(@RequestParam(required = false) String batchId,
+                                        HttpServletResponse response) throws IOException {
+        if (batchId == null || batchId.isBlank()) {
+            throw new IllegalArgumentException("\u8bf7\u9009\u62e9\u6279\u6b21\u540e\u5bfc\u51fa");
+        }
+        prepareText(response, "fielddiff_hf_" + LocalDateTime.now().format(TRACKING_EXPORT_TIMESTAMP) + ".txt");
+        fieldDiffTrackingExportService.export(batchId.trim(), response.getOutputStream());
     }
 
     @GetMapping("/samples/transaction-diffs/tracking-export")

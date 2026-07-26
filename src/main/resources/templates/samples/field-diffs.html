@@ -25,7 +25,7 @@
       <div><label>字段名</label><input name="semanticFieldName" th:value="${criteria.semanticFieldName()}"></div>
       <div><label>流水号</label><input name="tranSeqNo" th:value="${criteria.tranSeqNo()}"></div>
       <div><label>责任人</label><input name="owner" th:value="${criteria.owner()}"></div>
-      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/field-diffs/export">导出ZIP</button><a class="btn" href="/samples/field-diffs">重置</a></div>
+      <div class="actions"><button class="btn primary" type="submit">查询</button><button class="btn" type="submit" formaction="/samples/field-diffs/export">导出ZIP</button><button class="btn" type="submit" formaction="/samples/field-diffs/tracking-export" data-field-tracking-export>导出问题跟踪表</button><a class="btn" href="/samples/field-diffs">重置</a></div>
     </div>
     <div th:replace="~{fragments/layout :: pager(${result})}"></div>
   </form>
@@ -67,6 +67,15 @@
 </div>
 <div th:replace="~{fragments/layout :: sidebarScript}"></div>
 <script>
+  document.querySelector('[data-field-tracking-export]')?.addEventListener('click', function (event) {
+    const batchId = this.form.querySelector('[name="batchId"]');
+    if (!batchId.value.trim()) {
+      event.preventDefault();
+      window.alert('请选择批次后导出');
+      batchId.focus();
+    }
+  });
+
   (() => {
     const table = document.querySelector('[data-field-diff-table]');
     const dialog = document.getElementById('fieldDiffDialog');
