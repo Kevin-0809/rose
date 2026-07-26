@@ -1,5 +1,7 @@
 package com.spdb.report;
 
+import com.spdb.web.PageRequestParams;
+import com.spdb.web.PagedResult;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -60,12 +62,26 @@ public class ReportExportCommandService {
                 select command_id, batch_id, report_date, status, started_time, ended_time, error_message, created_time
                   from ana_report_export_command
                  where batch_id = :batchId
-                """, params(batchId), (rs, rowNum) -> new ReportExportCommandRow(
-                rs.getLong("command_id"), rs.getString("batch_id"), rs.getString("report_date"),
-                rs.getString("status"), localDateTime(rs.getTimestamp("started_time")),
-                localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message"),
-                localDateTime(rs.getTimestamp("created_time"))));
+                """, params(batchId), (rs, rowNum) -> mapCommand(rs));
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public PagedResult<ReportExportCommandRow> searchCommands(String batchId, PageRequestParams page) {
+        String filter = batchId == null ? "" : batchId.trim();
+        MapSqlParameterSource queryParams = new MapSqlParameterSource()
+                .addValue("batchId", "%" + filter + "%")
+                .addValue("limit", page.size())
+                .addValue("offset", page.offset());
+        String where = filter.isEmpty() ? "" : " where lower(batch_id) like lower(:batchId)";
+        List<ReportExportCommandRow> rows = jdbc.query("""
+                select command_id, batch_id, report_date, status, started_time, ended_time, error_message, created_time
+                  from ana_report_export_command
+                """ + where + """
+                 order by created_time desc, command_id desc
+                 limit :limit offset :offset
+                """, queryParams, (rs, rowNum) -> mapCommand(rs));
+        Long total = jdbc.queryForObject("select count(*) from ana_report_export_command" + where, queryParams, Long.class);
+        return PagedResult.of(rows, total == null ? 0 : total, page);
     }
 
     public List<ReportExportSummaryRow> findSummaries(String batchId) {
@@ -146,6 +162,14 @@ public class ReportExportCommandService {
 
     private LocalDateTime localDateTime(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toLocalDateTime();
+    }
+
+    private ReportExportCommandRow mapCommand(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new ReportExportCommandRow(
+                rs.getLong("command_id"), rs.getString("batch_id"), rs.getString("report_date"),
+                rs.getString("status"), localDateTime(rs.getTimestamp("started_time")),
+                localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message"),
+                localDateTime(rs.getTimestamp("created_time")));
     }
 
     private String abbreviate(String errorMessage) {

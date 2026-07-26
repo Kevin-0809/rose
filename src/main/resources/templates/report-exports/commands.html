@@ -1,7 +1,75 @@
 <!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>报表明细导出</title><link rel="stylesheet" href="/css/app.css"></head>
-<body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
-  <div class="page-head"><div><div class="eyebrow">Report Detail Export</div><h1>报表明细导出</h1><p class="muted">基于当前回放比对表生成汇总报表、字段级明细和交易级明细。</p></div></div>
-  <form class="panel form-grid" method="post" action="/report-exports"><div class="span-2"><div class="field-label">导出范围</div><div class="muted">读取当前 tss_retcode_comp、tss_tran_comp 和 tss_field_comp 的全部记录。</div></div><div class="actions"><button class="btn primary" type="submit">生成报表</button></div></form>
-</main></div></div><div th:replace="~{fragments/layout :: sidebarScript}"></div></body></html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>报表明细导出</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Report Detail Export</div>
+          <h1>报表明细导出</h1>
+          <p class="muted">发起导出后在此跟踪当前和历史批次，完成后可查看汇总、交易级与字段级明细。</p>
+        </div>
+      </div>
+
+      <div class="tag green" th:if="${message}" th:text="${message}"></div>
+      <form class="panel form-grid" method="post" action="/report-exports">
+        <div class="span-2">
+          <div class="field-label">导出范围</div>
+          <div class="muted">读取当前 tss_retcode_comp、tss_tran_comp 和 tss_field_comp 的全部记录。</div>
+        </div>
+        <div class="actions"><button class="btn primary" type="submit">生成报表</button></div>
+      </form>
+
+      <form class="panel filters" method="get" action="/report-exports">
+        <div class="filter-grid">
+          <div><label for="batch-id">批次号</label><input id="batch-id" name="batchId" th:value="${batchId}" placeholder="输入批次号查询"></div>
+          <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/report-exports">重置</a></div>
+          <div class="span-4 muted export-page-size">每页 50 条</div>
+        </div>
+      </form>
+
+      <section class="panel table-wrap command-table-wrap">
+        <table class="command-table report-export-command-table">
+          <thead><tr><th class="col-batch">批次号</th><th class="col-date">业务日期</th><th class="col-status">状态</th><th class="col-progress">执行进度</th><th class="col-time">创建时间</th><th class="col-time">开始时间</th><th class="col-time">结束时间</th><th class="col-error">失败原因</th><th class="col-actions">操作</th></tr></thead>
+          <tbody>
+          <tr th:each="row : ${result.rows()}" th:with="progress=${row.status() == 'SUCCEEDED' ? 100 : (row.status() == 'RUNNING' ? 50 : (row.status() == 'FAILED' ? 100 : 0))}">
+            <td class="col-batch" th:title="${row.batchId()}"><span class="cell-clip" th:text="${row.batchId()}"></span></td>
+            <td class="col-date" th:text="${row.reportDate()}"></td>
+            <td class="col-status"><span class="tag" th:classappend="${row.status() == 'SUCCEEDED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
+            <td class="col-progress"><div class="task-progress" th:classappend="${row.status() == 'FAILED'} ? 'is-failed' : ''" th:attr="aria-label=${'执行进度 ' + progress + '%'}"><span th:style="${'width:' + progress + '%'}"></span></div><small th:text="${row.status() == 'PENDING' ? '排队中 0%' : (row.status() == 'RUNNING' ? '处理中 50%' : (row.status() == 'SUCCEEDED' ? '已完成 100%' : '执行失败'))}"></small></td>
+            <td class="col-time" th:text="${row.createdTime()}"></td>
+            <td class="col-time" th:text="${row.startedTime()}"></td>
+            <td class="col-time" th:title="${row.endedTime()}" th:text="${row.endedTime()}"></td>
+            <td class="col-error" th:title="${row.errorMessage()}"><span class="cell-clip" th:text="${row.errorMessage()}"></span></td>
+            <td class="col-actions command-actions"><a class="btn" th:href="@{/report-exports/{batchId}(batchId=${row.batchId()})}">查看结果</a></td>
+          </tr>
+          <tr th:if="${result.rows().isEmpty()}"><td colspan="9" class="muted">未找到匹配的导出批次。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <nav class="pager" aria-label="批次分页">
+        <span class="muted" th:text="${'共 ' + result.total() + ' 条，第 ' + result.page() + ' / ' + result.totalPages() + ' 页，每页 50 条'}"></span>
+        <a class="btn" th:if="${result.page() > 1}" th:href="@{/report-exports(batchId=${batchId},page=${result.page() - 1})}">上一页</a>
+        <span class="btn is-disabled" th:if="${result.page() == 1}">上一页</span>
+        <a class="btn" th:if="${result.page() < result.totalPages()}" th:href="@{/report-exports(batchId=${batchId},page=${result.page() + 1})}">下一页</a>
+        <span class="btn is-disabled" th:if="${result.page() == result.totalPages()}">下一页</span>
+      </nav>
+    </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
+<script th:if="${hasRunningCommands}">
+  (() => { const timer = window.setInterval(() => window.location.reload(), 3000); window.addEventListener('pagehide', () => window.clearInterval(timer)); })();
+</script>
+</body>
+</html>

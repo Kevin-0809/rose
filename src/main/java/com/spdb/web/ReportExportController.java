@@ -7,6 +7,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -21,8 +22,16 @@ public class ReportExportController {
     }
 
     @GetMapping("/report-exports")
-    public String commands(Model model) {
+    public String commands(@RequestParam(required = false) String batchId,
+                           @RequestParam(required = false) Integer page,
+                           Model model) {
+        PageRequestParams pageParams = PageRequestParams.of(page, 50);
+        PagedResult<ReportExportCommandRow> result = reportExportCommandService.searchCommands(batchId, pageParams);
         model.addAttribute("active", "report-exports");
+        model.addAttribute("batchId", batchId);
+        model.addAttribute("result", result);
+        model.addAttribute("hasRunningCommands", result.rows().stream()
+                .anyMatch(row -> "PENDING".equals(row.status()) || "RUNNING".equals(row.status())));
         return "report-exports/commands";
     }
 
@@ -30,7 +39,8 @@ public class ReportExportController {
     public String create(RedirectAttributes redirectAttributes) {
         String batchId = reportExportCommandService.createAndStart();
         redirectAttributes.addFlashAttribute("message", "报表明细导出任务已提交：" + batchId);
-        return "redirect:/report-exports/" + batchId;
+        redirectAttributes.addAttribute("batchId", batchId);
+        return "redirect:/report-exports";
     }
 
     @GetMapping("/report-exports/{batchId}")

@@ -1021,6 +1021,44 @@ td {
 .command-table .col-error { width: 440px; }
 .command-table .col-actions { width: 170px; }
 
+.report-export-command-table .col-progress { width: 130px; }
+
+.task-progress {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(7, 16, 29, 0.72);
+}
+
+.task-progress span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width .25s ease;
+}
+
+.task-progress.is-failed span { background: var(--red); }
+
+.report-export-command-table small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.export-page-size {
+  align-self: end;
+  padding-bottom: 7px;
+  text-align: right;
+}
+
+.is-disabled {
+  cursor: default;
+  opacity: .45;
+}
+
 .command-actions {
   display: flex;
   align-items: center;

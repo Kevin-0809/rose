@@ -18,6 +18,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReportExportControllerTest {
 
     @Test
+    void commandsShowsBatchesWithBatchFilterAndFiftyRowsPerPage() {
+        FakeReportExportCommandService service = new FakeReportExportCommandService();
+        PagedResult<ReportExportCommandRow> result = PagedResult.of(List.of(command("RUNNING")), 51,
+                PageRequestParams.of(2, 50));
+        service.searchResult = result;
+        ReportExportController controller = new ReportExportController(service);
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view = controller.commands("RPT202607", 2, model);
+
+        assertThat(view).isEqualTo("report-exports/commands");
+        assertThat(model.getAttribute("batchId")).isEqualTo("RPT202607");
+        assertThat(model.getAttribute("result")).isSameAs(result);
+        assertThat(service.searchBatchId).isEqualTo("RPT202607");
+        assertThat(service.searchPage.size()).isEqualTo(50);
+    }
+
+    @Test
     void detailShowsSucceededExportSummaryAndBothDetailTypes() {
         FakeReportExportCommandService service = new FakeReportExportCommandService();
         service.command = command("SUCCEEDED");
@@ -52,7 +70,7 @@ class ReportExportControllerTest {
     }
 
     @Test
-    void createStartsExportAndRedirectsToItsDetail() {
+    void createStartsExportAndReturnsToTheFilteredBatchList() {
         FakeReportExportCommandService service = new FakeReportExportCommandService();
         service.createdBatchId = "RPT20260726-0001";
         ReportExportController controller = new ReportExportController(service);
@@ -60,7 +78,8 @@ class ReportExportControllerTest {
 
         String view = controller.create(redirectAttributes);
 
-        assertThat(view).isEqualTo("redirect:/report-exports/RPT20260726-0001");
+        assertThat(view).isEqualTo("redirect:/report-exports");
+        assertThat(redirectAttributes.getAttribute("batchId")).isEqualTo("RPT20260726-0001");
         assertThat(redirectAttributes.getFlashAttributes().get("message")).isEqualTo("报表明细导出任务已提交：RPT20260726-0001");
     }
 
@@ -74,6 +93,9 @@ class ReportExportControllerTest {
         private List<ReportExportSummaryRow> summaries = List.of();
         private List<ReportExportTransactionDetailRow> transactionDetails = List.of();
         private List<ReportExportFieldDetailRow> fieldDetails = List.of();
+        private PagedResult<ReportExportCommandRow> searchResult = PagedResult.of(List.of(), 0, PageRequestParams.of(null, 50));
+        private String searchBatchId;
+        private PageRequestParams searchPage;
 
         private FakeReportExportCommandService() {
             super(null, null);
@@ -82,6 +104,13 @@ class ReportExportControllerTest {
         @Override
         public String createAndStart() {
             return createdBatchId;
+        }
+
+        @Override
+        public PagedResult<ReportExportCommandRow> searchCommands(String batchId, PageRequestParams page) {
+            searchBatchId = batchId;
+            searchPage = page;
+            return searchResult;
         }
 
         @Override
