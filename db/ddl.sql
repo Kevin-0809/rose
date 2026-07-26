@@ -164,6 +164,67 @@ comment on column ana_tran_diff_result.owner is '责任人';
 comment on column ana_tran_diff_result.affected_tran_count is '影响交易笔数';
 comment on column ana_tran_diff_result.created_at is '创建时间';
 
+create table if not exists ana_tran_diff_tracking_export (
+    export_id bigserial primary key,
+    export_timestamp timestamp not null,
+    source_batch_id varchar(64) not null,
+    business_date varchar(8) not null,
+    row_no bigint not null,
+    service_code varchar(200) not null,
+    orig_error_code varchar(64),
+    dest_error_code varchar(64),
+    tran_code varchar(32),
+    tran_name varchar(200),
+    module_name varchar(100),
+    orig_error_desc varchar(500),
+    dest_error_desc varchar(500),
+    transaction_owner varchar(100),
+    tran_seq_no varchar(64),
+    problem_level varchar(100),
+    registration_date varchar(8),
+    field_name varchar(500),
+    problem_description text,
+    problem_type varchar(100),
+    preliminary_analysis text,
+    final_solution text,
+    resolution_date varchar(8),
+    coordination_required varchar(100),
+    resolver varchar(100),
+    defect_fix_date varchar(8),
+    created_at timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp
+);
+
+comment on table ana_tran_diff_tracking_export is '交易级差异问题跟踪导出表';
+comment on column ana_tran_diff_tracking_export.export_id is '导出记录ID';
+comment on column ana_tran_diff_tracking_export.export_timestamp is '导出时间';
+comment on column ana_tran_diff_tracking_export.source_batch_id is '来源批次号';
+comment on column ana_tran_diff_tracking_export.business_date is '业务日期';
+comment on column ana_tran_diff_tracking_export.row_no is '导出行号';
+comment on column ana_tran_diff_tracking_export.service_code is '服务码';
+comment on column ana_tran_diff_tracking_export.orig_error_code is '原系统错误码';
+comment on column ana_tran_diff_tracking_export.dest_error_code is '目标系统错误码';
+comment on column ana_tran_diff_tracking_export.tran_code is '交易码';
+comment on column ana_tran_diff_tracking_export.tran_name is '交易名称';
+comment on column ana_tran_diff_tracking_export.module_name is '所属模块';
+comment on column ana_tran_diff_tracking_export.orig_error_desc is '原系统错误描述';
+comment on column ana_tran_diff_tracking_export.dest_error_desc is '目标系统错误描述';
+comment on column ana_tran_diff_tracking_export.transaction_owner is '交易负责人';
+comment on column ana_tran_diff_tracking_export.tran_seq_no is '交易流水号';
+comment on column ana_tran_diff_tracking_export.problem_level is '问题级别';
+comment on column ana_tran_diff_tracking_export.registration_date is '登记日期';
+comment on column ana_tran_diff_tracking_export.field_name is '问题字段名';
+comment on column ana_tran_diff_tracking_export.problem_description is '问题描述';
+comment on column ana_tran_diff_tracking_export.problem_type is '问题类型';
+comment on column ana_tran_diff_tracking_export.preliminary_analysis is '初步分析';
+comment on column ana_tran_diff_tracking_export.final_solution is '最终解决方案';
+comment on column ana_tran_diff_tracking_export.resolution_date is '解决日期';
+comment on column ana_tran_diff_tracking_export.coordination_required is '是否需要协调';
+comment on column ana_tran_diff_tracking_export.resolver is '解决人';
+comment on column ana_tran_diff_tracking_export.defect_fix_date is '缺陷修复日期';
+comment on column ana_tran_diff_tracking_export.created_at is '创建时间';
+comment on column ana_tran_diff_tracking_export.updated_at is '更新时间';
+
 create table if not exists ana_field_diff_result (
     result_id bigserial primary key,
     batch_id varchar(64) not null,
@@ -516,6 +577,12 @@ on ana_tran_diff_result(batch_id, orig_cdate, tran_code, service_code, message_t
 
 create index if not exists idx_ana_tran_diff_result_sample
 on ana_tran_diff_result(batch_id, sample_tran_seq_no);
+
+create index if not exists idx_ana_tran_diff_tracking_export_source
+on ana_tran_diff_tracking_export(source_batch_id, service_code, orig_error_code, dest_error_code);
+
+create index if not exists idx_ana_tran_diff_tracking_export_time
+on ana_tran_diff_tracking_export(export_timestamp desc);
 
 create index if not exists idx_ana_field_diff_result_query
 on ana_field_diff_result(batch_id, orig_cdate, tran_code, service_code, message_type, mapping_status, owner);

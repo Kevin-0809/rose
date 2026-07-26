@@ -3,14 +3,17 @@ package com.spdb.web;
 import com.spdb.sample.SampleExcelExportService;
 import com.spdb.sample.SampleQueryService;
 import com.spdb.sample.SampleSearchCriteria;
+import com.spdb.sample.TransactionDiffTrackingExportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
 import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 class SampleControllerExportTest {
 
@@ -45,6 +48,47 @@ class SampleControllerExportTest {
         assertThat(excelExportService.transactionDiffExportCalled).isFalse();
     }
 
+    @Test
+    void trackingExportRejectsNullBatchWithoutCallingService() {
+        RecordingTrackingExportService trackingExportService = new RecordingTrackingExportService();
+        SampleController controller = new SampleController(new SampleQueryService(null), new RecordingExportService(),
+                trackingExportService);
+
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                        controller.exportTransactionDiffTracking(null, new MockHttpServletResponse()))
+                .withMessage("\u8bf7\u9009\u62e9\u6279\u6b21\u540e\u5bfc\u51fa");
+
+        assertThat(trackingExportService.exportCalled).isFalse();
+    }
+
+    @Test
+    void trackingExportRejectsBlankBatchWithoutCallingService() {
+        RecordingTrackingExportService trackingExportService = new RecordingTrackingExportService();
+        SampleController controller = new SampleController(new SampleQueryService(null), new RecordingExportService(),
+                trackingExportService);
+
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                        controller.exportTransactionDiffTracking("  ", new MockHttpServletResponse()))
+                .withMessage("\u8bf7\u9009\u62e9\u6279\u6b21\u540e\u5bfc\u51fa");
+
+        assertThat(trackingExportService.exportCalled).isFalse();
+    }
+
+    @Test
+    void trackingExportStreamsTrimmedBatchAsTextDownload() throws Exception {
+        RecordingTrackingExportService trackingExportService = new RecordingTrackingExportService();
+        SampleController controller = new SampleController(new SampleQueryService(null), new RecordingExportService(),
+                trackingExportService);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.exportTransactionDiffTracking("  batch-001  ", response);
+
+        assertThat(response.getContentType()).isEqualTo("text/plain;charset=UTF-8");
+        assertThat(decodedFilename(response)).matches("trandiff_hf_\\d{14}\\.txt");
+        assertThat(trackingExportService.sourceBatchId).isEqualTo("batch-001");
+        assertThat(response.getContentAsString()).isEqualTo("tracking export");
+    }
+
     private String decodedFilename(MockHttpServletResponse response) {
         String header = response.getHeader("Content-Disposition");
         String prefix = "attachment; filename*=UTF-8''";
@@ -70,6 +114,26 @@ class SampleControllerExportTest {
         @Override
         public void streamFieldDiffZipExport(SampleQueryService queryService, SampleSearchCriteria criteria, OutputStream outputStream) {
             fieldDiffZipExportCalled = true;
+        }
+    }
+
+    private static class RecordingTrackingExportService extends TransactionDiffTrackingExportService {
+        boolean exportCalled;
+        String sourceBatchId;
+
+        RecordingTrackingExportService() {
+            super(null, new DataSourceTransactionManager());
+        }
+
+        @Override
+        public void export(String sourceBatchId, OutputStream outputStream) {
+            exportCalled = true;
+            this.sourceBatchId = sourceBatchId;
+            try {
+                outputStream.write("tracking export".getBytes(StandardCharsets.UTF_8));
+            } catch (java.io.IOException exception) {
+                throw new AssertionError(exception);
+            }
         }
     }
 }

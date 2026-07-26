@@ -176,6 +176,66 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlContainsTransactionDiffTrackingExportTableAndRemediationColumns() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
+        String ddlLower = ddl.toLowerCase().replace("\r\n", "\n");
+        String createTable = "create table if not exists ana_tran_diff_tracking_export";
+        int tableStart = ddlLower.indexOf(createTable);
+        int tableEnd = ddlLower.indexOf(");", tableStart);
+
+        assertThat(tableStart).isGreaterThanOrEqualTo(0);
+        assertThat(tableEnd).isGreaterThan(tableStart);
+        String tableBlock = ddlLower.substring(tableStart, tableEnd + 2);
+        List<String> expectedColumns = List.of(
+                "export_id bigserial primary key",
+                "export_timestamp timestamp not null",
+                "source_batch_id varchar(64) not null",
+                "business_date varchar(8) not null",
+                "row_no bigint not null",
+                "service_code varchar(200) not null",
+                "orig_error_code varchar(64)",
+                "dest_error_code varchar(64)",
+                "tran_code varchar(32)",
+                "tran_name varchar(200)",
+                "module_name varchar(100)",
+                "orig_error_desc varchar(500)",
+                "dest_error_desc varchar(500)",
+                "transaction_owner varchar(100)",
+                "tran_seq_no varchar(64)",
+                "problem_level varchar(100)",
+                "registration_date varchar(8)",
+                "field_name varchar(500)",
+                "problem_description text",
+                "problem_type varchar(100)",
+                "preliminary_analysis text",
+                "final_solution text",
+                "resolution_date varchar(8)",
+                "coordination_required varchar(100)",
+                "resolver varchar(100)",
+                "defect_fix_date varchar(8)",
+                "created_at timestamp not null default current_timestamp",
+                "updated_at timestamp not null default current_timestamp");
+        expectedColumns.forEach(column -> assertThat(tableBlock).contains(column));
+
+        List<String> columnNames = List.of(
+                "export_id", "export_timestamp", "source_batch_id", "business_date", "row_no", "service_code",
+                "orig_error_code", "dest_error_code", "tran_code", "tran_name", "module_name", "orig_error_desc",
+                "dest_error_desc", "transaction_owner", "tran_seq_no", "problem_level", "registration_date",
+                "field_name", "problem_description", "problem_type", "preliminary_analysis", "final_solution",
+                "resolution_date", "coordination_required", "resolver", "defect_fix_date", "created_at", "updated_at");
+        assertThat(ddl).containsPattern("comment on table ana_tran_diff_tracking_export is '[\\p{IsHan}][^']*';");
+        columnNames.forEach(column -> assertThat(ddl).containsPattern(
+                "comment on column ana_tran_diff_tracking_export\\." + column + " is '[\\p{IsHan}][^']*';"));
+
+        assertThat(ddlLower).contains("""
+                create index if not exists idx_ana_tran_diff_tracking_export_source
+                on ana_tran_diff_tracking_export(source_batch_id, service_code, orig_error_code, dest_error_code);""");
+        assertThat(ddlLower).contains("""
+                create index if not exists idx_ana_tran_diff_tracking_export_time
+                on ana_tran_diff_tracking_export(export_timestamp desc);""");
+    }
+
+    @Test
     void ddlContainsModuleOwnerConfigForLeadershipDashboard() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
         String ddlLower = ddl.toLowerCase();

@@ -3,7 +3,9 @@ package com.spdb.web;
 import com.spdb.sample.SampleExcelExportService;
 import com.spdb.sample.SampleQueryService;
 import com.spdb.sample.SampleSearchCriteria;
+import com.spdb.sample.TransactionDiffTrackingExportService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,14 +22,23 @@ public class SampleController {
     private static final String TRANSACTION_DIFF = "RETURN_CODE";
     private static final String FIELD_DIFF = "FIELD_DIFF";
     private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+    private static final DateTimeFormatter TRACKING_EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final String FIELD_DIFF_EXPORT_FILENAME_PREFIX = "\u5b57\u6bb5\u7ea7\u5dee\u5f02_";
 
     private final SampleQueryService sampleQueryService;
     private final SampleExcelExportService sampleExcelExportService;
+    private final TransactionDiffTrackingExportService transactionDiffTrackingExportService;
 
     public SampleController(SampleQueryService sampleQueryService, SampleExcelExportService sampleExcelExportService) {
+        this(sampleQueryService, sampleExcelExportService, null);
+    }
+
+    @Autowired
+    public SampleController(SampleQueryService sampleQueryService, SampleExcelExportService sampleExcelExportService,
+                            TransactionDiffTrackingExportService transactionDiffTrackingExportService) {
         this.sampleQueryService = sampleQueryService;
         this.sampleExcelExportService = sampleExcelExportService;
+        this.transactionDiffTrackingExportService = transactionDiffTrackingExportService;
     }
 
     @GetMapping("/samples/transaction-diffs")
@@ -116,6 +127,16 @@ public class SampleController {
         sampleExcelExportService.streamFieldDiffZipExport(sampleQueryService, criteria, response.getOutputStream());
     }
 
+    @GetMapping("/samples/transaction-diffs/tracking-export")
+    public void exportTransactionDiffTracking(@RequestParam(required = false) String batchId,
+                                              HttpServletResponse response) throws IOException {
+        if (batchId == null || batchId.isBlank()) {
+            throw new IllegalArgumentException("\u8bf7\u9009\u62e9\u6279\u6b21\u540e\u5bfc\u51fa");
+        }
+        prepareText(response, "trandiff_hf_" + LocalDateTime.now().format(TRACKING_EXPORT_TIMESTAMP) + ".txt");
+        transactionDiffTrackingExportService.export(batchId.trim(), response.getOutputStream());
+    }
+
 
     private void prepareExcel(HttpServletResponse response, String filename) {
         String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
@@ -126,6 +147,12 @@ public class SampleController {
     private void prepareZip(HttpServletResponse response, String filename) {
         String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
         response.setContentType("application/zip");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
+    }
+
+    private void prepareText(HttpServletResponse response, String filename) {
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        response.setContentType("text/plain;charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
     }
 }
