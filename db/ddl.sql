@@ -233,11 +233,11 @@ comment on column ana_tran_diff_tracking_export.resolution_date is '解决日期
 comment on column ana_tran_diff_tracking_export.coordination_required is '是否需要协调';
 comment on column ana_tran_diff_tracking_export.resolver is '解决人';
 comment on column ana_tran_diff_tracking_export.defect_fix_date is '缺陷修复日期';
-comment on column ana_tran_diff_tracking_export.issue_id is '统一问题台账ID';
-comment on column ana_tran_diff_tracking_export.issue_key is '统一问题唯一键';
-comment on column ana_tran_diff_tracking_export.historical_occurrence_count is '历史出现次数';
-comment on column ana_tran_diff_tracking_export.first_seen_date is '首次发现日期';
-comment on column ana_tran_diff_tracking_export.previous_seen_date is '上次发现日期';
+comment on column ana_tran_diff_tracking_export.issue_id is '统一问题台账ID快照';
+comment on column ana_tran_diff_tracking_export.issue_key is '稳定业务键快照';
+comment on column ana_tran_diff_tracking_export.historical_occurrence_count is '本批次前历史出现批次数';
+comment on column ana_tran_diff_tracking_export.first_seen_date is '问题首次出现日期快照';
+comment on column ana_tran_diff_tracking_export.previous_seen_date is '本次前最近出现日期快照';
 comment on column ana_tran_diff_tracking_export.created_at is '创建时间';
 comment on column ana_tran_diff_tracking_export.updated_at is '更新时间';
 
@@ -316,18 +316,18 @@ comment on column ana_field_diff_tracking_export.resolution_date is '解决日�
 comment on column ana_field_diff_tracking_export.coordination_required is '是否需要协调';
 comment on column ana_field_diff_tracking_export.resolver is '解决人';
 comment on column ana_field_diff_tracking_export.defect_fix_date is '缺陷修复日期';
-comment on column ana_field_diff_tracking_export.issue_id is '统一问题台账ID';
-comment on column ana_field_diff_tracking_export.issue_key is '统一问题唯一键';
-comment on column ana_field_diff_tracking_export.historical_occurrence_count is '历史出现次数';
-comment on column ana_field_diff_tracking_export.first_seen_date is '首次发现日期';
-comment on column ana_field_diff_tracking_export.previous_seen_date is '上次发现日期';
+comment on column ana_field_diff_tracking_export.issue_id is '统一问题台账ID快照';
+comment on column ana_field_diff_tracking_export.issue_key is '稳定业务键快照';
+comment on column ana_field_diff_tracking_export.historical_occurrence_count is '本批次前历史出现批次数';
+comment on column ana_field_diff_tracking_export.first_seen_date is '问题首次出现日期快照';
+comment on column ana_field_diff_tracking_export.previous_seen_date is '本次前最近出现日期快照';
 comment on column ana_field_diff_tracking_export.created_at is '创建时间';
 comment on column ana_field_diff_tracking_export.updated_at is '更新时间';
 
 create table if not exists ana_diff_issue (
     issue_id bigserial primary key,
     issue_key varchar(600) not null unique,
-    issue_level varchar(32) not null,
+    issue_level varchar(16) not null,
     service_code varchar(200) not null,
     tran_code varchar(32),
     tran_name varchar(200),
@@ -340,16 +340,16 @@ create table if not exists ana_diff_issue (
     problem_description text,
     preliminary_analysis text,
     final_solution text,
-    issue_status varchar(32) not null default 'OPEN',
+    issue_status varchar(16) not null default 'OPEN',
     coordination_required varchar(100),
     resolver varchar(100),
     resolution_date date,
     defect_fix_date date,
-    first_seen_date date,
-    last_seen_date date,
-    first_seen_batch_id varchar(64),
-    last_seen_batch_id varchar(64),
-    occurrence_batch_count bigint not null default 0,
+    first_seen_date date not null,
+    last_seen_date date not null,
+    first_seen_batch_id varchar(64) not null,
+    last_seen_batch_id varchar(64) not null,
+    occurrence_batch_count bigint not null default 1,
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
     constraint ck_ana_diff_issue_level check (issue_level in ('TRANSACTION','FIELD')),
@@ -390,6 +390,14 @@ comment on column ana_diff_issue.last_seen_batch_id is '最后发现批次号';
 comment on column ana_diff_issue.occurrence_batch_count is '出现批次数';
 comment on column ana_diff_issue.created_at is '创建时间';
 comment on column ana_diff_issue.updated_at is '更新时间';
+
+alter table ana_tran_diff_tracking_export drop constraint if exists fk_ana_tran_diff_tracking_export_issue;
+alter table ana_tran_diff_tracking_export add constraint fk_ana_tran_diff_tracking_export_issue
+foreign key (issue_id) references ana_diff_issue(issue_id);
+
+alter table ana_field_diff_tracking_export drop constraint if exists fk_ana_field_diff_tracking_export_issue;
+alter table ana_field_diff_tracking_export add constraint fk_ana_field_diff_tracking_export_issue
+foreign key (issue_id) references ana_diff_issue(issue_id);
 
 create table if not exists ana_field_diff_result (
     result_id bigserial primary key,

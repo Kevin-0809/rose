@@ -439,11 +439,14 @@ class DatabaseScriptLayoutTest {
         assertThat(ddlLower).contains("create table if not exists ana_diff_issue");
         assertThat(ddlLower).contains("issue_key varchar(600) not null unique");
         assertThat(ddlLower).contains("check (issue_level in ('transaction','field'))");
-        assertThat(ddlLower).contains("issue_status varchar(32) not null default 'open'");
+        assertThat(ddlLower).contains("issue_level varchar(16) not null");
+        assertThat(ddlLower).contains("issue_status varchar(16) not null default 'open'");
         assertThat(ddlLower).contains("check (issue_status in ('open','resolved','ignored'))");
-        assertThat(ddlLower).contains("first_seen_date date");
-        assertThat(ddlLower).contains("last_seen_date date");
-        assertThat(ddlLower).contains("occurrence_batch_count bigint not null default 0");
+        assertThat(ddlLower).contains("first_seen_date date not null");
+        assertThat(ddlLower).contains("last_seen_date date not null");
+        assertThat(ddlLower).contains("first_seen_batch_id varchar(64) not null");
+        assertThat(ddlLower).contains("last_seen_batch_id varchar(64) not null");
+        assertThat(ddlLower).contains("occurrence_batch_count bigint not null default 1");
         assertThat(ddlLower).contains("idx_ana_diff_issue_status_last_seen");
         assertThat(ddlLower).contains("idx_ana_diff_issue_service_field");
 
@@ -470,8 +473,17 @@ class DatabaseScriptLayoutTest {
             assertThat(tableEnd).isGreaterThan(tableStart);
             String tableBlock = ddlLower.substring(tableStart, tableEnd + 2);
             trackingColumns.forEach(column -> assertThat(tableBlock).contains(column));
+            assertThat(tableBlock).contains("issue_id bigint");
             trackingColumnNames.forEach(column -> assertThat(ddl).containsPattern(
                     "comment on column " + table + "\\." + column + " is '[\\p{IsHan}][^']*';"));
         });
+
+        assertThat(ddlLower).contains("add constraint fk_ana_tran_diff_tracking_export_issue");
+        assertThat(ddlLower).contains("add constraint fk_ana_field_diff_tracking_export_issue");
+        assertThat(ddlLower).contains("foreign key (issue_id) references ana_diff_issue(issue_id)");
+        assertThat(ddl).contains("稳定业务键快照");
+        assertThat(ddl).contains("本批次前历史出现批次数");
+        assertThat(ddl).contains("问题首次出现日期快照");
+        assertThat(ddl).contains("本次前最近出现日期快照");
     }
 }
