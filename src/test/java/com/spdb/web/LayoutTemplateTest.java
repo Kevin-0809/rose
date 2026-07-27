@@ -23,7 +23,7 @@ class LayoutTemplateTest {
         assertThat(html).contains("th:attr=\"aria-current=${active == 'home'} ? 'page' : null\"");
         assertThat(hasClassToken(html, "section", "nav-group")).isTrue();
         assertThat(html).contains("数据准备");
-        assertThat(html).contains("执行分析");
+        assertThat(html).contains("回放分析");
         assertThat(html).contains("运维工具");
         assertThat(html).contains("href=\"/\"");
 
@@ -38,7 +38,9 @@ class LayoutTemplateTest {
                 .contains("/sampling/domain-reports")
                 .contains("批次领域报表")
                 .contains("/samples/transaction-diffs")
-                .contains("/samples/field-diffs");
+                .contains("/samples/field-diffs")
+                .contains("/report-exports")
+                .contains("/diff-issues");
         assertThat(sectionForGroup(html, "operations"))
                 .contains("/messages/flow-logs")
                 .contains("/messages/flow-logs/new")

@@ -13,8 +13,11 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,11 +33,14 @@ class ReportExportControllerTest {
         service.command = command("SUCCEEDED");
         ReportExportExcelService excel = mock(ReportExportExcelService.class);
         MockHttpServletResponse response = new MockHttpServletResponse();
+        Clock clock = Clock.fixed(Instant.parse("2026-07-27T11:35:00Z"), ZoneId.of("Asia/Shanghai"));
 
-        new ReportExportController(service, excel).download("RPT1", response);
+        new ReportExportController(service, excel, clock).download("RPT1", response);
 
         assertThat(response.getContentType()).isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        assertThat(response.getHeader("Content-Disposition")).contains("RPT1.xlsx");
+        assertThat(response.getHeader("Content-Disposition"))
+                .contains("202607271935.xlsx")
+                .doesNotContain("RPT1.xlsx");
         verify(excel).stream("RPT1", response.getOutputStream());
         service.command = command("RUNNING");
         assertThatThrownBy(() -> new ReportExportController(service, excel).download("RPT1", new MockHttpServletResponse()))

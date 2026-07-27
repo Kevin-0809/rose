@@ -1,5 +1,6 @@
 package com.spdb.report;
 
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +53,9 @@ class ReportExportExcelServiceTest {
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             assertThat(workbook.getSheetAt(0).getSheetName()).isEqualTo("汇总信息");
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellType()).isEqualTo(CellType.NUMERIC);
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getNumericCellValue()).isEqualTo(0.7d);
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
             assertThat(workbook.getSheet("支付").getPaneInformation().isFreezePane()).isTrue();
             assertThat(workbook.getSheet("支付").getRow(0).getCell(18).getStringCellValue()).isEqualTo("历史出现次数");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(5).getStringCellValue()).isEqualTo("交易级");

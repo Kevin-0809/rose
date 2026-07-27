@@ -18,18 +18,30 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Controller
 public class ReportExportController {
+    private static final DateTimeFormatter EXPORT_FILENAME_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
     private final ReportExportCommandService reportExportCommandService;
     private final ReportExportExcelService reportExportExcelService;
+    private final Clock clock;
 
     public ReportExportController(ReportExportCommandService reportExportCommandService,
                                   ReportExportExcelService reportExportExcelService) {
+        this(reportExportCommandService, reportExportExcelService, Clock.systemDefaultZone());
+    }
+
+    ReportExportController(ReportExportCommandService reportExportCommandService,
+                           ReportExportExcelService reportExportExcelService,
+                           Clock clock) {
         this.reportExportCommandService = reportExportCommandService;
         this.reportExportExcelService = reportExportExcelService;
+        this.clock = clock;
     }
 
     @GetMapping("/report-exports")
@@ -99,7 +111,12 @@ public class ReportExportController {
         }
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition", ContentDisposition.attachment()
-                .filename("报表明细导出-" + batchId + ".xlsx", StandardCharsets.UTF_8).build().toString());
+                .filename(exportFilename(), StandardCharsets.UTF_8).build().toString());
         reportExportExcelService.stream(batchId, response.getOutputStream());
+    }
+
+    private String exportFilename() {
+        LocalDateTime time = LocalDateTime.now(clock);
+        return "回放报表明细-" + EXPORT_FILENAME_TIME.format(time) + ".xlsx";
     }
 }

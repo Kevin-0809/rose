@@ -3,6 +3,7 @@ package com.spdb.report;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.IndexedColors;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -80,9 +82,11 @@ public class ReportExportExcelService {
                  order by module_name
                 """, params(batchId), rs -> {
             Row r = sheet.createRow(row[0]++);
-            for (int i = 0; i < 10; i++) {
+            for (int i = 0; i < 8; i++) {
                 cell(r, i, text(rs.getObject(i + 1)), styles.body);
             }
+            percentCell(r, 8, rs.getBigDecimal("success_rate"), styles.percent);
+            cell(r, 9, text(rs.getObject("diff_528_field_count")), styles.body);
         });
         for (int i = 0; i < 10; i++) {
             sheet.setColumnWidth(i, i == 1 ? 4600 : 3600);
@@ -147,6 +151,12 @@ public class ReportExportExcelService {
         cell.setCellStyle(style);
     }
 
+    private static void percentCell(Row row, int column, BigDecimal value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value == null ? 0d : value.doubleValue());
+        cell.setCellStyle(style);
+    }
+
     private static String text(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
@@ -165,11 +175,15 @@ public class ReportExportExcelService {
         private final CellStyle green;
         private final CellStyle blue;
         private final CellStyle body;
+        private final CellStyle percent;
 
         private Styles(SXSSFWorkbook book) {
             green = style(book, IndexedColors.LIGHT_GREEN);
             blue = style(book, IndexedColors.LIGHT_BLUE);
             body = style(book, null);
+            percent = style(book, null);
+            DataFormat format = book.createDataFormat();
+            percent.setDataFormat(format.getFormat("0.00%"));
         }
 
         private static CellStyle style(SXSSFWorkbook book, IndexedColors color) {
