@@ -994,7 +994,7 @@ td {
   max-width: 100%;
 }
 
-.command-table { 
+.command-table {
   table-layout: fixed;
   min-width: 1190px;
 }
