@@ -22,11 +22,6 @@
     <section class="nav-group" data-group="analysis">
       <button class="nav-group-toggle" type="button" aria-controls="nav-group-analysis" aria-expanded="false">回放分析</button>
       <div id="nav-group-analysis" class="nav-group-links">
-        <a th:classappend="${active == 'sampling-commands'} ? 'active'" th:attr="aria-current=${active == 'sampling-commands'} ? 'page' : null" href="/sampling/commands">采样指令</a>
-        <a th:classappend="${active == 'sampling-summaries'} ? 'active'" th:attr="aria-current=${active == 'sampling-summaries'} ? 'page' : null" href="/sampling/summaries">统计历史</a>
-        <a th:classappend="${active == 'batch-domain-reports'} ? 'active'" th:attr="aria-current=${active == 'batch-domain-reports'} ? 'page' : null" href="/sampling/domain-reports">批次领域报表</a>
-        <a th:classappend="${active == 'transaction-diffs'} ? 'active'" th:attr="aria-current=${active == 'transaction-diffs'} ? 'page' : null" href="/samples/transaction-diffs">交易级差异</a>
-        <a th:classappend="${active == 'field-diffs'} ? 'active'" th:attr="aria-current=${active == 'field-diffs'} ? 'page' : null" href="/samples/field-diffs">字段级差异</a>
         <a th:classappend="${active == 'report-exports'} ? 'active'" th:attr="aria-current=${active == 'report-exports'} ? 'page' : null" href="/report-exports">报表明细导出</a>
         <a th:classappend="${active == 'diff-issues'} ? 'active'" th:attr="aria-current=${active == 'diff-issues'} ? 'page' : null" href="/diff-issues">差异问题台账</a>
       </div>

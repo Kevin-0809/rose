@@ -33,14 +33,13 @@ class LayoutTemplateTest {
                 .contains("/config/fields")
                 .contains("/config/recording");
         assertThat(sectionForGroup(html, "analysis"))
-                .contains("/sampling/commands")
-                .contains("/sampling/summaries")
-                .contains("/sampling/domain-reports")
-                .contains("批次领域报表")
-                .contains("/samples/transaction-diffs")
-                .contains("/samples/field-diffs")
                 .contains("/report-exports")
-                .contains("/diff-issues");
+                .contains("/diff-issues")
+                .doesNotContain("/sampling/commands")
+                .doesNotContain("/sampling/summaries")
+                .doesNotContain("/sampling/domain-reports")
+                .doesNotContain("/samples/transaction-diffs")
+                .doesNotContain("/samples/field-diffs");
         assertThat(sectionForGroup(html, "operations"))
                 .contains("/messages/flow-logs")
                 .contains("/messages/flow-logs/new")
