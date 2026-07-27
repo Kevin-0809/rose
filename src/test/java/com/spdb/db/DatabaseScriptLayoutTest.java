@@ -238,7 +238,7 @@ class DatabaseScriptLayoutTest {
                 "comment on column ana_tran_diff_tracking_export\\." + column + " is '[\\p{IsHan}][^']*';"));
 
         assertThat(ddlLower).contains("""
-                create index if not exists idx_ana_tran_diff_tracking_export_source
+                create unique index if not exists uk_ana_tran_diff_tracking_export_batch_issue
                 on ana_tran_diff_tracking_export(source_batch_id, service_code, orig_error_code, dest_error_code);""");
         assertThat(ddlLower).contains("""
                 create index if not exists idx_ana_tran_diff_tracking_export_time
