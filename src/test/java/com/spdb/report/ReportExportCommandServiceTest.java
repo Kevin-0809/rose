@@ -6,6 +6,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import com.spdb.web.PageRequestParams;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -103,6 +104,25 @@ class ReportExportCommandServiceTest {
             assertThat(row.soapFieldName()).isEqualTo("items.0");
             assertThat(row.mappingStatus()).isEqualTo("UNMAPPED");
         });
+    }
+
+    @Test
+    void returnsTheLastAvailableDetailPageWhenTheRequestedPageIsTooLarge() {
+        jdbc.update("insert into ana_tran_diff_tracking_export(source_batch_id, row_no, service_code, tran_code) values (?, ?, ?, ?)",
+                "RPT1", 1L, "svc-a", "T1");
+        jdbc.update("insert into ana_field_diff_tracking_export(source_batch_id, row_no, service_code, soap_field_name) values (?, ?, ?, ?)",
+                "RPT1", 1L, "svc-a", "amount");
+
+        assertThat(service.searchTransactionDetails("RPT1", PageRequestParams.of(9, 50)))
+                .satisfies(result -> {
+                    assertThat(result.page()).isEqualTo(1);
+                    assertThat(result.rows()).extracting(ReportExportTransactionDetailRow::rowNo).containsExactly(1L);
+                });
+        assertThat(service.searchFieldDetails("RPT1", PageRequestParams.of(9, 50)))
+                .satisfies(result -> {
+                    assertThat(result.page()).isEqualTo(1);
+                    assertThat(result.rows()).extracting(ReportExportFieldDetailRow::rowNo).containsExactly(1L);
+                });
     }
 
     private ObjectProvider<ReportExportTaskLauncher> launcherProvider() {

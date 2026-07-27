@@ -115,6 +115,25 @@ public class ReportExportCommandService {
                 rs.getString("dest_error_desc")));
     }
 
+    public PagedResult<ReportExportTransactionDetailRow> searchTransactionDetails(String batchId, PageRequestParams page) {
+        long total = countTransactionDetails(batchId);
+        PageRequestParams effectivePage = pageForTotal(page, total);
+        MapSqlParameterSource queryParams = params(batchId).addValue("limit", effectivePage.size()).addValue("offset", effectivePage.offset());
+        List<ReportExportTransactionDetailRow> rows = jdbc.query("""
+                select export_id, row_no, service_code, orig_error_code, dest_error_code, tran_code, tran_name,
+                       module_name, orig_error_desc, dest_error_desc
+                  from ana_tran_diff_tracking_export
+                 where source_batch_id = :batchId
+                 order by row_no
+                 limit :limit offset :offset
+                """, queryParams, (rs, rowNum) -> new ReportExportTransactionDetailRow(
+                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
+                rs.getString("orig_error_code"), rs.getString("dest_error_code"), rs.getString("tran_code"),
+                rs.getString("tran_name"), rs.getString("module_name"), rs.getString("orig_error_desc"),
+                rs.getString("dest_error_desc")));
+        return PagedResult.of(rows, total, effectivePage);
+    }
+
     public List<ReportExportFieldDetailRow> findFieldDetails(String batchId) {
         return jdbc.query("""
                 select export_id, row_no, service_code, tran_code, tran_name, module_name, soap_field_name,
@@ -127,6 +146,41 @@ public class ReportExportCommandService {
                 rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"),
                 rs.getString("soap_field_name"), rs.getString("field_name"), rs.getString("mapping_status"),
                 rs.getString("orig_field_value"), rs.getString("dest_field_value")));
+    }
+
+    public PagedResult<ReportExportFieldDetailRow> searchFieldDetails(String batchId, PageRequestParams page) {
+        long total = countFieldDetails(batchId);
+        PageRequestParams effectivePage = pageForTotal(page, total);
+        MapSqlParameterSource queryParams = params(batchId).addValue("limit", effectivePage.size()).addValue("offset", effectivePage.offset());
+        List<ReportExportFieldDetailRow> rows = jdbc.query("""
+                select export_id, row_no, service_code, tran_code, tran_name, module_name, soap_field_name,
+                       field_name, mapping_status, orig_field_value, dest_field_value
+                  from ana_field_diff_tracking_export
+                 where source_batch_id = :batchId
+                 order by row_no
+                 limit :limit offset :offset
+                """, queryParams, (rs, rowNum) -> new ReportExportFieldDetailRow(
+                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
+                rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"),
+                rs.getString("soap_field_name"), rs.getString("field_name"), rs.getString("mapping_status"),
+                rs.getString("orig_field_value"), rs.getString("dest_field_value")));
+        return PagedResult.of(rows, total, effectivePage);
+    }
+
+    private long countTransactionDetails(String batchId) {
+        Long total = jdbc.queryForObject("select count(*) from ana_tran_diff_tracking_export where source_batch_id = :batchId",
+                params(batchId), Long.class);
+        return total == null ? 0 : total;
+    }
+
+    private long countFieldDetails(String batchId) {
+        Long total = jdbc.queryForObject("select count(*) from ana_field_diff_tracking_export where source_batch_id = :batchId",
+                params(batchId), Long.class);
+        return total == null ? 0 : total;
+    }
+
+    private PageRequestParams pageForTotal(PageRequestParams page, long total) {
+        return new PageRequestParams(Math.min(page.page(), page.totalPages(total)), page.size());
     }
 
     public boolean markRunning(String batchId) {

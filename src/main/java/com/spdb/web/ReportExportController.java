@@ -44,18 +44,23 @@ public class ReportExportController {
     }
 
     @GetMapping("/report-exports/{batchId}")
-    public String detail(@PathVariable String batchId, Model model) {
+    public String detail(@PathVariable String batchId,
+                         @RequestParam(required = false) Integer transactionPage,
+                         @RequestParam(required = false) Integer fieldPage,
+                         Model model) {
         ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
+        PageRequestParams transactionPageParams = PageRequestParams.of(transactionPage, 50);
+        PageRequestParams fieldPageParams = PageRequestParams.of(fieldPage, 50);
         model.addAttribute("active", "report-exports");
         model.addAttribute("command", command);
         if (command != null && "SUCCEEDED".equals(command.status())) {
             model.addAttribute("summaries", reportExportCommandService.findSummaries(batchId));
-            model.addAttribute("transactionDetails", reportExportCommandService.findTransactionDetails(batchId));
-            model.addAttribute("fieldDetails", reportExportCommandService.findFieldDetails(batchId));
+            model.addAttribute("transactionDetails", reportExportCommandService.searchTransactionDetails(batchId, transactionPageParams));
+            model.addAttribute("fieldDetails", reportExportCommandService.searchFieldDetails(batchId, fieldPageParams));
         } else {
             model.addAttribute("summaries", List.of());
-            model.addAttribute("transactionDetails", List.of());
-            model.addAttribute("fieldDetails", List.of());
+            model.addAttribute("transactionDetails", PagedResult.of(List.of(), 0, transactionPageParams));
+            model.addAttribute("fieldDetails", PagedResult.of(List.of(), 0, fieldPageParams));
         }
         return "report-exports/detail";
     }

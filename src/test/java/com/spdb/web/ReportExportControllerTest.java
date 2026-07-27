@@ -40,12 +40,12 @@ class ReportExportControllerTest {
         FakeReportExportCommandService service = new FakeReportExportCommandService();
         service.command = command("SUCCEEDED");
         service.summaries = List.of(new ReportExportSummaryRow(1L, "RPT1", "20260726", "支付", 2, 10, 1, 2, 3, 4, 5, 6, new BigDecimal("0.70000000")));
-        service.transactionDetails = List.of(new ReportExportTransactionDetailRow(1L, 1L, "svc-a", "O1", "D1", "T001", "交易A", "支付", "原错误", "新错误"));
-        service.fieldDetails = List.of(new ReportExportFieldDetailRow(1L, 1L, "svc-a", "T001", "交易A", "支付", "items.0", "amount", "UNMAPPED", "原值", "新值"));
+        service.transactionDetails = PagedResult.of(List.of(new ReportExportTransactionDetailRow(1L, 1L, "svc-a", "O1", "D1", "T001", "交易A", "支付", "原错误", "新错误")), 51, PageRequestParams.of(2, 50));
+        service.fieldDetails = PagedResult.of(List.of(new ReportExportFieldDetailRow(1L, 1L, "svc-a", "T001", "交易A", "支付", "items.0", "amount", "UNMAPPED", "原值", "新值")), 101, PageRequestParams.of(3, 50));
         ReportExportController controller = new ReportExportController(service);
         ConcurrentModel model = new ConcurrentModel();
 
-        String view = controller.detail("RPT1", model);
+        String view = controller.detail("RPT1", 2, 3, model);
 
         assertThat(view).isEqualTo("report-exports/detail");
         assertThat(model.getAttribute("active")).isEqualTo("report-exports");
@@ -53,6 +53,8 @@ class ReportExportControllerTest {
         assertThat(model.getAttribute("summaries")).isSameAs(service.summaries);
         assertThat(model.getAttribute("transactionDetails")).isSameAs(service.transactionDetails);
         assertThat(model.getAttribute("fieldDetails")).isSameAs(service.fieldDetails);
+        assertThat(service.transactionPage).isEqualTo(PageRequestParams.of(2, 50));
+        assertThat(service.fieldPage).isEqualTo(PageRequestParams.of(3, 50));
     }
 
     @Test
@@ -62,11 +64,17 @@ class ReportExportControllerTest {
         ReportExportController controller = new ReportExportController(service);
         ConcurrentModel model = new ConcurrentModel();
 
-        controller.detail("RPT1", model);
+        controller.detail("RPT1", null, null, model);
 
         assertThat(model.getAttribute("summaries")).isEqualTo(List.of());
-        assertThat(model.getAttribute("transactionDetails")).isEqualTo(List.of());
-        assertThat(model.getAttribute("fieldDetails")).isEqualTo(List.of());
+        PagedResult<?> transactionDetails = (PagedResult<?>) model.getAttribute("transactionDetails");
+        assertThat(transactionDetails.rows()).isEmpty();
+        assertThat(transactionDetails.total()).isZero();
+        assertThat(transactionDetails.size()).isEqualTo(50);
+        PagedResult<?> fieldDetails = (PagedResult<?>) model.getAttribute("fieldDetails");
+        assertThat(fieldDetails.rows()).isEmpty();
+        assertThat(fieldDetails.total()).isZero();
+        assertThat(fieldDetails.size()).isEqualTo(50);
     }
 
     @Test
@@ -91,11 +99,13 @@ class ReportExportControllerTest {
         private String createdBatchId;
         private ReportExportCommandRow command;
         private List<ReportExportSummaryRow> summaries = List.of();
-        private List<ReportExportTransactionDetailRow> transactionDetails = List.of();
-        private List<ReportExportFieldDetailRow> fieldDetails = List.of();
+        private PagedResult<ReportExportTransactionDetailRow> transactionDetails = PagedResult.of(List.of(), 0, PageRequestParams.of(null, 50));
+        private PagedResult<ReportExportFieldDetailRow> fieldDetails = PagedResult.of(List.of(), 0, PageRequestParams.of(null, 50));
         private PagedResult<ReportExportCommandRow> searchResult = PagedResult.of(List.of(), 0, PageRequestParams.of(null, 50));
         private String searchBatchId;
         private PageRequestParams searchPage;
+        private PageRequestParams transactionPage;
+        private PageRequestParams fieldPage;
 
         private FakeReportExportCommandService() {
             super(null, null);
@@ -124,12 +134,14 @@ class ReportExportControllerTest {
         }
 
         @Override
-        public List<ReportExportTransactionDetailRow> findTransactionDetails(String batchId) {
+        public PagedResult<ReportExportTransactionDetailRow> searchTransactionDetails(String batchId, PageRequestParams page) {
+            transactionPage = page;
             return transactionDetails;
         }
 
         @Override
-        public List<ReportExportFieldDetailRow> findFieldDetails(String batchId) {
+        public PagedResult<ReportExportFieldDetailRow> searchFieldDetails(String batchId, PageRequestParams page) {
+            fieldPage = page;
             return fieldDetails;
         }
     }
