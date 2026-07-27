@@ -42,7 +42,7 @@
 - `问题级别` 固定为“字段级”。
 - `字段名` 按非空字段以 ` | ` 拼接：`soap_field_name`、`sop_field_name`、`bizjson_field_name`、`field_cn_name`。
 - `问题描述` 仅根据实际值的空/非空状态脱敏：`528：有值/无值；CCBS：有值/无值`。不导出原始字段值。
-- 跑批落库时，字段差异记录根据服务码、交易码和归一后的 SOAP 字段名查询 `ana_field_mapping`，写入 `sop_field_name`、`soap_field_name`、`bizjson_field_name`、`field_cn_name`；无匹配映射时保留已有 SOAP 字段名，其余字段为空。
+- 跑批落库时，字段差异记录仅根据服务码和归一后的 SOAP 字段名查询 `ana_field_mapping`，写入 `sop_field_name`、`soap_field_name`、`bizjson_field_name`、`field_cn_name`；服务码是唯一业务键，交易码仅用于展示，不参与字段映射；无匹配映射时保留已有 SOAP 字段名，其余字段为空。
 
 ## 流式实现
 

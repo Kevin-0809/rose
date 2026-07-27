@@ -139,7 +139,7 @@ public class ReportExportBatchRunner {
             String service = service(field.destTrcd());
             Catalog catalog = catalogs.get(key(service));
             String normalized = normalizedField(field.origFieldName());
-            FieldMapping mapping = fieldMapping(fieldMappings, service, catalog == null ? null : catalog.tranCode(), normalized);
+            FieldMapping mapping = fieldMapping(fieldMappings, service, normalized);
             String sop = mapping == null ? null : mapping.sopFieldName();
             String soap = mapping == null ? normalized : mapping.soapFieldName();
             String bizjson = mapping == null ? null : mapping.bizjsonFieldName();
@@ -163,9 +163,9 @@ public class ReportExportBatchRunner {
     private static long count(List<Tran> rows, String result) { return rows.stream().filter(row -> result.equals(row.compResult())).count(); }
     private static String service(String value) { int index = text(value).indexOf('&'); return index < 0 ? text(value) : value.substring(0, index); }
     private static String normalizedField(String value) { String[] parts = text(value).split("\\."); return parts.length > 1 ? parts[0] + "." + parts[1] : text(value); }
-    private static FieldMapping fieldMapping(List<FieldMapping> mappings, String service, String tranCode, String soapFieldName) {
+    private static FieldMapping fieldMapping(List<FieldMapping> mappings, String service, String soapFieldName) {
         return mappings.stream().filter(mapping -> key(mapping.serviceCode()).equals(key(service))).filter(mapping -> key(mapping.soapFieldName()).equals(key(soapFieldName)))
-                .filter(mapping -> text(tranCode).isBlank() || text(mapping.tranCode()).isBlank() || key(mapping.tranCode()).equals(key(tranCode))).findFirst().orElse(null);
+                .findFirst().orElse(null);
     }
     private static String transactionFieldName(String result) { return switch (result) { case "1" -> "528失败/CCBS成功"; case "2" -> "528成功/CCBS失败"; case "3", "8" -> "528失败/CCBS失败"; default -> text(result); }; }
     private static String transactionDescription(Retcode retcode) { return "528错误码：" + text(retcode == null ? null : retcode.origCode()) + "；描述：" + text(retcode == null ? null : retcode.origDesc()) + "；CCBS错误码：" + text(retcode == null ? null : retcode.destCode()) + "；CCBS错误描述：" + text(retcode == null ? null : retcode.destDesc()); }

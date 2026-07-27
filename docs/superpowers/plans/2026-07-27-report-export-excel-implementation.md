@@ -54,7 +54,7 @@ Map<String, FieldMapping> mappings = fieldMappings();
 insertFieldDetails(batchId, reportDate, exportTime, fields, catalogs, mappings);
 ```
 
-以 `key(service) + "|" + key(normalizedField(origFieldName))` 定位映射；无映射时保留归一后的 SOAP 字段名。将四个字段名写进 `ana_field_diff_tracking_export`；`problem_description` 改为：
+以 `key(service) + "|" + key(normalizedField(origFieldName))` 定位映射；服务码为唯一业务键，交易码仅用于展示且不参与匹配。无映射时保留归一后的 SOAP 字段名。将四个字段名写进 `ana_field_diff_tracking_export`；`problem_description` 改为：
 
 ```java
 private static String presence(String value) {
