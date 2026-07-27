@@ -1,6 +1,10 @@
 package com.spdb.report;
 
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +57,9 @@ class ReportExportExcelServiceTest {
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             assertThat(workbook.getSheetAt(0).getSheetName()).isEqualTo("汇总信息");
+            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(0), 0);
+            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(1), 4);
+            assertHeaderStyle(workbook, workbook.getSheet("支付").getRow(0), 0);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellType()).isEqualTo(CellType.NUMERIC);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getNumericCellValue()).isEqualTo(0.7d);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
@@ -66,5 +73,15 @@ class ReportExportExcelServiceTest {
             assertThat(workbook.getSheet("支付").getRow(2).getCell(18).getStringCellValue()).isEqualTo("2");
         }
         assertThat(output.toString()).doesNotContain("secret");
+    }
+
+    private static void assertHeaderStyle(Workbook workbook, Row row, int column) {
+        assertThat(row.getHeightInPoints()).isGreaterThanOrEqualTo(22f);
+        var style = row.getCell(column).getCellStyle();
+        assertThat(style.getFillPattern()).isEqualTo(FillPatternType.SOLID_FOREGROUND);
+        assertThat(style.getFillForegroundColor()).isEqualTo(IndexedColors.DARK_BLUE.getIndex());
+        Font font = workbook.getFontAt(style.getFontIndexAsInt());
+        assertThat(font.getBold()).isTrue();
+        assertThat(font.getColor()).isEqualTo(IndexedColors.WHITE.getIndex());
     }
 }

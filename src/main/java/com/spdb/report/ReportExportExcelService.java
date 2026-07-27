@@ -5,9 +5,11 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.streaming.SXSSFSheet;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
@@ -57,21 +59,19 @@ public class ReportExportExcelService {
         SXSSFSheet sheet = book.createSheet("汇总信息");
         Row first = sheet.createRow(0);
         Row second = sheet.createRow(1);
+        first.setHeightInPoints(24f);
+        second.setHeightInPoints(22f);
         String[] fixed = {"批次", "领域", "覆盖528接口", "发送交易量"};
         for (int i = 0; i < fixed.length; i++) {
-            cell(first, i, fixed[i], styles.green);
-            sheet.addMergedRegion(new CellRangeAddress(0, 1, i, i));
+            mergedCell(sheet, 0, 1, i, i, fixed[i], styles.summaryHeader);
         }
-        cell(first, 4, "发送统计", styles.green);
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 4, 7));
+        mergedCell(sheet, 0, 0, 4, 7, "发送统计", styles.summaryHeader);
         String[] stats = {"528成功/CCBS失败", "528失败/CCBS成功", "二者均失败", "二者均成功"};
         for (int i = 0; i < stats.length; i++) {
-            cell(second, i + 4, stats[i], styles.green);
+            cell(second, i + 4, stats[i], styles.summaryHeader);
         }
-        cell(first, 8, "成功率", styles.green);
-        sheet.addMergedRegion(new CellRangeAddress(0, 1, 8, 8));
-        cell(first, 9, "差异字段数", styles.green);
-        sheet.addMergedRegion(new CellRangeAddress(0, 1, 9, 9));
+        mergedCell(sheet, 0, 1, 8, 8, "成功率", styles.summaryHeader);
+        mergedCell(sheet, 0, 1, 9, 9, "差异字段数", styles.summaryHeader);
         int[] row = {2};
         jdbc.query("""
                 select batch_id, module_name, covered_528_interface_count, sent_transaction_count,
@@ -97,8 +97,9 @@ public class ReportExportExcelService {
     private void writeModule(SXSSFWorkbook book, String batchId, String module, Styles styles) {
         SXSSFSheet sheet = book.createSheet(uniqueSheetName(book, module));
         Row header = sheet.createRow(0);
+        header.setHeightInPoints(24f);
         for (int i = 0; i < DETAIL_HEADERS.length; i++) {
-            cell(header, i, DETAIL_HEADERS[i], styles.blue);
+            cell(header, i, DETAIL_HEADERS[i], styles.detailHeader);
         }
         int[] row = {1};
         streamDetails(sheet, batchId, module, "ana_tran_diff_tracking_export", row, styles);
@@ -151,6 +152,19 @@ public class ReportExportExcelService {
         cell.setCellStyle(style);
     }
 
+    private static void mergedCell(SXSSFSheet sheet, int firstRow, int lastRow, int firstCol, int lastCol,
+                                   String value, CellStyle style) {
+        for (int rowIndex = firstRow; rowIndex <= lastRow; rowIndex++) {
+            Row row = sheet.getRow(rowIndex) == null ? sheet.createRow(rowIndex) : sheet.getRow(rowIndex);
+            for (int colIndex = firstCol; colIndex <= lastCol; colIndex++) {
+                Cell cell = row.getCell(colIndex) == null ? row.createCell(colIndex) : row.getCell(colIndex);
+                cell.setCellStyle(style);
+            }
+        }
+        sheet.getRow(firstRow).getCell(firstCol).setCellValue(value);
+        sheet.addMergedRegion(new CellRangeAddress(firstRow, lastRow, firstCol, lastCol));
+    }
+
     private static void percentCell(Row row, int column, BigDecimal value, CellStyle style) {
         Cell cell = row.createCell(column);
         cell.setCellValue(value == null ? 0d : value.doubleValue());
@@ -172,24 +186,37 @@ public class ReportExportExcelService {
     }
 
     private static final class Styles {
-        private final CellStyle green;
-        private final CellStyle blue;
+        private final CellStyle summaryHeader;
+        private final CellStyle detailHeader;
         private final CellStyle body;
         private final CellStyle percent;
 
         private Styles(SXSSFWorkbook book) {
-            green = style(book, IndexedColors.LIGHT_GREEN);
-            blue = style(book, IndexedColors.LIGHT_BLUE);
+            summaryHeader = headerStyle(book, IndexedColors.DARK_BLUE);
+            detailHeader = headerStyle(book, IndexedColors.DARK_BLUE);
             body = style(book, null);
             percent = style(book, null);
             DataFormat format = book.createDataFormat();
             percent.setDataFormat(format.getFormat("0.00%"));
         }
 
+        private static CellStyle headerStyle(SXSSFWorkbook book, IndexedColors color) {
+            CellStyle value = style(book, color);
+            Font font = book.createFont();
+            font.setBold(true);
+            font.setColor(IndexedColors.WHITE.getIndex());
+            value.setFont(font);
+            value.setVerticalAlignment(VerticalAlignment.CENTER);
+            value.setBorderTop(BorderStyle.MEDIUM);
+            value.setBorderBottom(BorderStyle.MEDIUM);
+            return value;
+        }
+
         private static CellStyle style(SXSSFWorkbook book, IndexedColors color) {
             CellStyle value = book.createCellStyle();
             value.setWrapText(true);
             value.setAlignment(HorizontalAlignment.CENTER);
+            value.setVerticalAlignment(VerticalAlignment.CENTER);
             value.setBorderBottom(BorderStyle.THIN);
             value.setBorderTop(BorderStyle.THIN);
             value.setBorderLeft(BorderStyle.THIN);
