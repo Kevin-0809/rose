@@ -27,6 +27,13 @@
           <span id="report-export-status" class="tag" role="status" aria-live="polite" th:classappend="${command.status() == 'SUCCEEDED'} ? 'green' : (${command.status() == 'FAILED'} ? 'yellow' : '')" th:text="${command.status()}"></span>
         </div>
         <p class="muted" th:if="${command.errorMessage() != null}" th:text="${command.errorMessage()}"></p>
+        <ol class="report-stage-list" aria-label="导出执行阶段">
+          <li th:each="stage : ${stageViews}" th:classappend="${'is-' + stage.state()}">
+            <span class="report-stage-icon" th:text="${stage.state() == 'completed' ? '✓' : stage.number()}"></span>
+            <span class="report-stage-name" th:text="${stage.label()}"></span>
+            <span class="report-stage-state" th:text="${stage.stateLabel()}"></span>
+          </li>
+        </ol>
       </section>
       <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
         <h2>汇总报表</h2>

@@ -62,6 +62,8 @@ public class ReportExportController {
         PageRequestParams fieldPageParams = PageRequestParams.of(fieldPage, 50);
         model.addAttribute("active", "report-exports");
         model.addAttribute("command", command);
+        model.addAttribute("stageViews", command == null ? List.of()
+                : ReportExportStageView.forCommand(command.status(), command.currentStage()));
         if (command != null && "SUCCEEDED".equals(command.status())) {
             model.addAttribute("summaries", reportExportCommandService.findSummaries(batchId));
             model.addAttribute("transactionDetails", reportExportCommandService.searchTransactionDetails(batchId, transactionPageParams));
