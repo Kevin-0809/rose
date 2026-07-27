@@ -15,6 +15,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -40,6 +42,7 @@ public class ReportExportBatchRunner {
     private final DataSource dataSource;
     private final TransactionTemplate transactionTemplate;
     private final Executor transactionDetailExecutor;
+    private final DiffIssueLedgerService issueLedgerService;
 
     public ReportExportBatchRunner(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
         this(jdbc, transactionManager, Runnable::run);
@@ -52,11 +55,13 @@ public class ReportExportBatchRunner {
         this.dataSource = jdbc.getJdbcTemplate().getDataSource();
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionDetailExecutor = transactionDetailExecutor;
+        this.issueLedgerService = new DiffIssueLedgerService(jdbc);
     }
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime) {
         Map<String, Catalog> catalogs = transactionTemplate.execute(status -> runInTransaction(batchId, reportDate, exportTime));
         streamTransactionDetails(batchId, reportDate, exportTime, catalogs);
+        issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     private Map<String, Catalog> runInTransaction(String batchId, String reportDate, LocalDateTime exportTime) {
@@ -194,6 +199,7 @@ public class ReportExportBatchRunner {
         jdbc.update(insert,
                 params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", rowNo)
                         .addValue("service", service).addValue("origCode", status == null ? retcode == null ? null : retcode.origCode() : status).addValue("destCode", status == null ? retcode == null ? null : retcode.destCode() : status)
+                        .addValue("issueKey", transactionIssueKey(service, status == null ? retcode == null ? null : retcode.origCode() : status, status == null ? retcode == null ? null : retcode.destCode() : status))
                         .addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
                         .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("origDesc", status == null ? retcode == null ? null : retcode.origDesc() : status)
                         .addValue("destDesc", status == null ? retcode == null ? null : retcode.destDesc() : status).addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", tran.mesgSeq())
@@ -212,7 +218,8 @@ public class ReportExportBatchRunner {
                     cast(:origDesc as varchar(500)) as orig_error_desc, cast(:destDesc as varchar(500)) as dest_error_desc,
                     cast(:owner as varchar(100)) as transaction_owner, cast(:seq as varchar(64)) as tran_seq_no,
                     '交易级' as problem_level, cast(:date as varchar(8)) as registration_date,
-                    cast(:field as varchar(500)) as field_name, cast(:description as varchar(2000)) as problem_description
+                    cast(:field as varchar(500)) as field_name, cast(:description as varchar(2000)) as problem_description,
+                    cast(:issueKey as varchar(600)) as issue_key
                 ) as source
                 on (target.source_batch_id = source.source_batch_id
                     and target.service_code = source.service_code
@@ -221,11 +228,11 @@ public class ReportExportBatchRunner {
                 when not matched then
                     insert (export_timestamp, source_batch_id, business_date, row_no, service_code, orig_error_code,
                     dest_error_code, tran_code, tran_name, module_name, orig_error_desc, dest_error_desc, transaction_owner,
-                    tran_seq_no, problem_level, registration_date, field_name, problem_description)
+                    tran_seq_no, problem_level, registration_date, field_name, problem_description, issue_key)
                     values (source.export_timestamp, source.source_batch_id, source.business_date, source.row_no, source.service_code,
                     source.orig_error_code, source.dest_error_code, source.tran_code, source.tran_name, source.module_name,
                     source.orig_error_desc, source.dest_error_desc, source.transaction_owner, source.tran_seq_no,
-                    source.problem_level, source.registration_date, source.field_name, source.problem_description)
+                    source.problem_level, source.registration_date, source.field_name, source.problem_description, source.issue_key)
                 """;
     }
 
@@ -245,14 +252,15 @@ public class ReportExportBatchRunner {
             jdbc.update("""
                     insert into ana_field_diff_tracking_export(export_timestamp, source_batch_id, business_date, row_no,
                     service_code, tran_code, tran_name, module_name, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name, mapping_status, orig_field_value,
-                    dest_field_value, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description)
-                    values (:time,:batchId,:date,:rowNo,:service,:tranCode,:tranName,:module,:sop,:soap,:bizjson,:fieldCn,:mappingStatus,:orig,:dest,:owner,:seq,'字段级',:date,:field,:description)""",
+                    dest_field_value, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description, issue_key)
+                    values (:time,:batchId,:date,:rowNo,:service,:tranCode,:tranName,:module,:sop,:soap,:bizjson,:fieldCn,:mappingStatus,:orig,:dest,:owner,:seq,'字段级',:date,:field,:description,:issueKey)""",
                     params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", ++rowNo)
                             .addValue("service", service).addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
                             .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("sop", sop).addValue("soap", soap).addValue("bizjson", bizjson).addValue("fieldCn", fieldCn)
                             .addValue("mappingStatus", mapping == null ? "UNMAPPED" : "MAPPED").addValue("orig", field.origValue()).addValue("dest", field.destValue())
                             .addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", field.mesgSeq()).addValue("field", joinedFieldNames(sop, soap, bizjson, fieldCn))
-                            .addValue("description", "528：" + valueStatus(field.origValue()) + "；CCBS：" + valueStatus(field.destValue())));
+                            .addValue("description", "528：" + valueStatus(field.origValue()) + "；CCBS：" + valueStatus(field.destValue()))
+                            .addValue("issueKey", fieldIssueKey(service, normalized)));
         }
     }
 
@@ -281,6 +289,9 @@ public class ReportExportBatchRunner {
     private static String module(String service, Map<String, Catalog> catalogs) { Catalog catalog = catalogs.get(key(service)); return catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog); }
     private static String moduleName(Catalog catalog) { return catalog.moduleName() == null || catalog.moduleName().isBlank() ? UNCONFIGURED_MODULE : catalog.moduleName(); }
     private static String key(String value) { return text(value).toLowerCase(Locale.ROOT); }
+    private static String transactionIssueKey(String service, String origCode, String destCode) { return "TRAN|" + issuePart(service) + "|" + issuePart(origCode) + "|" + issuePart(destCode); }
+    private static String fieldIssueKey(String service, String sourceField) { return "FIELD|" + issuePart(service) + "|" + issuePart(sourceField); }
+    private static String issuePart(String value) { return text(value).trim().toLowerCase(Locale.ROOT); }
     private static String text(String value) { return value == null ? "" : value; }
     private static <T> Set<T> union(Set<T> first, Set<T> second) { Set<T> result = new TreeSet<>(); result.addAll(first); result.addAll(second); return result; }
     private static MapSqlParameterSource params(String batchId, String reportDate) { return new MapSqlParameterSource("batchId", batchId).addValue("reportDate", reportDate); }
