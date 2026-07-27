@@ -80,6 +80,19 @@ class ReportExportCommandServiceTest {
     }
 
     @Test
+    void ignoresStageUpdatesUnlessTheCommandIsRunning() {
+        String batchId = service.createAndStart();
+
+        service.markStage(batchId, ReportExportStage.TRANSACTION_DETAILS);
+        assertThat(service.findByBatchId(batchId).currentStage()).isNull();
+
+        assertThat(service.markRunning(batchId)).isTrue();
+        service.markFailed(batchId, "failed");
+        service.markStage(batchId, ReportExportStage.SUMMARY);
+        assertThat(service.findByBatchId(batchId).currentStage()).isNull();
+    }
+
+    @Test
     void returnsOnlyExportSummaryRowsForTheRequestedBatch() {
         String batchId = service.createAndStart();
         jdbc.update("insert into ana_report_export_summary(batch_id, report_date, module_name, sent_transaction_count) values (?, ?, ?, ?)",
