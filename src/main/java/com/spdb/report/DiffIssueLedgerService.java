@@ -6,6 +6,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.spdb.web.PageRequestParams;
+import com.spdb.web.PagedResult;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -41,9 +43,13 @@ public class DiffIssueLedgerService {
     }
 
     public List<DiffIssueRow> search(DiffIssueSearch search) {
+        return searchPaged(search, PageRequestParams.of(1, 200)).rows();
+    }
+
+    public PagedResult<DiffIssueRow> searchPaged(DiffIssueSearch search, PageRequestParams page) {
         DiffIssueSearch criteria = search == null ? new DiffIssueSearch(null, null, null, null, null, null, null, null, null, null) : search;
-        return jdbc.query("""
-                select * from ana_diff_issue
+        PageRequestParams pageParams = page == null ? PageRequestParams.of(null, null) : page;
+        String where = """
                  where (:issueLevel is null or issue_level = :issueLevel)
                    and (:issueStatus is null or issue_status = :issueStatus)
                    and (:serviceCode is null or service_code = :serviceCode)
@@ -54,14 +60,18 @@ public class DiffIssueLedgerService {
                    and (:lastSeenFrom is null or last_seen_date >= :lastSeenFrom)
                    and (:lastSeenTo is null or last_seen_date <= :lastSeenTo)
                    and (:keyword is null or lower(issue_key) like lower(:keyword) or lower(problem_description) like lower(:keyword))
+                """;
+        MapSqlParameterSource values = searchParams(criteria)
+                .addValue("limit", pageParams.size())
+                .addValue("offset", pageParams.offset());
+        List<DiffIssueRow> rows = jdbc.query("""
+                select * from ana_diff_issue
+                """ + where + """
                  order by last_seen_date desc, issue_id desc
-                """, params()
-                .addValue("issueLevel", clean(criteria.issueLevel())).addValue("issueStatus", clean(criteria.issueStatus()))
-                .addValue("serviceCode", clean(criteria.serviceCode())).addValue("moduleName", clean(criteria.moduleName()))
-                .addValue("transactionOwner", clean(criteria.transactionOwner())).addValue("firstSeenFrom", criteria.firstSeenFrom())
-                .addValue("firstSeenTo", criteria.firstSeenTo()).addValue("lastSeenFrom", criteria.lastSeenFrom())
-                .addValue("lastSeenTo", criteria.lastSeenTo()).addValue("keyword", clean(criteria.keyword()) == null ? null : "%" + criteria.keyword().trim() + "%"),
-                (rs, ignored) -> row(rs));
+                 limit :limit offset :offset
+                """, values, (rs, ignored) -> row(rs));
+        Long total = jdbc.queryForObject("select count(*) from ana_diff_issue " + where, values, Long.class);
+        return PagedResult.of(rows, total == null ? 0 : total, pageParams);
     }
 
     public void update(long issueId, DiffIssueUpdate update, LocalDateTime expectedUpdatedAt) {
@@ -148,7 +158,8 @@ public class DiffIssueLedgerService {
                 """, params().addValue("batchId", batchId), (rs, ignored) -> new BatchIssue(rs.getString("issue_key"), rs.getString("issue_level"),
                 rs.getString("service_code"), rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"),
                 rs.getString("transaction_owner"), rs.getString("orig_error_code"), rs.getString("dest_error_code"),
-                rs.getString("normalized_source_field_name"), rs.getString("problem_description")));
+                normalizedSourceFieldName(rs.getString("issue_level"), rs.getString("issue_key"), rs.getString("normalized_source_field_name")),
+                rs.getString("problem_description")));
     }
 
     private DiffIssueRow findByKey(String issueKey) {
@@ -169,8 +180,22 @@ public class DiffIssueLedgerService {
     }
 
     private static MapSqlParameterSource params() { return new MapSqlParameterSource(); }
+    private static MapSqlParameterSource searchParams(DiffIssueSearch criteria) {
+        return params().addValue("issueLevel", clean(criteria.issueLevel())).addValue("issueStatus", clean(criteria.issueStatus()))
+                .addValue("serviceCode", clean(criteria.serviceCode())).addValue("moduleName", clean(criteria.moduleName()))
+                .addValue("transactionOwner", clean(criteria.transactionOwner())).addValue("firstSeenFrom", criteria.firstSeenFrom())
+                .addValue("firstSeenTo", criteria.firstSeenTo()).addValue("lastSeenFrom", criteria.lastSeenFrom())
+                .addValue("lastSeenTo", criteria.lastSeenTo()).addValue("keyword", clean(criteria.keyword()) == null ? null : "%" + criteria.keyword().trim() + "%");
+    }
     private static String clean(String value) { return value == null || value.isBlank() ? null : value.trim(); }
     private static String compactDate(LocalDate date) { return date == null ? null : DateTimeFormatter.BASIC_ISO_DATE.format(date); }
+    private static String normalizedSourceFieldName(String issueLevel, String issueKey, String fallback) {
+        if (!"FIELD".equals(issueLevel) || issueKey == null) {
+            return fallback;
+        }
+        int lastSeparator = issueKey.lastIndexOf('|');
+        return lastSeparator < 0 ? fallback : issueKey.substring(lastSeparator + 1);
+    }
 
     private record BatchIssue(String issueKey, String issueLevel, String serviceCode, String tranCode, String tranName,
                               String moduleName, String transactionOwner, String origErrorCode, String destErrorCode,

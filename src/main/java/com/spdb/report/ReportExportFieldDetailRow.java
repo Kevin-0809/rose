@@ -1,5 +1,7 @@
 package com.spdb.report;
 
+import java.time.LocalDate;
+
 public record ReportExportFieldDetailRow(
         long exportId,
         long rowNo,
@@ -11,6 +13,10 @@ public record ReportExportFieldDetailRow(
         String fieldName,
         String mappingStatus,
         String origFieldValue,
-        String destFieldValue
+        String destFieldValue,
+        Long issueId,
+        long historicalOccurrenceCount,
+        LocalDate firstSeenDate,
+        LocalDate previousSeenDate
 ) {
 }

@@ -59,9 +59,14 @@ public class ReportExportBatchRunner {
     }
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime) {
-        Map<String, Catalog> catalogs = transactionTemplate.execute(status -> runInTransaction(batchId, reportDate, exportTime));
-        streamTransactionDetails(batchId, reportDate, exportTime, catalogs);
-        issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
+        try {
+            Map<String, Catalog> catalogs = transactionTemplate.execute(status -> runInTransaction(batchId, reportDate, exportTime));
+            streamTransactionDetails(batchId, reportDate, exportTime, catalogs);
+            issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
+        } catch (RuntimeException exception) {
+            cleanupBatchArtifacts(batchId);
+            throw exception;
+        }
     }
 
     private Map<String, Catalog> runInTransaction(String batchId, String reportDate, LocalDateTime exportTime) {
@@ -137,6 +142,15 @@ public class ReportExportBatchRunner {
                     new MapSqlParameterSource("batchId", batchId));
             throw exception;
         }
+    }
+
+    private void cleanupBatchArtifacts(String batchId) {
+        transactionTemplate.executeWithoutResult(status -> {
+            MapSqlParameterSource params = new MapSqlParameterSource("batchId", batchId);
+            jdbc.update("delete from ana_tran_diff_tracking_export where source_batch_id = :batchId", params);
+            jdbc.update("delete from ana_field_diff_tracking_export where source_batch_id = :batchId", params);
+            jdbc.update("delete from ana_report_export_summary where batch_id = :batchId", params);
+        });
     }
 
     private Set<String> transactionServiceCodes() {

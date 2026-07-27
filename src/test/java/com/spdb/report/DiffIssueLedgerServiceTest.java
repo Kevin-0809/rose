@@ -9,6 +9,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import com.spdb.web.PageRequestParams;
+import com.spdb.web.PagedResult;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -88,6 +90,33 @@ class DiffIssueLedgerServiceTest {
             assertThat(issue.issueStatus()).isEqualTo("OPEN");
             assertThat(issue.finalSolution()).isEqualTo("solution");
             assertThat(issue.resolver()).isEqualTo("Lee");
+        });
+    }
+
+    @Test
+    void fieldLedgerUsesNormalizedSourceFieldFromIssueKeyInsteadOfDisplayFieldName() {
+        insertFieldDetail("B1", 1, "FIELD|svc-a|amount", "svc-a", "SOP_AMOUNT | amount | amount | 金额");
+
+        service.materializeBatch("B1", LocalDate.of(2026, 7, 27));
+
+        assertThat(service.findById(issueId("FIELD|svc-a|amount")).normalizedSourceFieldName()).isEqualTo("amount");
+    }
+
+    @Test
+    void searchPagedAppliesFiltersAndReturnsRequestedPage() {
+        insertTransactionDetail("B1", 1, "TRAN|svc-a|E1|D1", "svc-a", "E1", "D1");
+        insertFieldDetail("B1", 2, "FIELD|svc-a|amount", "svc-a", "amount");
+        service.materializeBatch("B1", LocalDate.of(2026, 7, 27));
+
+        PagedResult<DiffIssueRow> result = service.searchPaged(
+                new DiffIssueSearch("FIELD", "OPEN", "svc-a", "Module", "Owner", LocalDate.of(2026, 7, 1),
+                        LocalDate.of(2026, 7, 31), null, null, "amount"),
+                PageRequestParams.of(1, 20));
+
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.rows()).singleElement().satisfies(row -> {
+            assertThat(row.issueLevel()).isEqualTo("FIELD");
+            assertThat(row.issueKey()).isEqualTo("FIELD|svc-a|amount");
         });
     }
 

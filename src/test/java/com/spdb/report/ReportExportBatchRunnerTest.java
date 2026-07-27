@@ -15,6 +15,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReportExportBatchRunnerTest {
     private JdbcTemplate jdbc;
@@ -203,6 +204,27 @@ class ReportExportBatchRunnerTest {
         assertThat(submittedTasks).hasValue(2);
         assertThat(jdbc.queryForObject("select count(*) from ana_tran_diff_tracking_export where source_batch_id = 'BATCH-STREAM'", Long.class))
                 .isEqualTo(5L);
+    }
+
+    @Test
+    void cleansCurrentBatchArtifactsWhenTransactionStreamingFails() {
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC1', '交易一', '模块一', '负责人')");
+        jdbc.update("insert into tss_field_comp values ('F1', '20260727', 1, 1, 1, 'SVC1&soap', 'amount.extra', 'source', 'ignored', '')");
+        jdbc.update("insert into tss_tran_comp values ('T1', '20260727', 1, 1, 'SVC1&soap', '1')");
+        Executor failingExecutor = command -> {
+            throw new IllegalStateException("stream failed");
+        };
+        runner = new ReportExportBatchRunner(new NamedParameterJdbcTemplate(jdbc.getDataSource()),
+                new JdbcTransactionManager(jdbc.getDataSource()), failingExecutor);
+
+        assertThatThrownBy(() -> runner.run("BATCH-FAIL", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("stream failed");
+
+        assertThat(jdbc.queryForObject("select count(*) from ana_report_export_summary where batch_id = 'BATCH-FAIL'", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from ana_field_diff_tracking_export where source_batch_id = 'BATCH-FAIL'", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from ana_tran_diff_tracking_export where source_batch_id = 'BATCH-FAIL'", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from ana_diff_issue", Long.class)).isZero();
     }
 
     private void createSchema() {

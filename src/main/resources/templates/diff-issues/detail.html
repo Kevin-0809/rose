@@ -1,1 +1,69 @@
-<!DOCTYPE html><html lang="zh-CN" xmlns:th="http://www.thymeleaf.org"><head><meta charset="UTF-8"><title>维护问题</title><link rel="stylesheet" href="/css/app.css"></head><body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame"><div class="page-head"><h1>维护问题</h1><a class="btn" href="/diff-issues">返回</a></div><p th:if="${error}" th:text="${error}"></p><form class="panel form-grid" method="post" th:action="@{/diff-issues/{id}(id=${issue.issueId()})}"><input type="hidden" name="updatedAt" th:value="${issue.updatedAt()}"><div><label>问题键</label><input readonly th:value="${issue.issueKey()}"></div><div><label>状态</label><select name="issueStatus"><option value="OPEN" th:selected="${issue.issueStatus() == 'OPEN'}">未解决</option><option value="RESOLVED" th:selected="${issue.issueStatus() == 'RESOLVED'}">已解决</option><option value="IGNORED" th:selected="${issue.issueStatus() == 'IGNORED'}">忽略</option></select></div><div><label>问题类型</label><input name="problemType" th:value="${issue.problemType()}"></div><div><label>解决人</label><input name="resolver" th:value="${issue.resolver()}"></div><div class="span-2"><label>初步分析</label><textarea name="preliminaryAnalysis" th:text="${issue.preliminaryAnalysis()}"></textarea></div><div class="span-2"><label>最终方案</label><textarea name="finalSolution" th:text="${issue.finalSolution()}"></textarea></div><div><label>解决日期</label><input type="date" name="resolutionDate" th:value="${issue.resolutionDate()}"></div><div><label>缺陷修复日期</label><input type="date" name="defectFixDate" th:value="${issue.defectFixDate()}"></div><button class="btn primary" type="submit">保存</button></form></main></div></div></body></html>
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>维护差异问题</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Issue Maintenance</div>
+          <h1>维护差异问题</h1>
+          <p class="muted" th:text="${issue.issueKey()}"></p>
+        </div>
+        <a class="btn" href="/diff-issues">返回台账</a>
+      </div>
+
+      <div class="tag green" th:if="${message}" th:text="${message}"></div>
+      <div class="tag yellow" th:if="${error}" th:text="${error}"></div>
+
+      <section class="panel">
+        <div class="form-grid">
+          <div><label>问题级别</label><input readonly th:value="${issue.issueLevel()}"></div>
+          <div><label>状态</label><input readonly th:value="${issue.issueStatus()}"></div>
+          <div><label>服务码</label><input readonly th:value="${issue.serviceCode()}"></div>
+          <div><label>领域</label><input readonly th:value="${issue.moduleName()}"></div>
+          <div><label>交易码</label><input readonly th:value="${issue.tranCode()}"></div>
+          <div><label>交易名称</label><input readonly th:value="${issue.tranName()}"></div>
+          <div><label>字段名</label><input readonly th:value="${issue.normalizedSourceFieldName()}"></div>
+          <div><label>交易负责人</label><input readonly th:value="${issue.transactionOwner()}"></div>
+          <div><label>出现批次数</label><input readonly th:value="${issue.occurrenceBatchCount()}"></div>
+          <div><label>首次出现日期</label><input readonly th:value="${issue.firstSeenDate()}"></div>
+          <div><label>最近出现日期</label><input readonly th:value="${issue.lastSeenDate()}"></div>
+          <div><label>最近批次</label><input readonly th:value="${issue.lastSeenBatchId()}"></div>
+          <div class="span-2"><label>问题描述</label><textarea readonly th:text="${issue.problemDescription()}"></textarea></div>
+        </div>
+      </section>
+
+      <form class="panel form-grid" method="post" th:action="@{/diff-issues/{id}(id=${issue.issueId()})}">
+        <input type="hidden" name="updatedAt" th:value="${issue.updatedAt()}">
+        <div>
+          <label>处理状态</label>
+          <select name="issueStatus">
+            <option value="OPEN" th:selected="${issue.issueStatus() == 'OPEN'}">未解决</option>
+            <option value="RESOLVED" th:selected="${issue.issueStatus() == 'RESOLVED'}">已解决</option>
+            <option value="IGNORED" th:selected="${issue.issueStatus() == 'IGNORED'}">忽略</option>
+          </select>
+        </div>
+        <div><label>问题类型</label><input name="problemType" th:value="${issue.problemType()}"></div>
+        <div><label>解决人员</label><input name="resolver" th:value="${issue.resolver()}"></div>
+        <div><label>需协同组</label><input name="coordinationRequired" th:value="${issue.coordinationRequired()}"></div>
+        <div><label>解决日期</label><input type="date" name="resolutionDate" th:value="${issue.resolutionDate()}"></div>
+        <div><label>缺陷修复日期</label><input type="date" name="defectFixDate" th:value="${issue.defectFixDate()}"></div>
+        <div class="span-2"><label>初步问题分析</label><textarea name="preliminaryAnalysis" th:text="${issue.preliminaryAnalysis()}"></textarea></div>
+        <div class="span-2"><label>最终处理方案</label><textarea name="finalSolution" th:text="${issue.finalSolution()}"></textarea></div>
+        <button class="btn primary" type="submit">保存</button>
+      </form>
+    </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
+</body>
+</html>
