@@ -2,11 +2,14 @@ package com.spdb.web;
 
 import com.spdb.report.ReportExportCommandRow;
 import com.spdb.report.ReportExportCommandService;
+import com.spdb.report.ReportExportExcelService;
 import com.spdb.report.ReportExportFieldDetailRow;
 import com.spdb.report.ReportExportSummaryRow;
 import com.spdb.report.ReportExportTransactionDetailRow;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ConcurrentModel;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import java.math.BigDecimal;
@@ -14,8 +17,28 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class ReportExportControllerTest {
+
+    @Test
+    void downloadStreamsOnlySucceededBatch() throws Exception {
+        FakeReportExportCommandService service = new FakeReportExportCommandService();
+        service.command = command("SUCCEEDED");
+        ReportExportExcelService excel = mock(ReportExportExcelService.class);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        new ReportExportController(service, excel).download("RPT1", response);
+
+        assertThat(response.getContentType()).isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(response.getHeader("Content-Disposition")).contains("RPT1.xlsx");
+        verify(excel).stream("RPT1", response.getOutputStream());
+        service.command = command("RUNNING");
+        assertThatThrownBy(() -> new ReportExportController(service, excel).download("RPT1", new MockHttpServletResponse()))
+                .isInstanceOf(ResponseStatusException.class);
+    }
 
     @Test
     void commandsShowsBatchesWithBatchFilterAndFiftyRowsPerPage() {
