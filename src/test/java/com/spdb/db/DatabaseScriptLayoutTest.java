@@ -478,9 +478,7 @@ class DatabaseScriptLayoutTest {
                     "comment on column " + table + "\\." + column + " is '[\\p{IsHan}][^']*';"));
         });
 
-        assertThat(ddlLower).contains("add constraint fk_ana_tran_diff_tracking_export_issue");
-        assertThat(ddlLower).contains("add constraint fk_ana_field_diff_tracking_export_issue");
-        assertThat(ddlLower).contains("foreign key (issue_id) references ana_diff_issue(issue_id)");
+        assertThat(ddlLower).doesNotContain("foreign key (issue_id) references ana_diff_issue(issue_id)");
         assertThat(ddl).contains("稳定业务键快照");
         assertThat(ddl).contains("本批次前历史出现批次数");
         assertThat(ddl).contains("问题首次出现日期快照");

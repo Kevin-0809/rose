@@ -391,14 +391,6 @@ comment on column ana_diff_issue.occurrence_batch_count is '出现批次数';
 comment on column ana_diff_issue.created_at is '创建时间';
 comment on column ana_diff_issue.updated_at is '更新时间';
 
-alter table ana_tran_diff_tracking_export drop constraint if exists fk_ana_tran_diff_tracking_export_issue;
-alter table ana_tran_diff_tracking_export add constraint fk_ana_tran_diff_tracking_export_issue
-foreign key (issue_id) references ana_diff_issue(issue_id);
-
-alter table ana_field_diff_tracking_export drop constraint if exists fk_ana_field_diff_tracking_export_issue;
-alter table ana_field_diff_tracking_export add constraint fk_ana_field_diff_tracking_export_issue
-foreign key (issue_id) references ana_diff_issue(issue_id);
-
 create table if not exists ana_field_diff_result (
     result_id bigserial primary key,
     batch_id varchar(64) not null,
