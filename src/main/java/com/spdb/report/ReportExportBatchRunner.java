@@ -1,12 +1,19 @@
 package com.spdb.report;
 
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -16,6 +23,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
+import javax.sql.DataSource;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -24,27 +35,39 @@ import java.util.TreeSet;
 public class ReportExportBatchRunner {
     private static final String UNCONFIGURED_MODULE = "未配置领域";
 
+    private static final int TRANSACTION_FETCH_SIZE = 500;
+
     private final NamedParameterJdbcTemplate jdbc;
+    private final DataSource dataSource;
     private final TransactionTemplate transactionTemplate;
+    private final Executor transactionDetailExecutor;
 
     public ReportExportBatchRunner(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+        this(jdbc, transactionManager, Runnable::run);
+    }
+
+    @Autowired
+    public ReportExportBatchRunner(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager,
+                                   @Qualifier("reportExportTransactionDetailExecutor") Executor transactionDetailExecutor) {
         this.jdbc = jdbc;
+        this.dataSource = jdbc.getJdbcTemplate().getDataSource();
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionDetailExecutor = transactionDetailExecutor;
     }
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime) {
-        transactionTemplate.executeWithoutResult(status -> runInTransaction(batchId, reportDate, exportTime));
+        Map<String, Catalog> catalogs = transactionTemplate.execute(status -> runInTransaction(batchId, reportDate, exportTime));
+        streamTransactionDetails(batchId, reportDate, exportTime, catalogs);
     }
 
-    private void runInTransaction(String batchId, String reportDate, LocalDateTime exportTime) {
+    private Map<String, Catalog> runInTransaction(String batchId, String reportDate, LocalDateTime exportTime) {
         Map<String, Catalog> catalogs = catalogs();
         List<FieldMapping> fieldMappings = fieldMappings();
-        Map<String, Retcode> retcodes = retcodes();
         List<Tran> transactions = transactions();
         List<Field> fields = fields();
         insertSummaries(batchId, reportDate, transactions, fields, catalogs);
-        insertTransactionDetails(batchId, reportDate, exportTime, transactions, retcodes, catalogs);
         insertFieldDetails(batchId, reportDate, exportTime, fields, catalogs, fieldMappings);
+        return catalogs;
     }
 
     private Map<String, Catalog> catalogs() {
@@ -58,13 +81,6 @@ public class ReportExportBatchRunner {
         List<FieldMapping> result = new ArrayList<>();
         jdbc.getJdbcTemplate().query("select tran_code, service_code, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name from ana_field_mapping", (RowCallbackHandler)
                 rs -> result.add(new FieldMapping(rs.getString("tran_code"), rs.getString("service_code"), rs.getString("sop_field_name"), rs.getString("soap_field_name"), rs.getString("bizjson_field_name"), rs.getString("field_cn_name"))));
-        return result;
-    }
-
-    private Map<String, Retcode> retcodes() {
-        Map<String, Retcode> result = new LinkedHashMap<>();
-        jdbc.getJdbcTemplate().query("select mesg_seq, orig_cdate, service_code, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc from tss_retcode_comp", (RowCallbackHandler)
-                rs -> result.putIfAbsent(rowKey(rs.getString("orig_cdate"), rs.getString("mesg_seq")), new Retcode(rs.getString("service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"))));
         return result;
     }
 
@@ -105,30 +121,99 @@ public class ReportExportBatchRunner {
         }
     }
 
-    private void insertTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Tran> transactions, Map<String, Retcode> retcodes, Map<String, Catalog> catalogs) {
-        Map<String, Tran> grouped = new TreeMap<>();
-        transactions.stream().filter(row -> Set.of("1", "2", "3", "7", "8").contains(row.compResult())).sorted(TRAN_ORDER).forEach(row -> {
-            Retcode retcode = retcodes.get(rowKey(row.origCdate(), row.mesgSeq()));
-            String issue = retcode == null ? "TRAN|" + text(row.destTrcd()) + "|" + row.compResult() : "RET|" + service(retcode.serviceCode()) + "|" + text(retcode.origCode()) + "|" + text(retcode.destCode());
-            grouped.putIfAbsent(issue, row);
-        });
-        long rowNo = 0;
-        for (Tran tran : grouped.values()) {
-            Retcode retcode = retcodes.get(rowKey(tran.origCdate(), tran.mesgSeq()));
-            String service = retcode == null ? service(tran.destTrcd()) : service(retcode.serviceCode());
-            Catalog catalog = catalogs.get(key(service));
-            jdbc.update("""
-                    insert into ana_tran_diff_tracking_export(export_timestamp, source_batch_id, business_date, row_no,
-                    service_code, orig_error_code, dest_error_code, tran_code, tran_name, module_name, orig_error_desc,
-                    dest_error_desc, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description)
-                    values (:time,:batchId,:date,:rowNo,:service,:origCode,:destCode,:tranCode,:tranName,:module,:origDesc,:destDesc,:owner,:seq,'交易级',:date,:field,:description)""",
-                    params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", ++rowNo)
-                            .addValue("service", service).addValue("origCode", retcode == null ? null : retcode.origCode()).addValue("destCode", retcode == null ? null : retcode.destCode())
-                            .addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
-                            .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("origDesc", retcode == null ? null : retcode.origDesc())
-                            .addValue("destDesc", retcode == null ? null : retcode.destDesc()).addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", tran.mesgSeq())
-                            .addValue("field", transactionFieldName(tran.compResult())).addValue("description", transactionDescription(retcode)));
+    private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs) {
+        try {
+            AtomicLong rowNo = new AtomicLong();
+            List<CompletableFuture<Void>> tasks = transactionServiceCodes().stream()
+                    .map(service -> CompletableFuture.runAsync(() -> streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo), transactionDetailExecutor))
+                    .toList();
+            CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new)).join();
+        } catch (RuntimeException exception) {
+            jdbc.update("delete from ana_tran_diff_tracking_export where source_batch_id = :batchId",
+                    new MapSqlParameterSource("batchId", batchId));
+            throw exception;
         }
+    }
+
+    private Set<String> transactionServiceCodes() {
+        Set<String> services = new TreeSet<>();
+        jdbc.getJdbcTemplate().query("""
+                select distinct case when position('&' in coalesce(dest_trcd, '')) > 0
+                    then substring(dest_trcd, 1, position('&' in dest_trcd) - 1)
+                    else coalesce(dest_trcd, '') end as service_code
+                from tss_tran_comp
+                """, (RowCallbackHandler) rs -> services.add(rs.getString("service_code")));
+        return services;
+    }
+
+    private void streamTransactionService(String batchId, String reportDate, LocalDateTime exportTime, String normalizedService,
+                                          Map<String, Catalog> catalogs, AtomicLong rowNo) {
+        Set<String> issues = new TreeSet<>();
+        String insert = transactionDetailInsertSql();
+        String sql = """
+                select tc.mesg_seq, tc.orig_cdate, tc.conv_index, tc.conv_cindex, tc.dest_trcd, tc.comp_result,
+                       rc.mesg_seq as ret_mesg_seq, rc.service_code as ret_service_code, rc.orig_error_code, rc.orig_error_desc,
+                       rc.dest_error_code, rc.dest_error_desc
+                from tss_tran_comp tc
+                left join tss_retcode_comp rc on rc.mesg_seq = tc.mesg_seq and rc.orig_cdate = tc.orig_cdate
+                where case when position('&' in coalesce(tc.dest_trcd, '')) > 0
+                    then substring(tc.dest_trcd, 1, position('&' in tc.dest_trcd) - 1)
+                    else coalesce(tc.dest_trcd, '') end = ?
+                order by tc.mesg_seq, tc.conv_index, tc.conv_cindex
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(false);
+            statement.setFetchSize(TRANSACTION_FETCH_SIZE);
+            statement.setString(1, normalizedService);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) streamTransactionRow(rs, insert, batchId, reportDate, exportTime, catalogs, rowNo, issues);
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to stream transaction details for service " + normalizedService, exception);
+        }
+    }
+
+    private void streamTransactionRow(ResultSet rs, String insert, String batchId, String reportDate, LocalDateTime exportTime,
+                                      Map<String, Catalog> catalogs, AtomicLong rowNo, Set<String> issues) throws SQLException {
+        Tran row = new Tran(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getString("dest_trcd"), rs.getString("comp_result"));
+        Retcode retcode = rs.getString("ret_mesg_seq") == null ? null
+                : new Retcode(rs.getString("ret_service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"));
+        if (!shouldExportTransaction(row, retcode)) return;
+        String issue = transactionStatus(row.compResult()) == null
+                ? retcode == null ? "TRAN|" + text(row.destTrcd()) + "|" + row.compResult() : "RET|" + service(retcode.serviceCode()) + "|" + text(retcode.origCode()) + "|" + text(retcode.destCode())
+                : "STATUS|" + row.compResult() + "|" + text(row.destTrcd());
+        if (!issues.add(issue)) return;
+        insertTransactionDetail(insert, batchId, reportDate, exportTime, rowNo.incrementAndGet(), row, retcode, catalogs);
+    }
+
+    private void insertTransactionDetail(String insert, String batchId, String reportDate, LocalDateTime exportTime, long rowNo,
+                                         Tran tran, Retcode retcode, Map<String, Catalog> catalogs) {
+        String status = transactionStatus(tran.compResult());
+        String service = retcode == null ? service(tran.destTrcd()) : service(retcode.serviceCode());
+        Catalog catalog = catalogs.get(key(service));
+        jdbc.update(insert,
+                params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", rowNo)
+                        .addValue("service", service).addValue("origCode", status == null ? retcode == null ? null : retcode.origCode() : status).addValue("destCode", status == null ? retcode == null ? null : retcode.destCode() : status)
+                        .addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
+                        .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("origDesc", status == null ? retcode == null ? null : retcode.origDesc() : status)
+                        .addValue("destDesc", status == null ? retcode == null ? null : retcode.destDesc() : status).addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", tran.mesgSeq())
+                        .addValue("field", status == null ? transactionFieldName(retcode) : status).addValue("description", transactionDescription(retcode)));
+    }
+
+    private String transactionDetailInsertSql() {
+        return Boolean.TRUE.equals(jdbc.getJdbcTemplate().execute((ConnectionCallback<Boolean>) connection ->
+                "H2".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName()))) ? """
+                insert into ana_tran_diff_tracking_export(export_timestamp, source_batch_id, business_date, row_no,
+                service_code, orig_error_code, dest_error_code, tran_code, tran_name, module_name, orig_error_desc,
+                dest_error_desc, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description)
+                select :time,:batchId,:date,:rowNo,:service,:origCode,:destCode,:tranCode,:tranName,:module,:origDesc,:destDesc,:owner,:seq,'交易级',:date,:field,:description
+                where not exists (select 1 from ana_tran_diff_tracking_export where source_batch_id = :batchId and service_code = :service and orig_error_code = :origCode and dest_error_code = :destCode)""" : """
+                insert into ana_tran_diff_tracking_export(export_timestamp, source_batch_id, business_date, row_no,
+                service_code, orig_error_code, dest_error_code, tran_code, tran_name, module_name, orig_error_desc,
+                dest_error_desc, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description)
+                values (:time,:batchId,:date,:rowNo,:service,:origCode,:destCode,:tranCode,:tranName,:module,:origDesc,:destDesc,:owner,:seq,'交易级',:date,:field,:description)
+                on conflict (source_batch_id, service_code, orig_error_code, dest_error_code) do nothing""";
     }
 
     private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Field> fields, Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings) {
@@ -158,7 +243,6 @@ public class ReportExportBatchRunner {
         }
     }
 
-    private static final Comparator<Tran> TRAN_ORDER = Comparator.comparing(Tran::mesgSeq, Comparator.nullsFirst(String::compareTo)).thenComparingInt(Tran::convIndex).thenComparingInt(Tran::convCindex);
     private static final Comparator<Field> FIELD_ORDER = Comparator.comparing(Field::mesgSeq, Comparator.nullsFirst(String::compareTo)).thenComparingInt(Field::convIndex).thenComparingInt(Field::convCindex).thenComparingInt(Field::fieldIndex);
     private static long count(List<Tran> rows, String result) { return rows.stream().filter(row -> result.equals(row.compResult())).count(); }
     private static String service(String value) { int index = text(value).indexOf('&'); return index < 0 ? text(value) : value.substring(0, index); }
@@ -167,14 +251,23 @@ public class ReportExportBatchRunner {
         return mappings.stream().filter(mapping -> key(mapping.serviceCode()).equals(key(service))).filter(mapping -> key(mapping.soapFieldName()).equals(key(soapFieldName)))
                 .findFirst().orElse(null);
     }
-    private static String transactionFieldName(String result) { return switch (result) { case "1" -> "528失败/CCBS成功"; case "2" -> "528成功/CCBS失败"; case "3", "8" -> "528失败/CCBS失败"; default -> text(result); }; }
     private static String transactionDescription(Retcode retcode) { return "528错误码：" + text(retcode == null ? null : retcode.origCode()) + "；描述：" + text(retcode == null ? null : retcode.origDesc()) + "；CCBS错误码：" + text(retcode == null ? null : retcode.destCode()) + "；CCBS错误描述：" + text(retcode == null ? null : retcode.destDesc()); }
+    private static boolean shouldExportTransaction(Tran tran, Retcode retcode) { return !"4".equals(tran.compResult()) && (transactionStatus(tran.compResult()) != null || !bothSucceeded(retcode)); }
+    private static String transactionStatus(String result) { return switch (result) { case "0" -> "未比对"; case "5" -> "忽略比对"; case "6" -> "比对中"; case "7" -> "对比异常"; default -> null; }; }
+    private static boolean bothSucceeded(Retcode retcode) { return retcode != null && successCode(retcode.origCode()) && successCode(retcode.destCode()); }
+    private static boolean successCode(String code) { return "AAAAAAA".equals(code) || "000000000000".equals(code); }
+    private static String transactionFieldName(Retcode retcode) {
+        if (retcode == null || missingResponseCode(retcode.origCode()) || missingResponseCode(retcode.destCode())) return "二者都失败响应码不一致";
+        if (successCode(retcode == null ? null : retcode.origCode())) return "528成功ccbs失败";
+        if (successCode(retcode == null ? null : retcode.destCode())) return "528失败ccbs成功";
+        return text(retcode == null ? null : retcode.origCode()).equals(text(retcode == null ? null : retcode.destCode())) ? "二者都失败响应码一致" : "二者都失败响应码不一致";
+    }
+    private static boolean missingResponseCode(String code) { return code == null || code.isEmpty(); }
     private static String joinedFieldNames(String... names) { List<String> result = new ArrayList<>(); for (String name : names) if (!text(name).isBlank()) result.add(name); return String.join(" | ", result); }
     private static String valueStatus(String value) { return text(value).isEmpty() ? "无值" : "有值"; }
     private static String module(String service, Map<String, Catalog> catalogs) { Catalog catalog = catalogs.get(key(service)); return catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog); }
     private static String moduleName(Catalog catalog) { return catalog.moduleName() == null || catalog.moduleName().isBlank() ? UNCONFIGURED_MODULE : catalog.moduleName(); }
     private static String key(String value) { return text(value).toLowerCase(Locale.ROOT); }
-    private static String rowKey(String date, String sequence) { return text(date) + "|" + text(sequence); }
     private static String text(String value) { return value == null ? "" : value; }
     private static <T> Set<T> union(Set<T> first, Set<T> second) { Set<T> result = new TreeSet<>(); result.addAll(first); result.addAll(second); return result; }
     private static MapSqlParameterSource params(String batchId, String reportDate) { return new MapSqlParameterSource("batchId", batchId).addValue("reportDate", reportDate); }

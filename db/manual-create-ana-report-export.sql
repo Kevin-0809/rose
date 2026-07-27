@@ -40,3 +40,6 @@ on ana_report_export_command(status, created_time desc);
 
 create index if not exists idx_ana_report_export_summary_batch
 on ana_report_export_summary(batch_id, module_name);
+
+create unique index if not exists uk_ana_tran_diff_tracking_export_batch_issue
+on ana_tran_diff_tracking_export(source_batch_id, service_code, orig_error_code, dest_error_code);

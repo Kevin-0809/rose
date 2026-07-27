@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -80,13 +82,113 @@ class ReportExportBatchRunnerTest {
                 select field_name, problem_level, problem_description from ana_tran_diff_tracking_export order by row_no
                 """);
         assertThat(transactions).extracting(row -> row.get("field_name"))
-                .containsExactly("528失败/CCBS成功", "528成功/CCBS失败", "528失败/CCBS失败", "528失败/CCBS失败");
+                .containsExactly("二者都失败响应码不一致", "二者都失败响应码不一致", "二者都失败响应码不一致", "二者都失败响应码不一致");
         assertThat(transactions).allSatisfy(row -> assertThat(row.get("problem_level")).isEqualTo("交易级"));
         assertThat(transactions).extracting(row -> row.get("problem_description")).containsExactly(
                 "528错误码：O1；描述：orig one；CCBS错误码：D1；CCBS错误描述：dest one",
                 "528错误码：O2；描述：orig two；CCBS错误码：D2；CCBS错误描述：dest two",
                 "528错误码：O3；描述：orig three；CCBS错误码：D3；CCBS错误描述：dest three",
                 "528错误码：O8；描述：；CCBS错误码：D8；CCBS错误描述：");
+    }
+
+    @Test
+    void classifiesTransactionStatesAndResponseCodes() {
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('S0', '20260727', 1, 1, 'SVC0&soap', '0'),
+                ('S5', '20260727', 1, 1, 'SVC5&soap', '5'),
+                ('S6', '20260727', 1, 1, 'SVC6&soap', '6'),
+                ('S7', '20260727', 1, 1, 'SVC7&soap', '7'),
+                ('S4', '20260727', 1, 1, 'SVC4&soap', '4'),
+                ('OK', '20260727', 1, 1, 'SVCOK&soap', '1'),
+                ('OF', '20260727', 1, 1, 'SVC-OF&soap', '1'),
+                ('FO', '20260727', 1, 1, 'SVC-FO&soap', '2'),
+                ('FF-D', '20260727', 1, 1, 'SVC-FFD&soap', '3'),
+                ('FF-S', '20260727', 1, 1, 'SVC-FFS&soap', '8'),
+                ('MISSING', '20260727', 1, 1, 'SVC-MISSING&soap', '1'),
+                ('EMPTY', '20260727', 1, 1, 'SVC-EMPTY&soap', '1'),
+                ('NULL-EMPTY', '20260727', 1, 1, 'SVC-NULL-EMPTY&soap', '1')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp values
+                ('OK', '20260727', 'SVCOK&soap', 'AAAAAAA', '528 ok', '000000000000', 'ccbs ok'),
+                ('OF', '20260727', 'SVC-OF&soap', 'AAAAAAA', '528 ok', 'E1', 'ccbs failed'),
+                ('FO', '20260727', 'SVC-FO&soap', 'E2', '528 failed', '000000000000', 'ccbs ok'),
+                ('FF-D', '20260727', 'SVC-FFD&soap', 'E3', '528 failed', 'E4', 'ccbs failed'),
+                ('FF-S', '20260727', 'SVC-FFS&soap', 'E5', '528 failed', 'E5', 'ccbs failed'),
+                ('EMPTY', '20260727', 'SVC-EMPTY&soap', '', '528 empty', '', 'ccbs empty'),
+                ('NULL-EMPTY', '20260727', 'SVC-NULL-EMPTY&soap', null, '528 null', '', 'ccbs empty')
+                """);
+
+        runner.run("BATCH-STATES", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        List<Map<String, Object>> transactions = jdbc.queryForList("""
+                select tran_seq_no, orig_error_code, dest_error_code, orig_error_desc, dest_error_desc, field_name
+                from ana_tran_diff_tracking_export order by row_no
+                """);
+        assertThat(transactions).hasSize(11);
+        assertThat(transactions).extracting(row -> row.get("tran_seq_no"), row -> row.get("orig_error_code"), row -> row.get("dest_error_code"),
+                        row -> row.get("orig_error_desc"), row -> row.get("dest_error_desc"), row -> row.get("field_name"))
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("S0", "未比对", "未比对", "未比对", "未比对", "未比对"),
+                        org.assertj.core.groups.Tuple.tuple("S5", "忽略比对", "忽略比对", "忽略比对", "忽略比对", "忽略比对"),
+                        org.assertj.core.groups.Tuple.tuple("S6", "比对中", "比对中", "比对中", "比对中", "比对中"),
+                        org.assertj.core.groups.Tuple.tuple("S7", "对比异常", "对比异常", "对比异常", "对比异常", "对比异常"),
+                        org.assertj.core.groups.Tuple.tuple("OF", "AAAAAAA", "E1", "528 ok", "ccbs failed", "528成功ccbs失败"),
+                        org.assertj.core.groups.Tuple.tuple("FO", "E2", "000000000000", "528 failed", "ccbs ok", "528失败ccbs成功"),
+                        org.assertj.core.groups.Tuple.tuple("FF-D", "E3", "E4", "528 failed", "ccbs failed", "二者都失败响应码不一致"),
+                        org.assertj.core.groups.Tuple.tuple("FF-S", "E5", "E5", "528 failed", "ccbs failed", "二者都失败响应码一致"),
+                        org.assertj.core.groups.Tuple.tuple("MISSING", null, null, null, null, "二者都失败响应码不一致"),
+                        org.assertj.core.groups.Tuple.tuple("EMPTY", "", "", "528 empty", "ccbs empty", "二者都失败响应码不一致"),
+                        org.assertj.core.groups.Tuple.tuple("NULL-EMPTY", null, "", "528 null", "ccbs empty", "二者都失败响应码不一致"));
+    }
+
+    @Test
+    void keepsOneTransactionDetailWhenTheSameBatchRunsAgain() {
+        jdbc.update("insert into tss_tran_comp values ('T1', '20260727', 1, 1, 'SVC1&soap', '1')");
+        jdbc.update("insert into tss_retcode_comp values ('T1', '20260727', 'SVC1&soap', 'O1', 'orig', 'D1', 'dest')");
+
+        runner.run("BATCH-IDEMPOTENT", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+        runner.run("BATCH-IDEMPOTENT", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        assertThat(jdbc.queryForObject("""
+                select count(*) from ana_tran_diff_tracking_export
+                where source_batch_id = 'BATCH-IDEMPOTENT'
+                  and service_code = 'SVC1'
+                  and orig_error_code = 'O1'
+                  and dest_error_code = 'D1'
+                """, Long.class)).isEqualTo(1L);
+    }
+
+    @Test
+    void streamsTransactionDetailsOncePerNormalizedServiceCode() {
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('A1', '20260727', 1, 1, 'SVC-A&soap', '1'),
+                ('A2', '20260727', 2, 1, 'SVC-A&bizjson', '1'),
+                ('A3', '20260727', 3, 1, 'SVC-A&missing-one', '1'),
+                ('A4', '20260727', 4, 1, 'SVC-A&missing-two', '1'),
+                ('B1', '20260727', 1, 1, 'SVC-B&soap', '2')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp values
+                ('A1', '20260727', 'SVC-A&soap', 'OA1', 'orig', 'DA1', 'dest'),
+                ('A2', '20260727', 'SVC-A&bizjson', 'OA2', 'orig', 'DA2', 'dest'),
+                ('B1', '20260727', 'SVC-B&soap', 'OB1', 'orig', 'DB1', 'dest')
+                """);
+        AtomicInteger submittedTasks = new AtomicInteger();
+        Executor countingExecutor = command -> {
+            submittedTasks.incrementAndGet();
+            command.run();
+        };
+        runner = new ReportExportBatchRunner(new NamedParameterJdbcTemplate(jdbc.getDataSource()),
+                new JdbcTransactionManager(jdbc.getDataSource()), countingExecutor);
+
+        runner.run("BATCH-STREAM", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        assertThat(submittedTasks).hasValue(2);
+        assertThat(jdbc.queryForObject("select count(*) from ana_tran_diff_tracking_export where source_batch_id = 'BATCH-STREAM'", Long.class))
+                .isEqualTo(5L);
     }
 
     private void createSchema() {
@@ -96,7 +198,7 @@ class ReportExportBatchRunnerTest {
         jdbc.execute("create table tss_field_comp (mesg_seq varchar(64), orig_cdate varchar(8), conv_index integer, conv_cindex integer, field_index integer, dest_trcd varchar(200), orig_field_name varchar(200), orig_field_value varchar(2000), dest_field_name varchar(200), dest_field_value varchar(2000))");
         jdbc.execute("create table tss_retcode_comp (mesg_seq varchar(64), orig_cdate varchar(8), service_code varchar(200), orig_error_code varchar(64), orig_error_desc varchar(500), dest_error_code varchar(64), dest_error_desc varchar(500))");
         jdbc.execute("create table ana_report_export_summary (batch_id varchar(64), report_date varchar(8), module_name varchar(100), covered_528_interface_count bigint, sent_transaction_count bigint, comp_result_1_count bigint, comp_result_2_count bigint, comp_result_3_count bigint, comp_result_4_count bigint, comp_result_8_count bigint, success_rate decimal(12,8), diff_528_field_count bigint)");
-        jdbc.execute("create table ana_tran_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), orig_error_code varchar(64), dest_error_code varchar(64), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), orig_error_desc varchar(500), dest_error_desc varchar(500), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000))");
+        jdbc.execute("create table ana_tran_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), orig_error_code varchar(64), dest_error_code varchar(64), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), orig_error_desc varchar(500), dest_error_desc varchar(500), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), constraint uk_ana_tran_diff_tracking_export_batch_issue unique (source_batch_id, service_code, orig_error_code, dest_error_code))");
         jdbc.execute("create table ana_field_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), sop_field_name varchar(200), soap_field_name varchar(200), bizjson_field_name varchar(200), field_cn_name varchar(200), mapping_status varchar(32), orig_field_value varchar(2000), dest_field_value varchar(2000), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000))");
     }
 }

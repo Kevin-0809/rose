@@ -714,7 +714,7 @@ on ana_tran_diff_result(batch_id, orig_cdate, tran_code, service_code, message_t
 create index if not exists idx_ana_tran_diff_result_sample
 on ana_tran_diff_result(batch_id, sample_tran_seq_no);
 
-create index if not exists idx_ana_tran_diff_tracking_export_source
+create unique index if not exists uk_ana_tran_diff_tracking_export_batch_issue
 on ana_tran_diff_tracking_export(source_batch_id, service_code, orig_error_code, dest_error_code);
 
 create index if not exists idx_ana_tran_diff_tracking_export_time
