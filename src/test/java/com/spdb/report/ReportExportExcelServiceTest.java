@@ -3,10 +3,10 @@ package com.spdb.report;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -57,9 +57,12 @@ class ReportExportExcelServiceTest {
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             assertThat(workbook.getSheetAt(0).getSheetName()).isEqualTo("汇总信息");
-            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(0), 0);
-            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(1), 4);
-            assertHeaderStyle(workbook, workbook.getSheet("支付").getRow(0), 0);
+            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(0), 0, "16365C");
+            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(1), 4, "0E566F");
+            assertHeaderStyle(workbook, workbook.getSheet("支付").getRow(0), 0, "0E566F");
+            assertCellFill(workbook.getSheetAt(0).getRow(2), 0, "BDE7F4");
+            assertCellFill(workbook.getSheet("支付").getRow(1), 0, "BDE7F4");
+            assertCellFill(workbook.getSheet("支付").getRow(2), 0, "FFFFFF");
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellType()).isEqualTo(CellType.NUMERIC);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getNumericCellValue()).isEqualTo(0.7d);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
@@ -75,13 +78,24 @@ class ReportExportExcelServiceTest {
         assertThat(output.toString()).doesNotContain("secret");
     }
 
-    private static void assertHeaderStyle(Workbook workbook, Row row, int column) {
+    private static void assertHeaderStyle(Workbook workbook, Row row, int column, String expectedRgb) {
         assertThat(row.getHeightInPoints()).isGreaterThanOrEqualTo(22f);
         var style = row.getCell(column).getCellStyle();
         assertThat(style.getFillPattern()).isEqualTo(FillPatternType.SOLID_FOREGROUND);
-        assertThat(style.getFillForegroundColor()).isEqualTo(IndexedColors.DARK_BLUE.getIndex());
+        assertThat(fillRgb(style)).isEqualTo(expectedRgb);
         Font font = workbook.getFontAt(style.getFontIndexAsInt());
         assertThat(font.getBold()).isTrue();
-        assertThat(font.getColor()).isEqualTo(IndexedColors.WHITE.getIndex());
+        assertThat(font.getColor()).isEqualTo((short) 9);
+    }
+
+    private static void assertCellFill(Row row, int column, String expectedRgb) {
+        var style = row.getCell(column).getCellStyle();
+        assertThat(style.getFillPattern()).isEqualTo(FillPatternType.SOLID_FOREGROUND);
+        assertThat(fillRgb(style)).isEqualTo(expectedRgb);
+    }
+
+    private static String fillRgb(org.apache.poi.ss.usermodel.CellStyle style) {
+        byte[] rgb = ((XSSFCellStyle) style).getFillForegroundXSSFColor().getRGB();
+        return String.format("%02X%02X%02X", rgb[0] & 0xff, rgb[1] & 0xff, rgb[2] & 0xff);
     }
 }

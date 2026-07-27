@@ -13,6 +13,8 @@ import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.streaming.SXSSFSheet;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -68,7 +70,7 @@ public class ReportExportExcelService {
         mergedCell(sheet, 0, 0, 4, 7, "发送统计", styles.summaryHeader);
         String[] stats = {"528成功/CCBS失败", "528失败/CCBS成功", "二者均失败", "二者均成功"};
         for (int i = 0; i < stats.length; i++) {
-            cell(second, i + 4, stats[i], styles.summaryHeader);
+            cell(second, i + 4, stats[i], styles.detailHeader);
         }
         mergedCell(sheet, 0, 1, 8, 8, "成功率", styles.summaryHeader);
         mergedCell(sheet, 0, 1, 9, 9, "差异字段数", styles.summaryHeader);
@@ -81,12 +83,14 @@ public class ReportExportExcelService {
                  where batch_id=:batchId
                  order by module_name
                 """, params(batchId), rs -> {
+            int dataOrdinal = row[0] - 1;
             Row r = sheet.createRow(row[0]++);
+            CellStyle rowStyle = styles.rowStyle(dataOrdinal);
             for (int i = 0; i < 8; i++) {
-                cell(r, i, text(rs.getObject(i + 1)), styles.body);
+                cell(r, i, text(rs.getObject(i + 1)), rowStyle);
             }
-            percentCell(r, 8, rs.getBigDecimal("success_rate"), styles.percent);
-            cell(r, 9, text(rs.getObject("diff_528_field_count")), styles.body);
+            percentCell(r, 8, rs.getBigDecimal("success_rate"), styles.percentStyle(row[0]));
+            cell(r, 9, text(rs.getObject("diff_528_field_count")), rowStyle);
         });
         for (int i = 0; i < 10; i++) {
             sheet.setColumnWidth(i, i == 1 ? 4600 : 3600);
@@ -124,9 +128,11 @@ public class ReportExportExcelService {
             statement.setString(2, module);
             return statement;
         }, rs -> {
+            int dataOrdinal = row[0];
             Row r = sheet.createRow(row[0]++);
+            CellStyle rowStyle = styles.rowStyle(dataOrdinal);
             for (int i = 0; i < DETAIL_HEADERS.length; i++) {
-                cell(r, i, text(rs.getObject(i + 1)), styles.body);
+                cell(r, i, text(rs.getObject(i + 1)), rowStyle);
             }
         });
     }
@@ -186,21 +192,38 @@ public class ReportExportExcelService {
     }
 
     private static final class Styles {
+        private static final String TITLE_NAVY = "16365C";
+        private static final String TABLE_TEAL = "0E566F";
+        private static final String STRIPE_BLUE = "BDE7F4";
+        private static final String WHITE = "FFFFFF";
         private final CellStyle summaryHeader;
         private final CellStyle detailHeader;
-        private final CellStyle body;
-        private final CellStyle percent;
+        private final CellStyle oddBody;
+        private final CellStyle evenBody;
+        private final CellStyle oddPercent;
+        private final CellStyle evenPercent;
 
         private Styles(SXSSFWorkbook book) {
-            summaryHeader = headerStyle(book, IndexedColors.DARK_BLUE);
-            detailHeader = headerStyle(book, IndexedColors.DARK_BLUE);
-            body = style(book, null);
-            percent = style(book, null);
+            summaryHeader = headerStyle(book, TITLE_NAVY);
+            detailHeader = headerStyle(book, TABLE_TEAL);
+            oddBody = style(book, STRIPE_BLUE);
+            evenBody = style(book, WHITE);
+            oddPercent = style(book, STRIPE_BLUE);
+            evenPercent = style(book, WHITE);
             DataFormat format = book.createDataFormat();
-            percent.setDataFormat(format.getFormat("0.00%"));
+            oddPercent.setDataFormat(format.getFormat("0.00%"));
+            evenPercent.setDataFormat(format.getFormat("0.00%"));
         }
 
-        private static CellStyle headerStyle(SXSSFWorkbook book, IndexedColors color) {
+        private CellStyle rowStyle(int oneBasedDataRow) {
+            return oneBasedDataRow % 2 == 1 ? oddBody : evenBody;
+        }
+
+        private CellStyle percentStyle(int oneBasedDataRow) {
+            return oneBasedDataRow % 2 == 1 ? oddPercent : evenPercent;
+        }
+
+        private static CellStyle headerStyle(SXSSFWorkbook book, String color) {
             CellStyle value = style(book, color);
             Font font = book.createFont();
             font.setBold(true);
@@ -212,7 +235,7 @@ public class ReportExportExcelService {
             return value;
         }
 
-        private static CellStyle style(SXSSFWorkbook book, IndexedColors color) {
+        private static CellStyle style(SXSSFWorkbook book, String color) {
             CellStyle value = book.createCellStyle();
             value.setWrapText(true);
             value.setAlignment(HorizontalAlignment.CENTER);
@@ -222,10 +245,18 @@ public class ReportExportExcelService {
             value.setBorderLeft(BorderStyle.THIN);
             value.setBorderRight(BorderStyle.THIN);
             if (color != null) {
-                value.setFillForegroundColor(color.getIndex());
+                ((XSSFCellStyle) value).setFillForegroundColor(rgb(color));
                 value.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             }
             return value;
+        }
+
+        private static XSSFColor rgb(String hex) {
+            return new XSSFColor(new byte[] {
+                    (byte) Integer.parseInt(hex.substring(0, 2), 16),
+                    (byte) Integer.parseInt(hex.substring(2, 4), 16),
+                    (byte) Integer.parseInt(hex.substring(4, 6), 16)
+            }, null);
         }
     }
 }
