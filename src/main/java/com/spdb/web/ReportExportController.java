@@ -4,6 +4,7 @@ import com.spdb.report.ReportExportCommandRow;
 import com.spdb.report.ReportExportCommandService;
 import com.spdb.report.ReportExportExcelService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
@@ -31,6 +32,7 @@ public class ReportExportController {
     private final ReportExportExcelService reportExportExcelService;
     private final Clock clock;
 
+    @Autowired
     public ReportExportController(ReportExportCommandService reportExportCommandService,
                                   ReportExportExcelService reportExportExcelService) {
         this(reportExportCommandService, reportExportExcelService, Clock.systemDefaultZone());
