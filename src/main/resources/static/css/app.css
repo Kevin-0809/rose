@@ -1435,7 +1435,7 @@ tbody tr:hover {
 .issue-readonly-panel,
 .issue-maintenance-panel {
   margin-bottom: 20px;
-  padding: 18px;
+  padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: linear-gradient(180deg, rgba(15, 31, 52, 0.76), rgba(10, 21, 36, 0.48));
@@ -1443,8 +1443,9 @@ tbody tr:hover {
 
 .issue-filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px 12px;
+  grid-template-columns: minmax(240px, 1.35fr) repeat(3, minmax(150px, 1fr));
+  gap: 10px 12px;
+  align-items: end;
 }
 
 .issue-field,
@@ -1452,6 +1453,14 @@ tbody tr:hover {
 .issue-info-grid label,
 .issue-maintenance-grid label {
   margin: 0;
+}
+
+.issue-filter-grid label,
+.issue-maintenance-grid label {
+  display: grid;
+  gap: 5px;
+  color: #9db5cf;
+  letter-spacing: .02em;
 }
 
 .issue-field-wide {
@@ -1464,8 +1473,8 @@ tbody tr:hover {
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
@@ -1507,13 +1516,49 @@ tbody tr:hover {
 .issue-maintenance-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px 12px;
+  gap: 12px;
 }
 
-.issue-info-grid input[readonly],
-.issue-info-grid textarea[readonly] {
+.issue-kv {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(84, 111, 143, 0.42);
+  border-radius: 6px;
+  background: rgba(7, 16, 29, 0.32);
+}
+
+.issue-kv span {
+  display: block;
+  margin-bottom: 5px;
+  color: #8da6c1;
+  font-size: 12px;
+}
+
+.issue-kv strong {
+  display: block;
   color: var(--text-heading);
-  background: rgba(7, 16, 29, 0.48);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.issue-kv-code strong {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.issue-kv-desc {
+  padding: 12px 14px;
+}
+
+.issue-kv-desc p {
+  margin: 0;
+  color: var(--text-body);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .issue-field-full {
@@ -1524,16 +1569,14 @@ tbody tr:hover {
   grid-column: span 2;
 }
 
-.issue-info-grid textarea {
-  min-height: 84px;
-}
-
 .issue-maintenance-grid textarea {
-  min-height: 112px;
+  min-height: 92px;
 }
 
 .issue-form-actions .btn {
-  min-width: 160px;
+  width: auto;
+  min-width: 96px;
+  padding-inline: 18px;
 }
 
 @media (max-width: 1100px) {

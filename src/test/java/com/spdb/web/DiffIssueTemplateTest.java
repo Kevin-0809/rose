@@ -32,6 +32,8 @@ class DiffIssueTemplateTest {
         assertThat(html)
                 .contains("维护差异问题")
                 .contains("issue-readonly-panel")
+                .contains("issue-kv")
+                .contains("issue-kv-desc")
                 .contains("issue-maintenance-panel")
                 .contains("issue-form-actions")
                 .contains("name=\"updatedAt\"")

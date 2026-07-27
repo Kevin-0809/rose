@@ -30,19 +30,22 @@
           <span class="muted">本区域来自当前采集批次，仅用于定位问题。</span>
         </div>
         <div class="issue-info-grid">
-          <label>问题级别<input readonly th:value="${issue.issueLevel()}"></label>
-          <label>状态<input readonly th:value="${issue.issueStatus()}"></label>
-          <label>服务码<input readonly th:value="${issue.serviceCode()}"></label>
-          <label>领域<input readonly th:value="${issue.moduleName()}"></label>
-          <label>交易码<input readonly th:value="${issue.tranCode()}"></label>
-          <label>交易名称<input readonly th:value="${issue.tranName()}"></label>
-          <label>字段名<input readonly th:value="${issue.normalizedSourceFieldName()}"></label>
-          <label>交易负责人<input readonly th:value="${issue.transactionOwner()}"></label>
-          <label>出现批次数<input readonly th:value="${issue.occurrenceBatchCount()}"></label>
-          <label>首次出现日期<input readonly th:value="${issue.firstSeenDate()}"></label>
-          <label>最近出现日期<input readonly th:value="${issue.lastSeenDate()}"></label>
-          <label>最近批次<input readonly th:value="${issue.lastSeenBatchId()}"></label>
-          <label class="issue-field-full">问题描述<textarea readonly th:text="${issue.problemDescription()}"></textarea></label>
+          <div class="issue-kv"><span>问题级别</span><strong th:text="${issue.issueLevel()}"></strong></div>
+          <div class="issue-kv"><span>状态</span><strong th:text="${issue.issueStatus()}"></strong></div>
+          <div class="issue-kv issue-kv-code"><span>服务码</span><strong th:text="${issue.serviceCode()}"></strong></div>
+          <div class="issue-kv"><span>领域</span><strong th:text="${issue.moduleName()}"></strong></div>
+          <div class="issue-kv"><span>交易码</span><strong th:text="${issue.tranCode()}"></strong></div>
+          <div class="issue-kv issue-kv-code"><span>交易名称</span><strong th:text="${issue.tranName()}"></strong></div>
+          <div class="issue-kv"><span>字段名</span><strong th:text="${issue.normalizedSourceFieldName()}"></strong></div>
+          <div class="issue-kv"><span>交易负责人</span><strong th:text="${issue.transactionOwner()}"></strong></div>
+          <div class="issue-kv"><span>出现批次数</span><strong th:text="${issue.occurrenceBatchCount()}"></strong></div>
+          <div class="issue-kv"><span>首次出现日期</span><strong th:text="${issue.firstSeenDate()}"></strong></div>
+          <div class="issue-kv"><span>最近出现日期</span><strong th:text="${issue.lastSeenDate()}"></strong></div>
+          <div class="issue-kv issue-kv-code"><span>最近批次</span><strong th:text="${issue.lastSeenBatchId()}"></strong></div>
+          <div class="issue-kv issue-kv-desc issue-field-full">
+            <span>问题描述</span>
+            <p th:text="${issue.problemDescription()}"></p>
+          </div>
         </div>
       </section>
 
