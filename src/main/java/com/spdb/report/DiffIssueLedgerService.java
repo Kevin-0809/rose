@@ -13,6 +13,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -49,28 +50,17 @@ public class DiffIssueLedgerService {
     public PagedResult<DiffIssueRow> searchPaged(DiffIssueSearch search, PageRequestParams page) {
         DiffIssueSearch criteria = search == null ? new DiffIssueSearch(null, null, null, null, null, null, null, null, null, null) : search;
         PageRequestParams pageParams = page == null ? PageRequestParams.of(null, null) : page;
-        String where = """
-                 where (:issueLevel is null or issue_level = :issueLevel)
-                   and (:issueStatus is null or issue_status = :issueStatus)
-                   and (:serviceCode is null or service_code = :serviceCode)
-                   and (:moduleName is null or module_name = :moduleName)
-                   and (:transactionOwner is null or transaction_owner = :transactionOwner)
-                   and (:firstSeenFrom is null or first_seen_date >= :firstSeenFrom)
-                   and (:firstSeenTo is null or first_seen_date <= :firstSeenTo)
-                   and (:lastSeenFrom is null or last_seen_date >= :lastSeenFrom)
-                   and (:lastSeenTo is null or last_seen_date <= :lastSeenTo)
-                   and (:keyword is null or lower(issue_key) like lower(:keyword) or lower(problem_description) like lower(:keyword))
-                """;
-        MapSqlParameterSource values = searchParams(criteria)
+        SearchSql searchSql = searchSql(criteria);
+        MapSqlParameterSource values = searchSql.values()
                 .addValue("limit", pageParams.size())
                 .addValue("offset", pageParams.offset());
         List<DiffIssueRow> rows = jdbc.query("""
                 select * from ana_diff_issue
-                """ + where + """
+                """ + searchSql.where() + """
                  order by last_seen_date desc, issue_id desc
                  limit :limit offset :offset
                 """, values, (rs, ignored) -> row(rs));
-        Long total = jdbc.queryForObject("select count(*) from ana_diff_issue " + where, values, Long.class);
+        Long total = jdbc.queryForObject("select count(*) from ana_diff_issue " + searchSql.where(), values, Long.class);
         return PagedResult.of(rows, total == null ? 0 : total, pageParams);
     }
 
@@ -180,12 +170,43 @@ public class DiffIssueLedgerService {
     }
 
     private static MapSqlParameterSource params() { return new MapSqlParameterSource(); }
-    private static MapSqlParameterSource searchParams(DiffIssueSearch criteria) {
-        return params().addValue("issueLevel", clean(criteria.issueLevel())).addValue("issueStatus", clean(criteria.issueStatus()))
-                .addValue("serviceCode", clean(criteria.serviceCode())).addValue("moduleName", clean(criteria.moduleName()))
-                .addValue("transactionOwner", clean(criteria.transactionOwner())).addValue("firstSeenFrom", criteria.firstSeenFrom())
-                .addValue("firstSeenTo", criteria.firstSeenTo()).addValue("lastSeenFrom", criteria.lastSeenFrom())
-                .addValue("lastSeenTo", criteria.lastSeenTo()).addValue("keyword", clean(criteria.keyword()) == null ? null : "%" + criteria.keyword().trim() + "%");
+    private static SearchSql searchSql(DiffIssueSearch criteria) {
+        List<String> conditions = new ArrayList<>();
+        MapSqlParameterSource values = params();
+        addEquals(conditions, values, "issue_level", "issueLevel", clean(criteria.issueLevel()));
+        addEquals(conditions, values, "issue_status", "issueStatus", clean(criteria.issueStatus()));
+        addEquals(conditions, values, "service_code", "serviceCode", clean(criteria.serviceCode()));
+        addEquals(conditions, values, "module_name", "moduleName", clean(criteria.moduleName()));
+        addEquals(conditions, values, "transaction_owner", "transactionOwner", clean(criteria.transactionOwner()));
+        addDateFrom(conditions, values, "first_seen_date", "firstSeenFrom", criteria.firstSeenFrom());
+        addDateTo(conditions, values, "first_seen_date", "firstSeenTo", criteria.firstSeenTo());
+        addDateFrom(conditions, values, "last_seen_date", "lastSeenFrom", criteria.lastSeenFrom());
+        addDateTo(conditions, values, "last_seen_date", "lastSeenTo", criteria.lastSeenTo());
+        String keyword = clean(criteria.keyword());
+        if (keyword != null) {
+            conditions.add("(lower(issue_key) like lower(:keyword) or lower(problem_description) like lower(:keyword))");
+            values.addValue("keyword", "%" + keyword + "%");
+        }
+        String where = conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions) + "\n";
+        return new SearchSql(where, values);
+    }
+    private static void addEquals(List<String> conditions, MapSqlParameterSource values, String column, String param, String value) {
+        if (value != null) {
+            conditions.add(column + " = :" + param);
+            values.addValue(param, value);
+        }
+    }
+    private static void addDateFrom(List<String> conditions, MapSqlParameterSource values, String column, String param, LocalDate value) {
+        if (value != null) {
+            conditions.add(column + " >= :" + param);
+            values.addValue(param, value);
+        }
+    }
+    private static void addDateTo(List<String> conditions, MapSqlParameterSource values, String column, String param, LocalDate value) {
+        if (value != null) {
+            conditions.add(column + " <= :" + param);
+            values.addValue(param, value);
+        }
     }
     private static String clean(String value) { return value == null || value.isBlank() ? null : value.trim(); }
     private static String compactDate(LocalDate date) { return date == null ? null : DateTimeFormatter.BASIC_ISO_DATE.format(date); }
@@ -207,5 +228,8 @@ public class DiffIssueLedgerService {
                     .addValue("origErrorCode", origErrorCode).addValue("destErrorCode", destErrorCode)
                     .addValue("normalizedSourceFieldName", normalizedSourceFieldName).addValue("problemDescription", problemDescription);
         }
+    }
+
+    private record SearchSql(String where, MapSqlParameterSource values) {
     }
 }

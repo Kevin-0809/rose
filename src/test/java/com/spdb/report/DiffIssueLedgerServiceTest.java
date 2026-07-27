@@ -3,6 +3,8 @@ package com.spdb.report;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -11,10 +13,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import com.spdb.web.PageRequestParams;
 import com.spdb.web.PagedResult;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 class DiffIssueLedgerServiceTest {
     private JdbcTemplate jdbc;
@@ -118,6 +125,21 @@ class DiffIssueLedgerServiceTest {
             assertThat(row.issueLevel()).isEqualTo("FIELD");
             assertThat(row.issueKey()).isEqualTo("FIELD|svc-a|amount");
         });
+    }
+
+    @Test
+    void searchPagedDoesNotUseNullableParametersAsPostgresNullGuards() {
+        NamedParameterJdbcTemplate recordingJdbc = spy(new NamedParameterJdbcTemplate(jdbc.getDataSource()));
+        doReturn(List.of()).when(recordingJdbc).query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class));
+        doReturn(0L).when(recordingJdbc).queryForObject(anyString(), any(MapSqlParameterSource.class), any(Class.class));
+        DiffIssueLedgerService recordingService = new DiffIssueLedgerService(recordingJdbc);
+
+        recordingService.searchPaged(new DiffIssueSearch(null, null, null, null, null, null, null, null, null, null),
+                PageRequestParams.of(1, 20));
+
+        org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(recordingJdbc).query(sql.capture(), any(MapSqlParameterSource.class), any(RowMapper.class));
+        assertThat(sql.getValue()).doesNotContain("is null");
     }
 
     @Test
