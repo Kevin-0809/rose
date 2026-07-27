@@ -41,11 +41,19 @@
         <table class="command-table report-export-command-table">
           <thead><tr><th class="col-batch">批次号</th><th class="col-date">业务日期</th><th class="col-status">状态</th><th class="col-progress">执行进度</th><th class="col-time">创建时间</th><th class="col-time">开始时间</th><th class="col-time">结束时间</th><th class="col-error">失败原因</th><th class="col-actions">操作</th></tr></thead>
           <tbody>
-          <tr th:each="row : ${result.rows()}" th:with="progress=${row.status() == 'SUCCEEDED' ? 100 : (row.status() == 'RUNNING' ? 50 : (row.status() == 'FAILED' ? 100 : 0))}">
+          <tr th:each="row : ${result.rows()}" th:with="stages=${stageViewsByBatchId.get(row.batchId())}">
             <td class="col-batch" th:title="${row.batchId()}"><span class="cell-clip" th:text="${row.batchId()}"></span></td>
             <td class="col-date" th:text="${row.reportDate()}"></td>
             <td class="col-status"><span class="tag" th:classappend="${row.status() == 'SUCCEEDED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
-            <td class="col-progress"><div class="task-progress" th:classappend="${row.status() == 'FAILED'} ? 'is-failed' : ''" th:attr="aria-label=${'执行进度 ' + progress + '%'}"><span th:style="${'width:' + progress + '%'}"></span></div><small th:text="${row.status() == 'PENDING' ? '排队中 0%' : (row.status() == 'RUNNING' ? '处理中 50%' : (row.status() == 'SUCCEEDED' ? '已完成 100%' : '执行失败'))}"></small></td>
+            <td class="col-progress">
+              <ol class="report-stage-list report-stage-list-compact" th:attr="aria-label=${'批次 ' + row.batchId() + ' 的执行阶段'}">
+                <li th:each="stage : ${stages}" th:classappend="${'is-' + stage.state()}">
+                  <span class="report-stage-icon" th:text="${stage.state() == 'completed' ? '✓' : stage.number()}"></span>
+                  <span class="report-stage-name" th:text="${stage.label()}"></span>
+                  <span class="report-stage-state" th:text="${stage.stateLabel()}"></span>
+                </li>
+              </ol>
+            </td>
             <td class="col-time" th:text="${row.createdTime()}"></td>
             <td class="col-time" th:text="${row.startedTime()}"></td>
             <td class="col-time" th:title="${row.endedTime()}" th:text="${row.endedTime()}"></td>

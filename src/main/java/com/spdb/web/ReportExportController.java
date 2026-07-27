@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
@@ -39,6 +41,10 @@ public class ReportExportController {
         model.addAttribute("active", "report-exports");
         model.addAttribute("batchId", batchId);
         model.addAttribute("result", result);
+        model.addAttribute("stageViewsByBatchId", result.rows().stream().collect(Collectors.toMap(
+                ReportExportCommandRow::batchId,
+                row -> ReportExportStageView.forCommand(row.status(), row.currentStage()),
+                (first, ignored) -> first)));
         model.addAttribute("hasRunningCommands", result.rows().stream()
                 .anyMatch(row -> "PENDING".equals(row.status()) || "RUNNING".equals(row.status())));
         return "report-exports/commands";

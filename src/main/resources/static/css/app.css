@@ -994,9 +994,9 @@ td {
   max-width: 100%;
 }
 
-.command-table {
+.command-table { 
   table-layout: fixed;
-  min-width: 1320px;
+  min-width: 1190px;
 }
 
 .command-table th,
@@ -1013,15 +1013,23 @@ td {
   line-height: 1.45;
 }
 
-.command-table .col-batch { width: 150px; }
+.command-table .col-batch { width: 130px; }
 .command-table .col-date { width: 86px; }
-.command-table .col-status { width: 112px; }
+.command-table .col-status { width: 100px; }
 .command-table .col-duration { width: 66px; }
-.command-table .col-time { width: 150px; }
-.command-table .col-error { width: 440px; }
+.command-table .col-time { width: 130px; }
+.command-table .col-error { width: 190px; }
 .command-table .col-actions { width: 170px; }
 
-.report-export-command-table .col-progress { width: 130px; }
+.report-export-command-table .col-progress { width: 160px; }
+
+.report-export-command-table .col-error .cell-clip { -webkit-line-clamp: 2; }
+
+.report-stage-list-compact { gap: 3px; margin: 0; max-width: none; }
+.report-stage-list-compact li { grid-template-columns: 18px minmax(0, 1fr) auto; gap: 5px; min-height: 18px; }
+.report-stage-list-compact .report-stage-icon { width: 16px; height: 16px; font-size: 10px; }
+.report-stage-list-compact .report-stage-name,
+.report-stage-list-compact .report-stage-state { font-size: 11px; white-space: nowrap; }
 
 .task-progress {
   width: 100%;
