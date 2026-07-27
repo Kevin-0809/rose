@@ -23,7 +23,7 @@ class ReportExportControllerTest {
         PagedResult<ReportExportCommandRow> result = PagedResult.of(List.of(command("RUNNING")), 51,
                 PageRequestParams.of(2, 50));
         service.searchResult = result;
-        ReportExportController controller = new ReportExportController(service);
+        ReportExportController controller = new ReportExportController(service, null);
         ConcurrentModel model = new ConcurrentModel();
 
         String view = controller.commands("RPT202607", 2, model);
@@ -42,7 +42,7 @@ class ReportExportControllerTest {
         service.summaries = List.of(new ReportExportSummaryRow(1L, "RPT1", "20260726", "支付", 2, 10, 1, 2, 3, 4, 5, 6, new BigDecimal("0.70000000")));
         service.transactionDetails = PagedResult.of(List.of(new ReportExportTransactionDetailRow(1L, 1L, "svc-a", "O1", "D1", "T001", "交易A", "支付", "原错误", "新错误")), 51, PageRequestParams.of(2, 50));
         service.fieldDetails = PagedResult.of(List.of(new ReportExportFieldDetailRow(1L, 1L, "svc-a", "T001", "交易A", "支付", "items.0", "amount", "UNMAPPED", "原值", "新值")), 101, PageRequestParams.of(3, 50));
-        ReportExportController controller = new ReportExportController(service);
+        ReportExportController controller = new ReportExportController(service, null);
         ConcurrentModel model = new ConcurrentModel();
 
         String view = controller.detail("RPT1", 2, 3, model);
@@ -61,7 +61,7 @@ class ReportExportControllerTest {
     void detailHidesRowsUntilExportSucceeds() {
         FakeReportExportCommandService service = new FakeReportExportCommandService();
         service.command = command("RUNNING");
-        ReportExportController controller = new ReportExportController(service);
+        ReportExportController controller = new ReportExportController(service, null);
         ConcurrentModel model = new ConcurrentModel();
 
         controller.detail("RPT1", null, null, model);
@@ -81,7 +81,7 @@ class ReportExportControllerTest {
     void createStartsExportAndReturnsToTheFilteredBatchList() {
         FakeReportExportCommandService service = new FakeReportExportCommandService();
         service.createdBatchId = "RPT20260726-0001";
-        ReportExportController controller = new ReportExportController(service);
+        ReportExportController controller = new ReportExportController(service, null);
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
         String view = controller.create(redirectAttributes);

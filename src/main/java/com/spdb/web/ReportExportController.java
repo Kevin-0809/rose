@@ -2,6 +2,11 @@ package com.spdb.web;
 
 import com.spdb.report.ReportExportCommandRow;
 import com.spdb.report.ReportExportCommandService;
+import com.spdb.report.ReportExportExcelService;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,13 +17,17 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 @Controller
 public class ReportExportController {
     private final ReportExportCommandService reportExportCommandService;
+    private final ReportExportExcelService reportExportExcelService;
 
-    public ReportExportController(ReportExportCommandService reportExportCommandService) {
+    public ReportExportController(ReportExportCommandService reportExportCommandService, ReportExportExcelService reportExportExcelService) {
         this.reportExportCommandService = reportExportCommandService;
+        this.reportExportExcelService = reportExportExcelService;
     }
 
     @GetMapping("/report-exports")
@@ -69,5 +78,16 @@ public class ReportExportController {
     @ResponseBody
     public ReportExportCommandRow progress(@PathVariable String batchId) {
         return reportExportCommandService.findByBatchId(batchId);
+    }
+
+    @GetMapping("/report-exports/{batchId}/excel")
+    public void download(@PathVariable String batchId, HttpServletResponse response) throws IOException {
+        ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
+        if (command == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到导出批次");
+        if (!"SUCCEEDED".equals(command.status())) throw new ResponseStatusException(HttpStatus.CONFLICT, "批次尚未完成");
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", ContentDisposition.attachment()
+                .filename("报表明细导出-" + batchId + ".xlsx", StandardCharsets.UTF_8).build().toString());
+        reportExportExcelService.stream(batchId, response.getOutputStream());
     }
 }
