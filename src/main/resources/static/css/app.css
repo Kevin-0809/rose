@@ -1421,3 +1421,146 @@ tbody tr:hover {
   overflow-wrap: anywhere;
 }
 .report-stage-list{display:grid;gap:8px;margin:16px 0 0;padding:0;list-style:none;max-width:420px}.report-stage-list li{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;color:var(--text-muted)}.report-stage-icon{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;border:1px solid #bac5d0;border-radius:50%;font-size:12px;font-weight:700}.report-stage-name{font-size:13px}.report-stage-state{font-size:12px}.report-stage-list .is-completed{color:#23734b}.report-stage-list .is-completed .report-stage-icon{background:#23734b;border-color:#23734b;color:#fff}.report-stage-list .is-running{color:#176ea6;font-weight:700}.report-stage-list .is-running .report-stage-icon{background:#176ea6;border-color:#176ea6;color:#fff}.report-stage-list .is-failed{color:#b4443c;font-weight:700}.report-stage-list .is-failed .report-stage-icon{background:#b4443c;border-color:#b4443c;color:#fff}.report-stage-list .is-not-executed{color:#7b8794}.report-stage-list .is-pending{color:#7b8794}
+
+.issue-page-head {
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.issue-page-head .muted {
+  margin: 10px 0 0;
+}
+
+.issue-filter-panel,
+.issue-readonly-panel,
+.issue-maintenance-panel {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(15, 31, 52, 0.76), rgba(10, 21, 36, 0.48));
+}
+
+.issue-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.issue-field,
+.issue-filter-grid label,
+.issue-info-grid label,
+.issue-maintenance-grid label {
+  margin: 0;
+}
+
+.issue-field-wide {
+  grid-column: span 2;
+}
+
+.issue-filter-actions,
+.issue-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.issue-table-panel {
+  padding-top: 0;
+}
+
+.issue-ledger-table {
+  min-width: 1260px;
+}
+
+.issue-ledger-table th,
+.issue-ledger-table td {
+  padding: 9px 10px;
+}
+
+.issue-key-cell,
+.issue-key-line {
+  font-family: Consolas, "Courier New", monospace;
+  overflow-wrap: anywhere;
+}
+
+.issue-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.issue-section-head .muted {
+  margin: 0;
+  font-size: 12px;
+}
+
+.issue-info-grid,
+.issue-maintenance-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.issue-info-grid input[readonly],
+.issue-info-grid textarea[readonly] {
+  color: var(--text-heading);
+  background: rgba(7, 16, 29, 0.48);
+}
+
+.issue-field-full {
+  grid-column: 1 / -1;
+}
+
+.issue-field-half {
+  grid-column: span 2;
+}
+
+.issue-info-grid textarea {
+  min-height: 84px;
+}
+
+.issue-maintenance-grid textarea {
+  min-height: 112px;
+}
+
+.issue-form-actions .btn {
+  min-width: 160px;
+}
+
+@media (max-width: 1100px) {
+  .issue-filter-grid,
+  .issue-info-grid,
+  .issue-maintenance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .issue-filter-grid,
+  .issue-info-grid,
+  .issue-maintenance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-field-wide,
+  .issue-field-half,
+  .issue-field-full {
+    grid-column: auto;
+  }
+
+  .issue-section-head,
+  .issue-filter-actions,
+  .issue-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

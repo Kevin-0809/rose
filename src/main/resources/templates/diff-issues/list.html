@@ -11,8 +11,8 @@
   <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
   <div class="app-workspace">
     <div th:replace="~{fragments/layout :: workspaceBar}"></div>
-    <main class="shell layout-frame">
-      <div class="page-head">
+    <main class="shell layout-frame issue-ledger-page">
+      <div class="page-head issue-page-head">
         <div>
           <div class="eyebrow">Diff Issue Ledger</div>
           <h1>差异问题台账</h1>
@@ -20,33 +20,57 @@
         </div>
       </div>
 
-      <form class="panel filters" method="get" action="/diff-issues">
-        <input name="serviceCode" placeholder="服务码" th:value="${serviceCode}">
-        <input name="moduleName" placeholder="领域" th:value="${moduleName}">
-        <input name="transactionOwner" placeholder="交易负责人" th:value="${transactionOwner}">
-        <input name="keyword" placeholder="问题键或描述" th:value="${keyword}">
-        <select name="issueLevel">
-          <option value="">全部级别</option>
-          <option value="TRANSACTION" th:selected="${issueLevel == 'TRANSACTION'}">交易级</option>
-          <option value="FIELD" th:selected="${issueLevel == 'FIELD'}">字段级</option>
-        </select>
-        <select name="issueStatus">
-          <option value="">全部状态</option>
-          <option value="OPEN" th:selected="${issueStatus == 'OPEN'}">未解决</option>
-          <option value="RESOLVED" th:selected="${issueStatus == 'RESOLVED'}">已解决</option>
-          <option value="IGNORED" th:selected="${issueStatus == 'IGNORED'}">忽略</option>
-        </select>
-        <input type="date" name="firstSeenFrom" th:value="${firstSeenFrom}" aria-label="首次出现开始日期">
-        <input type="date" name="firstSeenTo" th:value="${firstSeenTo}" aria-label="首次出现结束日期">
-        <input type="date" name="lastSeenFrom" th:value="${lastSeenFrom}" aria-label="最近出现开始日期">
-        <input type="date" name="lastSeenTo" th:value="${lastSeenTo}" aria-label="最近出现结束日期">
-        <input type="hidden" name="size" th:value="${result.size()}">
-        <button class="btn primary" type="submit">查询</button>
-        <a class="btn" href="/diff-issues">重置</a>
+      <form class="panel issue-filter-panel" method="get" action="/diff-issues">
+        <div class="issue-filter-grid">
+          <label class="issue-field issue-field-wide">服务码
+            <input name="serviceCode" placeholder="例如 S91437625PayOrderStatusQry" th:value="${serviceCode}">
+          </label>
+          <label class="issue-field">领域
+            <input name="moduleName" placeholder="例如 支付" th:value="${moduleName}">
+          </label>
+          <label class="issue-field">交易负责人
+            <input name="transactionOwner" placeholder="负责人姓名" th:value="${transactionOwner}">
+          </label>
+          <label class="issue-field issue-field-wide">关键字
+            <input name="keyword" placeholder="问题键、交易名或问题描述" th:value="${keyword}">
+          </label>
+          <label class="issue-field">问题级别
+            <select name="issueLevel">
+              <option value="">全部级别</option>
+              <option value="TRANSACTION" th:selected="${issueLevel == 'TRANSACTION'}">交易级</option>
+              <option value="FIELD" th:selected="${issueLevel == 'FIELD'}">字段级</option>
+            </select>
+          </label>
+          <label class="issue-field">处理状态
+            <select name="issueStatus">
+              <option value="">全部状态</option>
+              <option value="OPEN" th:selected="${issueStatus == 'OPEN'}">未解决</option>
+              <option value="RESOLVED" th:selected="${issueStatus == 'RESOLVED'}">已解决</option>
+              <option value="IGNORED" th:selected="${issueStatus == 'IGNORED'}">忽略</option>
+            </select>
+          </label>
+          <label class="issue-field">首次出现起
+            <input type="date" name="firstSeenFrom" th:value="${firstSeenFrom}">
+          </label>
+          <label class="issue-field">首次出现止
+            <input type="date" name="firstSeenTo" th:value="${firstSeenTo}">
+          </label>
+          <label class="issue-field">最近出现起
+            <input type="date" name="lastSeenFrom" th:value="${lastSeenFrom}">
+          </label>
+          <label class="issue-field">最近出现止
+            <input type="date" name="lastSeenTo" th:value="${lastSeenTo}">
+          </label>
+        </div>
+        <div class="issue-filter-actions">
+          <input type="hidden" name="size" th:value="${result.size()}">
+          <button class="btn primary" type="submit">查询</button>
+          <a class="btn" href="/diff-issues">重置</a>
+        </div>
       </form>
 
-      <section class="panel table-wrap">
-        <table>
+      <section class="panel table-wrap issue-table-panel">
+        <table class="issue-ledger-table">
           <thead>
           <tr>
             <th>级别</th><th>服务码</th><th>领域</th><th>交易负责人</th><th>问题键</th>
@@ -59,13 +83,13 @@
             <td th:text="${row.serviceCode()}"></td>
             <td th:text="${row.moduleName()}"></td>
             <td th:text="${row.transactionOwner()}"></td>
-            <td th:text="${row.issueKey()}"></td>
+            <td class="issue-key-cell" th:text="${row.issueKey()}"></td>
             <td th:text="${row.issueStatus()}"></td>
             <td th:text="${row.occurrenceBatchCount()}"></td>
             <td th:text="${row.firstSeenDate()}"></td>
             <td th:text="${row.lastSeenDate()}"></td>
             <td th:text="${row.resolver()}"></td>
-            <td><a class="btn" th:href="@{/diff-issues/{id}(id=${row.issueId()})}">维护</a></td>
+            <td><a class="btn small" th:href="@{/diff-issues/{id}(id=${row.issueId()})}">维护</a></td>
           </tr>
           </tbody>
         </table>

@@ -13,6 +13,9 @@ class DiffIssueTemplateTest {
 
         assertThat(html)
                 .contains("差异问题台账")
+                .contains("issue-filter-panel")
+                .contains("issue-filter-grid")
+                .contains("issue-filter-actions")
                 .contains("name=\"moduleName\"")
                 .contains("name=\"transactionOwner\"")
                 .contains("name=\"firstSeenFrom\"")
@@ -28,6 +31,9 @@ class DiffIssueTemplateTest {
 
         assertThat(html)
                 .contains("维护差异问题")
+                .contains("issue-readonly-panel")
+                .contains("issue-maintenance-panel")
+                .contains("issue-form-actions")
                 .contains("name=\"updatedAt\"")
                 .contains("name=\"coordinationRequired\"")
                 .contains("name=\"preliminaryAnalysis\"")
