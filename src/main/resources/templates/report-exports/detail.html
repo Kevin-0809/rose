@@ -18,13 +18,20 @@
           <h1>报表明细导出结果</h1>
           <p class="muted" th:text="${command == null ? '未找到导出任务' : command.batchId()}"></p>
         </div>
-        <a class="btn" href="/report-exports">新建导出</a>
+        <a class="btn" href="/report-exports">返回导出列表</a>
       </div>
+
       <div class="tag green" th:if="${message}" th:text="${message}"></div>
+
       <section class="panel" th:if="${command != null}">
         <div class="page-head compact-head">
-          <div><h2>任务状态</h2><p class="muted" th:text="${'业务日期：' + command.reportDate()}"></p></div>
-          <span id="report-export-status" class="tag" role="status" aria-live="polite" th:classappend="${command.status() == 'SUCCEEDED'} ? 'green' : (${command.status() == 'FAILED'} ? 'yellow' : '')" th:text="${command.status()}"></span>
+          <div>
+            <h2>任务状态</h2>
+            <p class="muted" th:text="${'业务日期：' + command.reportDate()}"></p>
+          </div>
+          <span id="report-export-status" class="tag" role="status" aria-live="polite"
+                th:classappend="${command.status() == 'SUCCEEDED'} ? 'green' : (${command.status() == 'FAILED'} ? 'yellow' : '')"
+                th:text="${command.status()}"></span>
         </div>
         <p class="muted" th:if="${command.errorMessage() != null}" th:text="${command.errorMessage()}"></p>
         <ol class="report-stage-list" aria-label="导出执行阶段">
@@ -35,36 +42,114 @@
           </li>
         </ol>
       </section>
+
       <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
-        <h2>汇总报表</h2>
-        <table><thead><tr><th>业务日期</th><th>领域</th><th>覆盖528接口</th><th>发送交易量</th><th>528成功/CCBS失败</th><th>528失败/CCBS成功</th><th>二者均失败</th><th>二者均成功</th><th>二者均失败不一致</th><th>成功率</th><th>差异字段数</th></tr></thead>
-          <tbody><tr th:each="row : ${summaries}"><td th:text="${row.reportDate()}"></td><td th:text="${row.moduleName()}"></td><td th:text="${row.covered528InterfaceCount()}"></td><td th:text="${row.sentTransactionCount()}"></td><td th:text="${row.compResult1Count()}"></td><td th:text="${row.compResult2Count()}"></td><td th:text="${row.compResult3Count()}"></td><td th:text="${row.compResult4Count()}"></td><td th:text="${row.compResult8Count()}"></td><td th:text="${row.successRate()}"></td><td th:text="${row.diff528FieldCount()}"></td></tr></tbody>
+        <div class="page-head compact-head">
+          <h2>汇总报表</h2>
+          <a class="btn" th:href="@{/report-exports/{batchId}/excel(batchId=${command.batchId()})}">下载 Excel</a>
+        </div>
+        <table>
+          <thead>
+          <tr>
+            <th>业务日期</th><th>领域</th><th>覆盖528接口</th><th>发送交易量</th>
+            <th>528成功/CCBS失败</th><th>528失败/CCBS成功</th><th>二者均失败</th><th>二者均成功</th>
+            <th>二者均失败不一致</th><th>成功率</th><th>差异字段数</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr th:each="row : ${summaries}">
+            <td th:text="${row.reportDate()}"></td>
+            <td th:text="${row.moduleName()}"></td>
+            <td th:text="${row.covered528InterfaceCount()}"></td>
+            <td th:text="${row.sentTransactionCount()}"></td>
+            <td th:text="${row.compResult1Count()}"></td>
+            <td th:text="${row.compResult2Count()}"></td>
+            <td th:text="${row.compResult3Count()}"></td>
+            <td th:text="${row.compResult4Count()}"></td>
+            <td th:text="${row.compResult8Count()}"></td>
+            <td th:text="${row.successRate()}"></td>
+            <td th:text="${row.diff528FieldCount()}"></td>
+          </tr>
+          </tbody>
         </table>
       </section>
+
       <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
         <h2>交易级明细</h2>
-        <table><thead><tr><th>序号</th><th>服务码</th><th>原错误码</th><th>目标错误码</th><th>交易码</th><th>交易名称</th><th>领域</th><th>原错误描述</th><th>目标错误描述</th></tr></thead>
-          <tbody><tr th:each="row : ${transactionDetails.rows()}"><td th:text="${row.rowNo()}"></td><td th:text="${row.serviceCode()}"></td><td th:text="${row.origErrorCode()}"></td><td th:text="${row.destErrorCode()}"></td><td th:text="${row.tranCode()}"></td><td th:text="${row.tranName()}"></td><td th:text="${row.moduleName()}"></td><td th:text="${row.origErrorDesc()}"></td><td th:text="${row.destErrorDesc()}"></td></tr></tbody>
+        <table>
+          <thead>
+          <tr>
+            <th>序号</th><th>服务码</th><th>528响应码</th><th>CCBS响应码</th><th>交易码</th>
+            <th>交易名称</th><th>领域</th><th>528响应描述</th><th>CCBS响应描述</th>
+            <th>历史出现次数</th><th>首次出现日期</th><th>上次出现日期</th><th>台账</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr th:each="row : ${transactionDetails.rows()}">
+            <td th:text="${row.rowNo()}"></td>
+            <td th:text="${row.serviceCode()}"></td>
+            <td th:text="${row.origErrorCode()}"></td>
+            <td th:text="${row.destErrorCode()}"></td>
+            <td th:text="${row.tranCode()}"></td>
+            <td th:text="${row.tranName()}"></td>
+            <td th:text="${row.moduleName()}"></td>
+            <td th:text="${row.origErrorDesc()}"></td>
+            <td th:text="${row.destErrorDesc()}"></td>
+            <td th:text="${row.historicalOccurrenceCount()}"></td>
+            <td th:text="${row.firstSeenDate()}"></td>
+            <td th:text="${row.previousSeenDate()}"></td>
+            <td>
+              <a class="btn" th:if="${row.issueId() != null}" th:href="@{/diff-issues/{id}(id=${row.issueId()})}">查看</a>
+            </td>
+          </tr>
+          </tbody>
         </table>
         <nav class="pager" aria-label="交易级明细分页">
           <span class="muted" th:text="'共 ' + ${transactionDetails.total()} + ' 条，第 ' + ${transactionDetails.page()} + ' / ' + ${transactionDetails.totalPages()} + ' 页，每页 ' + ${transactionDetails.size()} + ' 条'"></span>
-          <span class="btn is-disabled" th:if="${transactionDetails.page() &lt;= 1}">上一页</span>
+          <span class="btn is-disabled" th:if="${transactionDetails.page() <= 1}">上一页</span>
           <a class="btn" th:if="${transactionDetails.page() > 1}" th:href="@{/report-exports/{batchId}(batchId=${command.batchId()},transactionPage=${transactionDetails.page() - 1},fieldPage=${fieldDetails.page()})}">上一页</a>
           <span class="btn is-disabled" th:if="${transactionDetails.page() >= transactionDetails.totalPages()}">下一页</span>
-          <a class="btn" th:if="${transactionDetails.page() &lt; transactionDetails.totalPages()}" th:href="@{/report-exports/{batchId}(batchId=${command.batchId()},transactionPage=${transactionDetails.page() + 1},fieldPage=${fieldDetails.page()})}">下一页</a>
+          <a class="btn" th:if="${transactionDetails.page() < transactionDetails.totalPages()}" th:href="@{/report-exports/{batchId}(batchId=${command.batchId()},transactionPage=${transactionDetails.page() + 1},fieldPage=${fieldDetails.page()})}">下一页</a>
         </nav>
       </section>
+
       <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
         <h2>字段级明细</h2>
-        <table><thead><tr><th>序号</th><th>服务码</th><th>交易码</th><th>交易名称</th><th>领域</th><th>SOAP字段</th><th>问题字段</th><th>映射状态</th><th>原字段值</th><th>目标字段值</th></tr></thead>
-          <tbody><tr th:each="row : ${fieldDetails.rows()}"><td th:text="${row.rowNo()}"></td><td th:text="${row.serviceCode()}"></td><td th:text="${row.tranCode()}"></td><td th:text="${row.tranName()}"></td><td th:text="${row.moduleName()}"></td><td th:text="${row.soapFieldName()}"></td><td th:text="${row.fieldName()}"></td><td th:text="${row.mappingStatus()}"></td><td th:text="${row.origFieldValue()}"></td><td th:text="${row.destFieldValue()}"></td></tr></tbody>
+        <table>
+          <thead>
+          <tr>
+            <th>序号</th><th>服务码</th><th>交易码</th><th>交易名称</th><th>领域</th><th>SOAP字段</th>
+            <th>问题字段</th><th>映射状态</th><th>528字段值</th><th>CCBS字段值</th>
+            <th>历史出现次数</th><th>首次出现日期</th><th>上次出现日期</th><th>台账</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr th:each="row : ${fieldDetails.rows()}">
+            <td th:text="${row.rowNo()}"></td>
+            <td th:text="${row.serviceCode()}"></td>
+            <td th:text="${row.tranCode()}"></td>
+            <td th:text="${row.tranName()}"></td>
+            <td th:text="${row.moduleName()}"></td>
+            <td th:text="${row.soapFieldName()}"></td>
+            <td th:text="${row.fieldName()}"></td>
+            <td th:text="${row.mappingStatus()}"></td>
+            <td th:text="${row.origFieldValue()}"></td>
+            <td th:text="${row.destFieldValue()}"></td>
+            <td th:text="${row.historicalOccurrenceCount()}"></td>
+            <td th:text="${row.firstSeenDate()}"></td>
+            <td th:text="${row.previousSeenDate()}"></td>
+            <td>
+              <a class="btn" th:if="${row.issueId() != null}" th:href="@{/diff-issues/{id}(id=${row.issueId()})}">查看</a>
+            </td>
+          </tr>
+          </tbody>
         </table>
         <nav class="pager" aria-label="字段级明细分页">
           <span class="muted" th:text="'共 ' + ${fieldDetails.total()} + ' 条，第 ' + ${fieldDetails.page()} + ' / ' + ${fieldDetails.totalPages()} + ' 页，每页 ' + ${fieldDetails.size()} + ' 条'"></span>
-          <span class="btn is-disabled" th:if="${fieldDetails.page() &lt;= 1}">上一页</span>
+          <span class="btn is-disabled" th:if="${fieldDetails.page() <= 1}">上一页</span>
           <a class="btn" th:if="${fieldDetails.page() > 1}" th:href="@{/report-exports/{batchId}(batchId=${command.batchId()},transactionPage=${transactionDetails.page()},fieldPage=${fieldDetails.page() - 1})}">上一页</a>
           <span class="btn is-disabled" th:if="${fieldDetails.page() >= fieldDetails.totalPages()}">下一页</span>
-          <a class="btn" th:if="${fieldDetails.page() &lt; fieldDetails.totalPages()}" th:href="@{/report-exports/{batchId}(batchId=${command.batchId()},transactionPage=${transactionDetails.page()},fieldPage=${fieldDetails.page() + 1})}">下一页</a>
+          <a class="btn" th:if="${fieldDetails.page() < fieldDetails.totalPages()}" th:href="@{/report-exports/{batchId}(batchId=${command.batchId()},transactionPage=${transactionDetails.page()},fieldPage=${fieldDetails.page() + 1})}">下一页</a>
         </nav>
       </section>
     </main>

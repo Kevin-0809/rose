@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>差异问题台账</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app-shell" th:attr="data-active=${active}">
+  <div th:replace="~{fragments/layout :: sidebar(${active})}"></div>
+  <div class="app-workspace">
+    <div th:replace="~{fragments/layout :: workspaceBar}"></div>
+    <main class="shell layout-frame">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Diff Issue Ledger</div>
+          <h1>差异问题台账</h1>
+          <p class="muted">维护交易级与字段级差异问题，供后续采集批次自动带入历史统计和处理信息。</p>
+        </div>
+      </div>
+
+      <form class="panel filters" method="get" action="/diff-issues">
+        <input name="serviceCode" placeholder="服务码" th:value="${serviceCode}">
+        <input name="moduleName" placeholder="领域" th:value="${moduleName}">
+        <input name="transactionOwner" placeholder="交易负责人" th:value="${transactionOwner}">
+        <input name="keyword" placeholder="问题键或描述" th:value="${keyword}">
+        <select name="issueLevel">
+          <option value="">全部级别</option>
+          <option value="TRANSACTION" th:selected="${issueLevel == 'TRANSACTION'}">交易级</option>
+          <option value="FIELD" th:selected="${issueLevel == 'FIELD'}">字段级</option>
+        </select>
+        <select name="issueStatus">
+          <option value="">全部状态</option>
+          <option value="OPEN" th:selected="${issueStatus == 'OPEN'}">未解决</option>
+          <option value="RESOLVED" th:selected="${issueStatus == 'RESOLVED'}">已解决</option>
+          <option value="IGNORED" th:selected="${issueStatus == 'IGNORED'}">忽略</option>
+        </select>
+        <input type="date" name="firstSeenFrom" th:value="${firstSeenFrom}" aria-label="首次出现开始日期">
+        <input type="date" name="firstSeenTo" th:value="${firstSeenTo}" aria-label="首次出现结束日期">
+        <input type="date" name="lastSeenFrom" th:value="${lastSeenFrom}" aria-label="最近出现开始日期">
+        <input type="date" name="lastSeenTo" th:value="${lastSeenTo}" aria-label="最近出现结束日期">
+        <input type="hidden" name="size" th:value="${result.size()}">
+        <button class="btn primary" type="submit">查询</button>
+        <a class="btn" href="/diff-issues">重置</a>
+      </form>
+
+      <section class="panel table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>级别</th><th>服务码</th><th>领域</th><th>交易负责人</th><th>问题键</th>
+            <th>状态</th><th>出现批次数</th><th>首次出现</th><th>最近出现</th><th>解决人</th><th>维护</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr th:each="row : ${result.rows()}">
+            <td th:text="${row.issueLevel()}"></td>
+            <td th:text="${row.serviceCode()}"></td>
+            <td th:text="${row.moduleName()}"></td>
+            <td th:text="${row.transactionOwner()}"></td>
+            <td th:text="${row.issueKey()}"></td>
+            <td th:text="${row.issueStatus()}"></td>
+            <td th:text="${row.occurrenceBatchCount()}"></td>
+            <td th:text="${row.firstSeenDate()}"></td>
+            <td th:text="${row.lastSeenDate()}"></td>
+            <td th:text="${row.resolver()}"></td>
+            <td><a class="btn" th:href="@{/diff-issues/{id}(id=${row.issueId()})}">维护</a></td>
+          </tr>
+          </tbody>
+        </table>
+        <nav class="pager" aria-label="问题台账分页">
+          <span class="muted" th:text="'共 ' + ${result.total()} + ' 条，第 ' + ${result.page()} + ' / ' + ${result.totalPages()} + ' 页，每页 ' + ${result.size()} + ' 条'"></span>
+          <span class="btn is-disabled" th:if="${result.page() <= 1}">上一页</span>
+          <a class="btn" th:if="${result.page() > 1}" th:href="@{/diff-issues(issueLevel=${issueLevel},issueStatus=${issueStatus},serviceCode=${serviceCode},moduleName=${moduleName},transactionOwner=${transactionOwner},firstSeenFrom=${firstSeenFrom},firstSeenTo=${firstSeenTo},lastSeenFrom=${lastSeenFrom},lastSeenTo=${lastSeenTo},keyword=${keyword},page=${result.page() - 1},size=${result.size()})}">上一页</a>
+          <span class="btn is-disabled" th:if="${result.page() >= result.totalPages()}">下一页</span>
+          <a class="btn" th:if="${result.page() < result.totalPages()}" th:href="@{/diff-issues(issueLevel=${issueLevel},issueStatus=${issueStatus},serviceCode=${serviceCode},moduleName=${moduleName},transactionOwner=${transactionOwner},firstSeenFrom=${firstSeenFrom},firstSeenTo=${firstSeenTo},lastSeenFrom=${lastSeenFrom},lastSeenTo=${lastSeenTo},keyword=${keyword},page=${result.page() + 1},size=${result.size()})}">下一页</a>
+        </nav>
+      </section>
+    </main>
+  </div>
+</div>
+<div th:replace="~{fragments/layout :: sidebarScript}"></div>
+</body>
+</html>

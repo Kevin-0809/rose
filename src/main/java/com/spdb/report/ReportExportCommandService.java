@@ -104,15 +104,12 @@ public class ReportExportCommandService {
     public List<ReportExportTransactionDetailRow> findTransactionDetails(String batchId) {
         return jdbc.query("""
                 select export_id, row_no, service_code, orig_error_code, dest_error_code, tran_code, tran_name,
-                       module_name, orig_error_desc, dest_error_desc
+                       module_name, orig_error_desc, dest_error_desc, issue_id, historical_occurrence_count,
+                       first_seen_date, previous_seen_date
                   from ana_tran_diff_tracking_export
                  where source_batch_id = :batchId
                  order by row_no
-                """, params(batchId), (rs, rowNum) -> new ReportExportTransactionDetailRow(
-                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
-                rs.getString("orig_error_code"), rs.getString("dest_error_code"), rs.getString("tran_code"),
-                rs.getString("tran_name"), rs.getString("module_name"), rs.getString("orig_error_desc"),
-                rs.getString("dest_error_desc")));
+                """, params(batchId), (rs, rowNum) -> mapTransactionDetail(rs));
     }
 
     public PagedResult<ReportExportTransactionDetailRow> searchTransactionDetails(String batchId, PageRequestParams page) {
@@ -121,31 +118,25 @@ public class ReportExportCommandService {
         MapSqlParameterSource queryParams = params(batchId).addValue("limit", effectivePage.size()).addValue("offset", effectivePage.offset());
         List<ReportExportTransactionDetailRow> rows = jdbc.query("""
                 select export_id, row_no, service_code, orig_error_code, dest_error_code, tran_code, tran_name,
-                       module_name, orig_error_desc, dest_error_desc
+                       module_name, orig_error_desc, dest_error_desc, issue_id, historical_occurrence_count,
+                       first_seen_date, previous_seen_date
                   from ana_tran_diff_tracking_export
                  where source_batch_id = :batchId
                  order by row_no
                  limit :limit offset :offset
-                """, queryParams, (rs, rowNum) -> new ReportExportTransactionDetailRow(
-                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
-                rs.getString("orig_error_code"), rs.getString("dest_error_code"), rs.getString("tran_code"),
-                rs.getString("tran_name"), rs.getString("module_name"), rs.getString("orig_error_desc"),
-                rs.getString("dest_error_desc")));
+                """, queryParams, (rs, rowNum) -> mapTransactionDetail(rs));
         return PagedResult.of(rows, total, effectivePage);
     }
 
     public List<ReportExportFieldDetailRow> findFieldDetails(String batchId) {
         return jdbc.query("""
                 select export_id, row_no, service_code, tran_code, tran_name, module_name, soap_field_name,
-                       field_name, mapping_status, orig_field_value, dest_field_value
+                       field_name, mapping_status, orig_field_value, dest_field_value, issue_id,
+                       historical_occurrence_count, first_seen_date, previous_seen_date
                   from ana_field_diff_tracking_export
                  where source_batch_id = :batchId
                  order by row_no
-                """, params(batchId), (rs, rowNum) -> new ReportExportFieldDetailRow(
-                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
-                rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"),
-                rs.getString("soap_field_name"), rs.getString("field_name"), rs.getString("mapping_status"),
-                rs.getString("orig_field_value"), rs.getString("dest_field_value")));
+                """, params(batchId), (rs, rowNum) -> mapFieldDetail(rs));
     }
 
     public PagedResult<ReportExportFieldDetailRow> searchFieldDetails(String batchId, PageRequestParams page) {
@@ -154,16 +145,13 @@ public class ReportExportCommandService {
         MapSqlParameterSource queryParams = params(batchId).addValue("limit", effectivePage.size()).addValue("offset", effectivePage.offset());
         List<ReportExportFieldDetailRow> rows = jdbc.query("""
                 select export_id, row_no, service_code, tran_code, tran_name, module_name, soap_field_name,
-                       field_name, mapping_status, orig_field_value, dest_field_value
+                       field_name, mapping_status, orig_field_value, dest_field_value, issue_id,
+                       historical_occurrence_count, first_seen_date, previous_seen_date
                   from ana_field_diff_tracking_export
                  where source_batch_id = :batchId
                  order by row_no
                  limit :limit offset :offset
-                """, queryParams, (rs, rowNum) -> new ReportExportFieldDetailRow(
-                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
-                rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"),
-                rs.getString("soap_field_name"), rs.getString("field_name"), rs.getString("mapping_status"),
-                rs.getString("orig_field_value"), rs.getString("dest_field_value")));
+                """, queryParams, (rs, rowNum) -> mapFieldDetail(rs));
         return PagedResult.of(rows, total, effectivePage);
     }
 
@@ -232,6 +220,30 @@ public class ReportExportCommandService {
                 rs.getString("status"), rs.getString("current_stage"), localDateTime(rs.getTimestamp("started_time")),
                 localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message"),
                 localDateTime(rs.getTimestamp("created_time")));
+    }
+
+    private ReportExportTransactionDetailRow mapTransactionDetail(java.sql.ResultSet rs) throws java.sql.SQLException {
+        long issueId = rs.getLong("issue_id");
+        boolean issueIdNull = rs.wasNull();
+        return new ReportExportTransactionDetailRow(
+                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
+                rs.getString("orig_error_code"), rs.getString("dest_error_code"), rs.getString("tran_code"),
+                rs.getString("tran_name"), rs.getString("module_name"), rs.getString("orig_error_desc"),
+                rs.getString("dest_error_desc"), issueIdNull ? null : issueId,
+                rs.getLong("historical_occurrence_count"), rs.getObject("first_seen_date", LocalDate.class),
+                rs.getObject("previous_seen_date", LocalDate.class));
+    }
+
+    private ReportExportFieldDetailRow mapFieldDetail(java.sql.ResultSet rs) throws java.sql.SQLException {
+        long issueId = rs.getLong("issue_id");
+        boolean issueIdNull = rs.wasNull();
+        return new ReportExportFieldDetailRow(
+                rs.getLong("export_id"), rs.getLong("row_no"), rs.getString("service_code"),
+                rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"),
+                rs.getString("soap_field_name"), rs.getString("field_name"), rs.getString("mapping_status"),
+                rs.getString("orig_field_value"), rs.getString("dest_field_value"), issueIdNull ? null : issueId,
+                rs.getLong("historical_occurrence_count"), rs.getObject("first_seen_date", LocalDate.class),
+                rs.getObject("previous_seen_date", LocalDate.class));
     }
 
     private String abbreviate(String errorMessage) {

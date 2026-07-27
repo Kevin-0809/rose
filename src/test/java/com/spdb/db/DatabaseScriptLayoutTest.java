@@ -431,4 +431,57 @@ class DatabaseScriptLayoutTest {
                 create index if not exists idx_ana_report_export_summary_batch
                 on ana_report_export_summary(batch_id, module_name);""");
     }
+    @Test
+    void ddlContainsDiffIssueLedgerAndComments() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8);
+        String ddlLower = ddl.toLowerCase().replace("\r\n", "\n");
+
+        assertThat(ddlLower).contains("create table if not exists ana_diff_issue");
+        assertThat(ddlLower).contains("issue_key varchar(600) not null unique");
+        assertThat(ddlLower).contains("check (issue_level in ('transaction','field'))");
+        assertThat(ddlLower).contains("issue_level varchar(16) not null");
+        assertThat(ddlLower).contains("issue_status varchar(16) not null default 'open'");
+        assertThat(ddlLower).contains("check (issue_status in ('open','resolved','ignored'))");
+        assertThat(ddlLower).contains("first_seen_date date not null");
+        assertThat(ddlLower).contains("last_seen_date date not null");
+        assertThat(ddlLower).contains("first_seen_batch_id varchar(64) not null");
+        assertThat(ddlLower).contains("last_seen_batch_id varchar(64) not null");
+        assertThat(ddlLower).contains("occurrence_batch_count bigint not null default 1");
+        assertThat(ddlLower).contains("idx_ana_diff_issue_status_last_seen");
+        assertThat(ddlLower).contains("idx_ana_diff_issue_service_field");
+
+        List<String> issueColumns = List.of(
+                "issue_id", "issue_key", "issue_level", "service_code", "tran_code", "tran_name", "module_name",
+                "transaction_owner", "orig_error_code", "dest_error_code", "normalized_source_field_name", "problem_type",
+                "problem_description", "preliminary_analysis", "final_solution", "issue_status", "coordination_required",
+                "resolver", "resolution_date", "defect_fix_date", "first_seen_date", "last_seen_date", "first_seen_batch_id",
+                "last_seen_batch_id", "occurrence_batch_count", "created_at", "updated_at");
+        assertThat(ddl).containsPattern("comment on table ana_diff_issue is '[\\p{IsHan}][^']*';");
+        issueColumns.forEach(column -> assertThat(ddl).containsPattern(
+                "comment on column ana_diff_issue\\." + column + " is '[\\p{IsHan}][^']*';"));
+
+        List<String> trackingColumns = List.of(
+                "issue_id bigint", "issue_key varchar(600)", "historical_occurrence_count bigint not null default 0",
+                "first_seen_date date", "previous_seen_date date");
+        List<String> trackingColumnNames = List.of(
+                "issue_id", "issue_key", "historical_occurrence_count", "first_seen_date", "previous_seen_date");
+        List<String> trackingTables = List.of("ana_tran_diff_tracking_export", "ana_field_diff_tracking_export");
+        trackingTables.forEach(table -> {
+            int tableStart = ddlLower.indexOf("create table if not exists " + table);
+            int tableEnd = ddlLower.indexOf(");", tableStart);
+            assertThat(tableStart).isGreaterThanOrEqualTo(0);
+            assertThat(tableEnd).isGreaterThan(tableStart);
+            String tableBlock = ddlLower.substring(tableStart, tableEnd + 2);
+            trackingColumns.forEach(column -> assertThat(tableBlock).contains(column));
+            assertThat(tableBlock).contains("issue_id bigint");
+            trackingColumnNames.forEach(column -> assertThat(ddl).containsPattern(
+                    "comment on column " + table + "\\." + column + " is '[\\p{IsHan}][^']*';"));
+        });
+
+        assertThat(ddlLower).doesNotContain("foreign key (issue_id) references ana_diff_issue(issue_id)");
+        assertThat(ddl).contains("稳定业务键快照");
+        assertThat(ddl).contains("本批次前历史出现批次数");
+        assertThat(ddl).contains("问题首次出现日期快照");
+        assertThat(ddl).contains("本次前最近出现日期快照");
+    }
 }

@@ -1,5 +1,7 @@
 package com.spdb.report;
 
+import java.time.LocalDate;
+
 public record ReportExportTransactionDetailRow(
         long exportId,
         long rowNo,
@@ -10,6 +12,10 @@ public record ReportExportTransactionDetailRow(
         String tranName,
         String moduleName,
         String origErrorDesc,
-        String destErrorDesc
+        String destErrorDesc,
+        Long issueId,
+        long historicalOccurrenceCount,
+        LocalDate firstSeenDate,
+        LocalDate previousSeenDate
 ) {
 }
