@@ -115,7 +115,7 @@ class ReportExportControllerTest {
     }
 
     private static ReportExportCommandRow command(String status) {
-        return new ReportExportCommandRow(1L, "RPT1", "20260726", status, null, null, null, LocalDateTime.now());
+        return new ReportExportCommandRow(1L, "RPT1", "20260726", status, null, null, null, null, LocalDateTime.now());
     }
 
     private static final class FakeReportExportCommandService extends ReportExportCommandService {

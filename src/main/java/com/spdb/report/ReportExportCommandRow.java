@@ -7,6 +7,7 @@ public record ReportExportCommandRow(
         String batchId,
         String reportDate,
         String status,
+        String currentStage,
         LocalDateTime startedTime,
         LocalDateTime endedTime,
         String errorMessage,

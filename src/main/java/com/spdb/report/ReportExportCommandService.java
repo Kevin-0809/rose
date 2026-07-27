@@ -59,7 +59,7 @@ public class ReportExportCommandService {
 
     public ReportExportCommandRow findByBatchId(String batchId) {
         List<ReportExportCommandRow> rows = jdbc.query("""
-                select command_id, batch_id, report_date, status, started_time, ended_time, error_message, created_time
+                select command_id, batch_id, report_date, status, current_stage, started_time, ended_time, error_message, created_time
                   from ana_report_export_command
                  where batch_id = :batchId
                 """, params(batchId), (rs, rowNum) -> mapCommand(rs));
@@ -74,7 +74,7 @@ public class ReportExportCommandService {
                 .addValue("offset", page.offset());
         String where = filter.isEmpty() ? "" : " where lower(batch_id) like lower(:batchId)";
         List<ReportExportCommandRow> rows = jdbc.query("""
-                select command_id, batch_id, report_date, status, started_time, ended_time, error_message, created_time
+                select command_id, batch_id, report_date, status, current_stage, started_time, ended_time, error_message, created_time
                   from ana_report_export_command
                 """ + where + """
                  order by created_time desc, command_id desc
@@ -196,9 +196,17 @@ public class ReportExportCommandService {
         jdbc.update("""
                 update ana_report_export_command
                    set status = 'SUCCEEDED', ended_time = current_timestamp,
-                       error_message = null, updated_at = current_timestamp
+                       error_message = null, current_stage = null, updated_at = current_timestamp
                  where batch_id = :batchId and status = 'RUNNING'
                 """, params(batchId));
+    }
+
+    public void markStage(String batchId, ReportExportStage stage) {
+        jdbc.update("""
+                update ana_report_export_command
+                   set current_stage = :currentStage, updated_at = current_timestamp
+                 where batch_id = :batchId and status = 'RUNNING'
+                """, params(batchId).addValue("currentStage", stage.name()));
     }
 
     public void markFailed(String batchId, String errorMessage) {
@@ -221,7 +229,7 @@ public class ReportExportCommandService {
     private ReportExportCommandRow mapCommand(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new ReportExportCommandRow(
                 rs.getLong("command_id"), rs.getString("batch_id"), rs.getString("report_date"),
-                rs.getString("status"), localDateTime(rs.getTimestamp("started_time")),
+                rs.getString("status"), rs.getString("current_stage"), localDateTime(rs.getTimestamp("started_time")),
                 localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message"),
                 localDateTime(rs.getTimestamp("created_time")));
     }
