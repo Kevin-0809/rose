@@ -176,6 +176,55 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void keepsOneFieldDetailWhenTheSameBatchRunsAgain() {
+        jdbc.update("insert into tss_field_comp values ('F1', '20260727', 1, 1, 1, 'SVC1&soap', 'Request.amount', 'source', 'ignored', 'destination')");
+
+        runner.run("BATCH-FIELD-IDEMPOTENT", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+        runner.run("BATCH-FIELD-IDEMPOTENT", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        assertThat(jdbc.queryForObject("""
+                select count(*) from ana_field_diff_tracking_export
+                where source_batch_id = 'BATCH-FIELD-IDEMPOTENT'
+                  and service_code = 'SVC1'
+                  and issue_key = 'FIELD|svc1|request.amount'
+                """, Long.class)).isEqualTo(1L);
+    }
+
+    @Test
+    void trimsFieldSuffixAfterUnderscoreWithinNormalizedTwoPartFieldName() {
+        jdbc.update("""
+                insert into ana_field_mapping(tran_code, service_code, std_field_name, field_cn_name, sop_field_name, soap_field_name, bizjson_field_name)
+                values ('T001', 'SVC1', 'amount', '金额', 'SOP_AMOUNT', 'Request.amount', 'biz.amount')
+                """);
+        jdbc.update("insert into tss_field_comp values ('F1', '20260727', 1, 1, 1, 'SVC1&soap', 'Request.amount_001.extra', 'source', 'ignored', 'destination')");
+
+        runner.run("BATCH-FIELD-NORMALIZED", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        Map<String, Object> field = jdbc.queryForMap("""
+                select soap_field_name, mapping_status, issue_key
+                from ana_field_diff_tracking_export
+                where source_batch_id = 'BATCH-FIELD-NORMALIZED'
+                """);
+        assertThat(field).containsEntry("soap_field_name", "Request.amount")
+                .containsEntry("mapping_status", "MAPPED")
+                .containsEntry("issue_key", "FIELD|svc1|request.amount");
+    }
+
+    @Test
+    void usesMergeForFieldDetailInsert() throws Exception {
+        var method = ReportExportBatchRunner.class.getDeclaredMethod("fieldDetailInsertSql");
+        method.setAccessible(true);
+
+        String sql = (String) method.invoke(runner);
+
+        assertThat(sql).contains("merge into ana_field_diff_tracking_export as target")
+                .contains("using (")
+                .contains("when not matched then")
+                .doesNotContain("on conflict")
+                .doesNotContain("where not exists");
+    }
+
+    @Test
     void streamsTransactionDetailsOncePerNormalizedServiceCode() {
         jdbc.update("""
                 insert into tss_tran_comp values

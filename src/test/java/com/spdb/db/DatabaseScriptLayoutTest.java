@@ -311,6 +311,9 @@ class DatabaseScriptLayoutTest {
                 create index if not exists idx_ana_field_diff_tracking_export_source
                 on ana_field_diff_tracking_export(source_batch_id, service_code, soap_field_name);""");
         assertThat(ddlLower).contains("""
+                create unique index if not exists uk_ana_field_diff_tracking_export_batch_issue
+                on ana_field_diff_tracking_export(source_batch_id, service_code, issue_key);""");
+        assertThat(ddlLower).contains("""
                 create index if not exists idx_ana_field_diff_tracking_export_time
                 on ana_field_diff_tracking_export(export_timestamp desc);""");
     }
