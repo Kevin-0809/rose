@@ -6,6 +6,7 @@ create table if not exists ana_report_export_command (
     batch_id varchar(64) not null,
     report_date varchar(8) not null,
     status varchar(32) not null default 'PENDING',
+    current_stage varchar(32),
     started_time timestamp,
     ended_time timestamp,
     error_message varchar(4000),
@@ -15,6 +16,8 @@ create table if not exists ana_report_export_command (
     constraint ck_ana_report_export_command_status
         check (status in ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED'))
 );
+
+alter table ana_report_export_command add column if not exists current_stage varchar(32);
 
 create table if not exists ana_report_export_summary (
     summary_id bigserial primary key,

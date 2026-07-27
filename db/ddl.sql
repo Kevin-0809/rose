@@ -633,6 +633,7 @@ create table if not exists ana_report_export_command (
     batch_id varchar(64) not null,
     report_date varchar(8) not null,
     status varchar(32) not null default 'PENDING',
+    current_stage varchar(32),
     started_time timestamp,
     ended_time timestamp,
     error_message varchar(4000),
@@ -648,6 +649,7 @@ comment on column ana_report_export_command.command_id is '导出指令主键';
 comment on column ana_report_export_command.batch_id is '导出批次号';
 comment on column ana_report_export_command.report_date is '报表日期，格式yyyymmdd';
 comment on column ana_report_export_command.status is '导出执行状态';
+comment on column ana_report_export_command.current_stage is '当前执行阶段';
 comment on column ana_report_export_command.started_time is '导出开始时间';
 comment on column ana_report_export_command.ended_time is '导出结束时间';
 comment on column ana_report_export_command.error_message is '导出失败错误信息';

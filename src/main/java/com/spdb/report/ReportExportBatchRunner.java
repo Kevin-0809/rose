@@ -1,6 +1,5 @@
 package com.spdb.report;
 
-import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -202,18 +201,32 @@ public class ReportExportBatchRunner {
     }
 
     private String transactionDetailInsertSql() {
-        return Boolean.TRUE.equals(jdbc.getJdbcTemplate().execute((ConnectionCallback<Boolean>) connection ->
-                "H2".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName()))) ? """
-                insert into ana_tran_diff_tracking_export(export_timestamp, source_batch_id, business_date, row_no,
-                service_code, orig_error_code, dest_error_code, tran_code, tran_name, module_name, orig_error_desc,
-                dest_error_desc, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description)
-                select :time,:batchId,:date,:rowNo,:service,:origCode,:destCode,:tranCode,:tranName,:module,:origDesc,:destDesc,:owner,:seq,'交易级',:date,:field,:description
-                where not exists (select 1 from ana_tran_diff_tracking_export where source_batch_id = :batchId and service_code = :service and orig_error_code = :origCode and dest_error_code = :destCode)""" : """
-                insert into ana_tran_diff_tracking_export(export_timestamp, source_batch_id, business_date, row_no,
-                service_code, orig_error_code, dest_error_code, tran_code, tran_name, module_name, orig_error_desc,
-                dest_error_desc, transaction_owner, tran_seq_no, problem_level, registration_date, field_name, problem_description)
-                values (:time,:batchId,:date,:rowNo,:service,:origCode,:destCode,:tranCode,:tranName,:module,:origDesc,:destDesc,:owner,:seq,'交易级',:date,:field,:description)
-                on conflict (source_batch_id, service_code, orig_error_code, dest_error_code) do nothing""";
+        return """
+                merge into ana_tran_diff_tracking_export as target
+                using (
+                    select cast(:time as timestamp) as export_timestamp, cast(:batchId as varchar(64)) as source_batch_id,
+                    cast(:date as varchar(8)) as business_date, cast(:rowNo as bigint) as row_no,
+                    cast(:service as varchar(200)) as service_code, cast(:origCode as varchar(64)) as orig_error_code,
+                    cast(:destCode as varchar(64)) as dest_error_code, cast(:tranCode as varchar(32)) as tran_code,
+                    cast(:tranName as varchar(200)) as tran_name, cast(:module as varchar(100)) as module_name,
+                    cast(:origDesc as varchar(500)) as orig_error_desc, cast(:destDesc as varchar(500)) as dest_error_desc,
+                    cast(:owner as varchar(100)) as transaction_owner, cast(:seq as varchar(64)) as tran_seq_no,
+                    '交易级' as problem_level, cast(:date as varchar(8)) as registration_date,
+                    cast(:field as varchar(500)) as field_name, cast(:description as varchar(2000)) as problem_description
+                ) as source
+                on (target.source_batch_id = source.source_batch_id
+                    and target.service_code = source.service_code
+                    and target.orig_error_code = source.orig_error_code
+                    and target.dest_error_code = source.dest_error_code)
+                when not matched then
+                    insert (export_timestamp, source_batch_id, business_date, row_no, service_code, orig_error_code,
+                    dest_error_code, tran_code, tran_name, module_name, orig_error_desc, dest_error_desc, transaction_owner,
+                    tran_seq_no, problem_level, registration_date, field_name, problem_description)
+                    values (source.export_timestamp, source.source_batch_id, source.business_date, source.row_no, source.service_code,
+                    source.orig_error_code, source.dest_error_code, source.tran_code, source.tran_name, source.module_name,
+                    source.orig_error_desc, source.dest_error_desc, source.transaction_owner, source.tran_seq_no,
+                    source.problem_level, source.registration_date, source.field_name, source.problem_description)
+                """;
     }
 
     private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Field> fields, Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings) {

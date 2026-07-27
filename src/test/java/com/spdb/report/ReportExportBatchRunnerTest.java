@@ -161,6 +161,20 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void usesMergeForTransactionDetailInsert() throws Exception {
+        var method = ReportExportBatchRunner.class.getDeclaredMethod("transactionDetailInsertSql");
+        method.setAccessible(true);
+
+        String sql = (String) method.invoke(runner);
+
+        assertThat(sql).contains("merge into ana_tran_diff_tracking_export as target")
+                .contains("using (")
+                .contains("when not matched then")
+                .doesNotContain("on conflict")
+                .doesNotContain("where not exists");
+    }
+
+    @Test
     void streamsTransactionDetailsOncePerNormalizedServiceCode() {
         jdbc.update("""
                 insert into tss_tran_comp values
@@ -201,4 +215,5 @@ class ReportExportBatchRunnerTest {
         jdbc.execute("create table ana_tran_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), orig_error_code varchar(64), dest_error_code varchar(64), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), orig_error_desc varchar(500), dest_error_desc varchar(500), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), constraint uk_ana_tran_diff_tracking_export_batch_issue unique (source_batch_id, service_code, orig_error_code, dest_error_code))");
         jdbc.execute("create table ana_field_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), sop_field_name varchar(200), soap_field_name varchar(200), bizjson_field_name varchar(200), field_cn_name varchar(200), mapping_status varchar(32), orig_field_value varchar(2000), dest_field_value varchar(2000), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000))");
     }
+
 }
