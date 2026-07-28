@@ -88,7 +88,9 @@ public class ReportExportCommandService {
         return jdbc.query("""
                 select summary_id, batch_id, report_date, module_name, covered_528_interface_count,
                        sent_transaction_count, comp_result_1_count, comp_result_2_count, comp_result_3_count,
-                       comp_result_4_count, comp_result_8_count, diff_528_field_count, success_rate
+                       comp_result_4_count, comp_result_8_count, diff_528_field_count, success_rate,
+                       field_pass_transaction_count, comparison_pass_rate, transaction_issue_count,
+                       field_issue_count, issue_total_count, duplicate_issue_count
                   from ana_report_export_summary
                  where batch_id = :batchId
                  order by module_name
@@ -98,7 +100,10 @@ public class ReportExportCommandService {
                 rs.getLong("sent_transaction_count"), rs.getLong("comp_result_1_count"),
                 rs.getLong("comp_result_2_count"), rs.getLong("comp_result_3_count"),
                 rs.getLong("comp_result_4_count"), rs.getLong("comp_result_8_count"),
-                rs.getLong("diff_528_field_count"), rs.getBigDecimal("success_rate")));
+                rs.getLong("diff_528_field_count"), rs.getBigDecimal("success_rate"),
+                rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("comparison_pass_rate"),
+                rs.getLong("transaction_issue_count"), rs.getLong("field_issue_count"),
+                rs.getLong("issue_total_count"), rs.getLong("duplicate_issue_count")));
     }
 
     public List<ReportExportTransactionDetailRow> findTransactionDetails(String batchId) {
