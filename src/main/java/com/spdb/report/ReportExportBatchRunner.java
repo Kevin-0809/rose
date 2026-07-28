@@ -67,6 +67,7 @@ public class ReportExportBatchRunner {
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime, Consumer<ReportExportStage> stageConsumer) {
         try {
+            cleanupBatchArtifacts(batchId);
             SourceData source = transactionTemplate.execute(status -> sourceData());
             stageConsumer.accept(ReportExportStage.TRANSACTION_DETAILS);
             streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs());
@@ -76,8 +77,10 @@ public class ReportExportBatchRunner {
                 stageConsumer.accept(ReportExportStage.SUMMARY);
                 insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
             });
-            issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
-            updateSummaryIssueMetrics(batchId);
+            transactionTemplate.executeWithoutResult(status -> {
+                issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
+                updateSummaryIssueMetrics(batchId);
+            });
         } catch (RuntimeException exception) {
             cleanupBatchArtifacts(batchId);
             throw exception;
