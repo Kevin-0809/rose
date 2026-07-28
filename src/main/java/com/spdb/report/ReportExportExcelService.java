@@ -170,7 +170,7 @@ public class ReportExportExcelService {
 
     private void writeSummaryTotalRow(Row excelRow, List<SummaryRow> rows, Map<String, Long> previousIssueTotals,
                                       boolean current, int dataOrdinal, Styles styles) {
-        CellStyle rowStyle = styles.summaryTotalStyle();
+        CellStyle rowStyle = styles.summaryTotalStyle(current);
         SummaryTotals totals = SummaryTotals.of(rows);
         cell(excelRow, 0, "", rowStyle);
         cell(excelRow, 1, "合计", rowStyle);
@@ -182,17 +182,17 @@ public class ReportExportExcelService {
         cell(excelRow, 7, text(totals.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(totals.compResult4Count()), rowStyle);
         percentCell(excelRow, 9, rate(totals.compResult3Count() + totals.compResult4Count(),
-                totals.sentTransactionCount()), styles.summaryTotalPercentStyle());
+                totals.sentTransactionCount()), styles.summaryTotalPercentStyle(current));
         percentCell(excelRow, 10, rate(totals.fieldPassTransactionCount() + totals.compResult3Count(),
-                totals.sentTransactionCount()), styles.summaryTotalPercentStyle());
+                totals.sentTransactionCount()), styles.summaryTotalPercentStyle(current));
         cell(excelRow, 11, text(totals.issueTotalCount()), rowStyle);
         if (current) {
             long previousIssueTotal = previousIssueTotals.values().stream().mapToLong(Long::longValue).sum();
             cell(excelRow, 12, text(totals.duplicateIssueCount()), rowStyle);
             percentCell(excelRow, 13, rate(totals.duplicateIssueCount(), totals.issueTotalCount()),
-                    styles.summaryTotalPercentStyle());
+                    styles.summaryTotalPercentStyle(current));
             percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, totals.duplicateIssueCount()),
-                    styles.summaryTotalPercentStyle());
+                    styles.summaryTotalPercentStyle(current));
             blankCells(excelRow, 15, 20, rowStyle);
         } else {
             blankCells(excelRow, 12, 17, rowStyle);
@@ -423,7 +423,7 @@ public class ReportExportExcelService {
         private static final String CURRENT_HEADER_PINK = "FCE4D6";
         private static final String SUMMARY_ISSUE_YELLOW = "FFF2CC";
         private static final String SUMMARY_TOTAL_BLUE = "EEF2F7";
-        private final CellStyle summaryHeader;
+        private static final String CURRENT_SUMMARY_TOTAL_PINK = "F8F3F0";
         private final CellStyle detailHeader;
         private final CellStyle previousSummaryTitle;
         private final CellStyle previousSummaryMainHeader;
@@ -433,33 +433,37 @@ public class ReportExportExcelService {
         private final CellStyle summaryIssueHeader;
         private final CellStyle summaryBody;
         private final CellStyle summaryPercent;
-        private final CellStyle summaryTotal;
-        private final CellStyle summaryTotalPercent;
+        private final CellStyle previousSummaryTotal;
+        private final CellStyle previousSummaryTotalPercent;
+        private final CellStyle currentSummaryTotal;
+        private final CellStyle currentSummaryTotalPercent;
         private final CellStyle oddBody;
         private final CellStyle evenBody;
         private final CellStyle oddPercent;
         private final CellStyle evenPercent;
 
         private Styles(SXSSFWorkbook book) {
-            summaryHeader = headerStyle(book, TITLE_NAVY);
             detailHeader = headerStyle(book, TABLE_TEAL);
-            previousSummaryTitle = headerStyle(book, PREVIOUS_TITLE_GREEN);
-            previousSummaryMainHeader = headerStyle(book, PREVIOUS_MAIN_GREEN);
-            previousSummarySubHeader = headerStyle(book, PREVIOUS_SUB_GREEN);
-            currentSummaryTitle = headerStyle(book, CURRENT_TITLE_PINK);
-            currentSummaryHeader = headerStyle(book, CURRENT_HEADER_PINK);
-            summaryIssueHeader = headerStyle(book, SUMMARY_ISSUE_YELLOW);
+            previousSummaryTitle = summaryHeaderStyle(book, PREVIOUS_TITLE_GREEN);
+            previousSummaryMainHeader = summaryHeaderStyle(book, PREVIOUS_MAIN_GREEN);
+            previousSummarySubHeader = summaryHeaderStyle(book, PREVIOUS_SUB_GREEN);
+            currentSummaryTitle = summaryHeaderStyle(book, CURRENT_TITLE_PINK);
+            currentSummaryHeader = summaryHeaderStyle(book, CURRENT_HEADER_PINK);
+            summaryIssueHeader = summaryHeaderStyle(book, SUMMARY_ISSUE_YELLOW);
             summaryBody = style(book, WHITE);
             summaryPercent = style(book, WHITE);
-            summaryTotal = style(book, SUMMARY_TOTAL_BLUE);
-            summaryTotalPercent = style(book, SUMMARY_TOTAL_BLUE);
+            previousSummaryTotal = style(book, SUMMARY_TOTAL_BLUE);
+            previousSummaryTotalPercent = style(book, SUMMARY_TOTAL_BLUE);
+            currentSummaryTotal = style(book, CURRENT_SUMMARY_TOTAL_PINK);
+            currentSummaryTotalPercent = style(book, CURRENT_SUMMARY_TOTAL_PINK);
             oddBody = style(book, STRIPE_BLUE);
             evenBody = style(book, WHITE);
             oddPercent = style(book, STRIPE_BLUE);
             evenPercent = style(book, WHITE);
             DataFormat format = book.createDataFormat();
             summaryPercent.setDataFormat(format.getFormat("0.00%"));
-            summaryTotalPercent.setDataFormat(format.getFormat("0.00%"));
+            previousSummaryTotalPercent.setDataFormat(format.getFormat("0.00%"));
+            currentSummaryTotalPercent.setDataFormat(format.getFormat("0.00%"));
             oddPercent.setDataFormat(format.getFormat("0.00%"));
             evenPercent.setDataFormat(format.getFormat("0.00%"));
         }
@@ -496,19 +500,27 @@ public class ReportExportExcelService {
             return summaryPercent;
         }
 
-        private CellStyle summaryTotalStyle() {
-            return summaryTotal;
+        private CellStyle summaryTotalStyle(boolean current) {
+            return current ? currentSummaryTotal : previousSummaryTotal;
         }
 
-        private CellStyle summaryTotalPercentStyle() {
-            return summaryTotalPercent;
+        private CellStyle summaryTotalPercentStyle(boolean current) {
+            return current ? currentSummaryTotalPercent : previousSummaryTotalPercent;
         }
 
         private static CellStyle headerStyle(SXSSFWorkbook book, String color) {
+            return headerStyle(book, color, IndexedColors.WHITE.getIndex());
+        }
+
+        private static CellStyle summaryHeaderStyle(SXSSFWorkbook book, String color) {
+            return headerStyle(book, color, IndexedColors.BLACK.getIndex());
+        }
+
+        private static CellStyle headerStyle(SXSSFWorkbook book, String color, short fontColor) {
             CellStyle value = style(book, color);
             Font font = book.createFont();
             font.setBold(true);
-            font.setColor(IndexedColors.WHITE.getIndex());
+            font.setColor(fontColor);
             value.setFont(font);
             value.setVerticalAlignment(VerticalAlignment.CENTER);
             value.setBorderTop(BorderStyle.MEDIUM);

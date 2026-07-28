@@ -126,10 +126,13 @@ class ReportExportExcelServiceTest {
             assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).contains("上一批次");
             assertMergedRegion(sheet, 0, 0, 0, 17);
             assertCellFill(sheet.getRow(0), 0, "B7D7C0");
+            assertCellFontColor(workbook, sheet.getRow(0), 0, (short) 8);
             assertMainHeaders(sheet.getRow(1), false);
             assertCellFill(sheet.getRow(1), 0, "C6E0B4");
+            assertCellFontColor(workbook, sheet.getRow(1), 0, (short) 8);
             assertCellFill(sheet.getRow(1), 4, "C6E0B4");
             assertCellFill(sheet.getRow(1), 11, "FFF2CC");
+            assertCellFontColor(workbook, sheet.getRow(1), 11, (short) 8);
             assertCellFill(sheet.getRow(1), 12, "FFF2CC");
             assertCellFill(sheet.getRow(1), 17, "FFF2CC");
             assertSubHeaders(sheet.getRow(2), 4, 12);
@@ -213,7 +216,7 @@ class ReportExportExcelServiceTest {
             assertBlankCells(sheet.getRow(10), 15, 20);
 
             assertThat(sheet.getRow(11).getCell(1).getStringCellValue()).isEqualTo("合计");
-            assertCellFill(sheet.getRow(11), 0, "EEF2F7");
+            assertCellFill(sheet.getRow(11), 0, "F8F3F0");
             assertThat(sheet.getRow(11).getCell(11).getStringCellValue()).isEqualTo("9");
             assertThat(sheet.getRow(11).getCell(12).getStringCellValue()).isEqualTo("3");
             assertPercentCell(sheet.getRow(11), 9, 0.7d);
@@ -301,6 +304,12 @@ class ReportExportExcelServiceTest {
         var style = row.getCell(column).getCellStyle();
         assertThat(style.getFillPattern()).isEqualTo(FillPatternType.SOLID_FOREGROUND);
         assertThat(fillRgb(style)).isEqualTo(expectedRgb);
+    }
+
+    private static void assertCellFontColor(Workbook workbook, Row row, int column, short expectedIndexedColor) {
+        var style = row.getCell(column).getCellStyle();
+        Font font = workbook.getFontAt(style.getFontIndexAsInt());
+        assertThat(font.getColor()).isEqualTo(expectedIndexedColor);
     }
 
     private static String fillRgb(org.apache.poi.ss.usermodel.CellStyle style) {
