@@ -63,9 +63,12 @@ class ReportExportExcelServiceTest {
             assertCellFill(workbook.getSheetAt(0).getRow(2), 0, "BDE7F4");
             assertCellFill(workbook.getSheet("支付").getRow(1), 0, "BDE7F4");
             assertCellFill(workbook.getSheet("支付").getRow(2), 0, "FFFFFF");
-            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellType()).isEqualTo(CellType.NUMERIC);
-            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getNumericCellValue()).isEqualTo(0.7d);
-            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
+            assertThat(workbook.getSheetAt(0).getRow(1).getCell(6).getStringCellValue()).isEqualTo("二者均失败响应码一致");
+            assertThat(workbook.getSheetAt(0).getRow(1).getCell(8).getStringCellValue()).isEqualTo("二者均失败响应码不一致");
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getStringCellValue()).isEqualTo("5");
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(9).getCellType()).isEqualTo(CellType.NUMERIC);
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(9).getNumericCellValue()).isEqualTo(0.7d);
+            assertThat(workbook.getSheetAt(0).getRow(2).getCell(9).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
             assertThat(workbook.getSheet("支付").getPaneInformation().isFreezePane()).isTrue();
             assertThat(workbook.getSheet("支付").getRow(0).getCell(17).getStringCellValue()).isEqualTo("备注");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(17).getStringCellValue()).isBlank();

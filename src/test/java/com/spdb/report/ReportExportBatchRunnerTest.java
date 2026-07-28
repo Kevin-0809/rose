@@ -93,6 +93,39 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void splitsBothFailedTransactionsByResponseCodeConsistencyInSummarySuccessRate() {
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC1', '交易一', '支付', '负责人')");
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('OK', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('FAIL-SAME', '20260728', 2, 1, 'SVC1&soap', '3'),
+                ('FAIL-DIFF', '20260728', 3, 1, 'SVC1&soap', '3'),
+                ('ORIG-FAIL', '20260728', 4, 1, 'SVC1&soap', '1')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp values
+                ('FAIL-SAME', '20260728', 'SVC1&soap', 'E1', 'orig failed', 'E1', 'dest failed'),
+                ('FAIL-DIFF', '20260728', 'SVC1&soap', 'E2', 'orig failed', 'E3', 'dest failed'),
+                ('ORIG-FAIL', '20260728', 'SVC1&soap', 'E4', 'orig failed', '000000000000', 'dest ok')
+                """);
+
+        runner.run("BATCH-SUMMARY-SPLIT", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select sent_transaction_count, comp_result_1_count, comp_result_3_count, comp_result_4_count,
+                       comp_result_8_count, success_rate
+                from ana_report_export_summary
+                where batch_id = 'BATCH-SUMMARY-SPLIT' and module_name = '支付'
+                """);
+        assertThat(summary).containsEntry("sent_transaction_count", 4L)
+                .containsEntry("comp_result_1_count", 1L)
+                .containsEntry("comp_result_3_count", 1L)
+                .containsEntry("comp_result_4_count", 1L)
+                .containsEntry("comp_result_8_count", 1L);
+        assertThat(summary.get("success_rate").toString()).isEqualTo("0.50000000");
+    }
+
+    @Test
     void classifiesTransactionStatesAndResponseCodes() {
         jdbc.update("""
                 insert into tss_tran_comp values

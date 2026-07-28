@@ -72,7 +72,7 @@ public class ReportExportBatchRunner {
                 stageConsumer.accept(ReportExportStage.FIELD_DETAILS);
                 insertFieldDetails(batchId, reportDate, exportTime, source.fields(), source.catalogs(), source.fieldMappings());
                 stageConsumer.accept(ReportExportStage.SUMMARY);
-                insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs());
+                insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
             });
             issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
         } catch (RuntimeException exception) {
@@ -82,7 +82,7 @@ public class ReportExportBatchRunner {
     }
 
     private SourceData sourceData() {
-        return new SourceData(catalogs(), fieldMappings(), transactions(), fields());
+        return new SourceData(catalogs(), fieldMappings(), transactions(), fields(), retcodes());
     }
 
     private Map<String, Catalog> catalogs() {
@@ -113,14 +113,22 @@ public class ReportExportBatchRunner {
         return result;
     }
 
-    private void insertSummaries(String batchId, String reportDate, List<Tran> transactions, List<Field> fields, Map<String, Catalog> catalogs) {
+    private Map<String, Retcode> retcodes() {
+        Map<String, Retcode> result = new LinkedHashMap<>();
+        jdbc.getJdbcTemplate().query("select mesg_seq, orig_cdate, service_code, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc from tss_retcode_comp", (RowCallbackHandler)
+                rs -> result.putIfAbsent(tranKey(rs.getString("mesg_seq"), rs.getString("orig_cdate")),
+                        new Retcode(rs.getString("service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"))));
+        return result;
+    }
+
+    private void insertSummaries(String batchId, String reportDate, List<Tran> transactions, List<Field> fields, Map<String, Catalog> catalogs, Map<String, Retcode> retcodes) {
         Map<String, List<Tran>> byModule = new TreeMap<>();
         for (Tran tran : transactions) byModule.computeIfAbsent(module(service(tran.destTrcd()), catalogs), ignored -> new ArrayList<>()).add(tran);
         Map<String, Set<String>> fieldNames = new LinkedHashMap<>();
         for (Field field : fields) fieldNames.computeIfAbsent(module(service(field.destTrcd()), catalogs), ignored -> new TreeSet<>()).add(normalizedField(field.origFieldName()));
         for (String module : union(byModule.keySet(), fieldNames.keySet())) {
             List<Tran> rows = byModule.getOrDefault(module, List.of());
-            long one = count(rows, "1"), two = count(rows, "2"), three = count(rows, "3"), four = count(rows, "4"), eight = count(rows, "8");
+            long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"), four = count(rows, retcodes, "4"), eight = count(rows, retcodes, "8");
             long total = rows.size();
             MapSqlParameterSource p = params(batchId, reportDate).addValue("module", module)
                     .addValue("covered", rows.stream().map(row -> service(row.destTrcd())).filter(value -> !value.isBlank()).distinct().count())
@@ -315,7 +323,19 @@ public class ReportExportBatchRunner {
     }
 
     private static final Comparator<Field> FIELD_ORDER = Comparator.comparing(Field::mesgSeq, Comparator.nullsFirst(String::compareTo)).thenComparingInt(Field::convIndex).thenComparingInt(Field::convCindex).thenComparingInt(Field::fieldIndex);
-    private static long count(List<Tran> rows, String result) { return rows.stream().filter(row -> result.equals(row.compResult())).count(); }
+    private static long count(List<Tran> rows, Map<String, Retcode> retcodes, String result) { return rows.stream().filter(row -> result.equals(summaryResult(row, retcodes.get(tranKey(row.mesgSeq(), row.origCdate()))))).count(); }
+    private static String summaryResult(Tran row, Retcode retcode) {
+        if ("3".equals(row.compResult()) || "8".equals(row.compResult())) {
+            return bothFailedResponseCodesMatch(retcode) ? "3" : "8";
+        }
+        return row.compResult();
+    }
+    private static boolean bothFailedResponseCodesMatch(Retcode retcode) {
+        return retcode != null
+                && !missingResponseCode(retcode.origCode())
+                && !missingResponseCode(retcode.destCode())
+                && text(retcode.origCode()).equals(text(retcode.destCode()));
+    }
     private static String service(String value) { int index = text(value).indexOf('&'); return index < 0 ? text(value) : value.substring(0, index); }
     private static String normalizedField(String value) {
         String text = text(value);
@@ -349,6 +369,7 @@ public class ReportExportBatchRunner {
     private static String fieldIssueKey(String service, String sourceField) { return "FIELD|" + issuePart(service) + "|" + issuePart(sourceField); }
     private static String issuePart(String value) { return text(value).trim().toLowerCase(Locale.ROOT); }
     private static String text(String value) { return value == null ? "" : value; }
+    private static String tranKey(String mesgSeq, String origCdate) { return text(mesgSeq) + "|" + text(origCdate); }
     private static <T> Set<T> union(Set<T> first, Set<T> second) { Set<T> result = new TreeSet<>(); result.addAll(first); result.addAll(second); return result; }
     private static MapSqlParameterSource params(String batchId, String reportDate) { return new MapSqlParameterSource("batchId", batchId).addValue("reportDate", reportDate); }
 
@@ -357,5 +378,5 @@ public class ReportExportBatchRunner {
     private record Retcode(String serviceCode, String origCode, String origDesc, String destCode, String destDesc) {}
     private record Tran(String mesgSeq, String origCdate, int convIndex, int convCindex, String destTrcd, String compResult) {}
     private record Field(String mesgSeq, String origCdate, int convIndex, int convCindex, int fieldIndex, String destTrcd, String origFieldName, String origValue, String destFieldName, String destValue) {}
-    private record SourceData(Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings, List<Tran> transactions, List<Field> fields) {}
+    private record SourceData(Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings, List<Tran> transactions, List<Field> fields, Map<String, Retcode> retcodes) {}
 }

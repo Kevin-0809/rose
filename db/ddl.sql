@@ -783,9 +783,9 @@ comment on column ana_report_export_summary.covered_528_interface_count is '覆�
 comment on column ana_report_export_summary.sent_transaction_count is '已发送交易数量';
 comment on column ana_report_export_summary.comp_result_1_count is '比对结果1数量';
 comment on column ana_report_export_summary.comp_result_2_count is '比对结果2数量';
-comment on column ana_report_export_summary.comp_result_3_count is '比对结果3数量';
-comment on column ana_report_export_summary.comp_result_4_count is '比对结果4数量';
-comment on column ana_report_export_summary.comp_result_8_count is '比对结果8数量';
+comment on column ana_report_export_summary.comp_result_3_count is '二者均失败且响应码一致数量';
+comment on column ana_report_export_summary.comp_result_4_count is '二者均成功数量';
+comment on column ana_report_export_summary.comp_result_8_count is '二者均失败且响应码不一致数量';
 comment on column ana_report_export_summary.diff_528_field_count is '差异528字段数量';
 comment on column ana_report_export_summary.success_rate is '比对成功率';
 comment on column ana_report_export_summary.created_time is '创建时间';

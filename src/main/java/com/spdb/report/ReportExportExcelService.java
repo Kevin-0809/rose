@@ -67,18 +67,18 @@ public class ReportExportExcelService {
         for (int i = 0; i < fixed.length; i++) {
             mergedCell(sheet, 0, 1, i, i, fixed[i], styles.summaryHeader);
         }
-        mergedCell(sheet, 0, 0, 4, 7, "发送统计", styles.summaryHeader);
-        String[] stats = {"528成功/CCBS失败", "528失败/CCBS成功", "二者均失败", "二者均成功"};
+        mergedCell(sheet, 0, 0, 4, 8, "发送统计", styles.summaryHeader);
+        String[] stats = {"528成功/CCBS失败", "528失败/CCBS成功", "二者均失败响应码一致", "二者均成功", "二者均失败响应码不一致"};
         for (int i = 0; i < stats.length; i++) {
             cell(second, i + 4, stats[i], styles.detailHeader);
         }
-        mergedCell(sheet, 0, 1, 8, 8, "成功率", styles.summaryHeader);
-        mergedCell(sheet, 0, 1, 9, 9, "差异字段数", styles.summaryHeader);
+        mergedCell(sheet, 0, 1, 9, 9, "成功率", styles.summaryHeader);
+        mergedCell(sheet, 0, 1, 10, 10, "差异字段数", styles.summaryHeader);
         int[] row = {2};
         jdbc.query("""
                 select batch_id, module_name, covered_528_interface_count, sent_transaction_count,
                        comp_result_1_count, comp_result_2_count, comp_result_3_count, comp_result_4_count,
-                       success_rate, diff_528_field_count
+                       comp_result_8_count, success_rate, diff_528_field_count
                   from ana_report_export_summary
                  where batch_id=:batchId
                  order by module_name
@@ -86,13 +86,13 @@ public class ReportExportExcelService {
             int dataOrdinal = row[0] - 1;
             Row r = sheet.createRow(row[0]++);
             CellStyle rowStyle = styles.rowStyle(dataOrdinal);
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < 9; i++) {
                 cell(r, i, text(rs.getObject(i + 1)), rowStyle);
             }
-            percentCell(r, 8, rs.getBigDecimal("success_rate"), styles.percentStyle(row[0]));
-            cell(r, 9, text(rs.getObject("diff_528_field_count")), rowStyle);
+            percentCell(r, 9, rs.getBigDecimal("success_rate"), styles.percentStyle(row[0]));
+            cell(r, 10, text(rs.getObject("diff_528_field_count")), rowStyle);
         });
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 11; i++) {
             sheet.setColumnWidth(i, i == 1 ? 4600 : 3600);
         }
         sheet.createFreezePane(0, 2);
