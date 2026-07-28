@@ -42,8 +42,8 @@ class ReportExportExcelServiceTest {
         jdbc.update("""
                 insert into ana_tran_diff_tracking_export(source_batch_id,module_name,row_no,tran_code,tran_name,
                     problem_level,registration_date,field_name,problem_description,historical_occurrence_count,
-                    first_seen_date,previous_seen_date)
-                values ('RPT1','支付',1,'T1','交易一','交易级','20260727','528失败/CCBS成功','交易描述',3,?,?)
+                    first_seen_date,previous_seen_date,defect_fix_date)
+                values ('RPT1','支付',1,'T1','交易一','交易级','20260727','528失败/CCBS成功','交易描述',3,?,?, '20260725')
                 """, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-20"));
         jdbc.update("""
                 insert into ana_field_diff_tracking_export(source_batch_id,module_name,row_no,tran_code,tran_name,
@@ -72,14 +72,16 @@ class ReportExportExcelServiceTest {
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(9).getNumericCellValue()).isEqualTo(0.7d);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(9).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
             assertThat(workbook.getSheet("支付").getPaneInformation().isFreezePane()).isTrue();
-            assertThat(workbook.getSheet("支付").getRow(0).getCell(17).getStringCellValue()).isEqualTo("备注");
-            assertThat(workbook.getSheet("支付").getRow(1).getCell(17).getStringCellValue()).isBlank();
             assertThat(workbook.getSheet("支付").getRow(0).getCell(19).getStringCellValue()).isEqualTo("历史出现次数");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(5).getStringCellValue()).isEqualTo("交易级");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(19).getStringCellValue()).isEqualTo("3");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(20).getStringCellValue()).isEqualTo("2026-07-01");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(21).getStringCellValue()).isEqualTo("2026-07-20");
             assertThat(workbook.getSheet("支付").getRow(2).getCell(8).getStringCellValue()).isEqualTo("528：有值；CCBS：无值");
+            assertThat(workbook.getSheet("支付").getRow(0).getCell(17).getStringCellValue()).isEqualTo("缺陷修复日期");
+            assertThat(workbook.getSheet("支付").getRow(1).getCell(17).getStringCellValue()).isEqualTo("20260725");
+            assertThat(workbook.getSheet("支付").getRow(0).getCell(18).getStringCellValue()).isEqualTo("备注");
+            assertThat(workbook.getSheet("支付").getRow(1).getCell(18).getStringCellValue()).isBlank();
             assertThat(workbook.getSheet("支付").getRow(2).getCell(19).getStringCellValue()).isEqualTo("2");
         }
         assertThat(output.toString()).doesNotContain("secret");

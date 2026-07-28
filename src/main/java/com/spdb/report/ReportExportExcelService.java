@@ -34,7 +34,7 @@ import java.util.Set;
 public class ReportExportExcelService {
     private static final String[] DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
             "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
-            "解决人员", "流水号", "备注", "缺陷修复日期", "历史出现次数", "首次出现日期", "上次出现日期"};
+            "解决人员", "流水号", "缺陷修复日期", "备注", "历史出现次数", "首次出现日期", "上次出现日期"};
     private final NamedParameterJdbcTemplate jdbc;
 
     public ReportExportExcelService(NamedParameterJdbcTemplate jdbc) {
@@ -132,7 +132,7 @@ public class ReportExportExcelService {
             Row r = sheet.createRow(row[0]++);
             CellStyle rowStyle = styles.rowStyle(dataOrdinal);
             for (int i = 0; i < DETAIL_HEADERS.length; i++) {
-                cell(r, i, i == 17 ? "" : text(rs.getObject(i < 17 ? i + 1 : i)), rowStyle);
+                cell(r, i, i == 18 ? "" : text(rs.getObject(i < 18 ? i + 1 : i)), rowStyle);
             }
         });
     }
