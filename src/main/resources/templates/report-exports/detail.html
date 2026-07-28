@@ -52,8 +52,8 @@
           <thead>
           <tr>
             <th>业务日期</th><th>领域</th><th>覆盖528接口</th><th>发送交易量</th>
-            <th>528成功/CCBS失败</th><th>528失败/CCBS成功</th><th>二者均失败响应码一致</th><th>二者均成功</th>
-            <th>二者均失败响应码不一致</th><th>成功率</th><th>差异字段数</th>
+            <th>528成功/CCBS失败</th><th>528失败/CCBS成功</th><th>二者均失败响应码一致</th><th>二者均失败响应码不一致</th>
+            <th>二者均成功</th><th>成功率</th><th>差异字段数</th>
           </tr>
           </thead>
           <tbody>
@@ -65,8 +65,8 @@
             <td th:text="${row.compResult1Count()}"></td>
             <td th:text="${row.compResult2Count()}"></td>
             <td th:text="${row.compResult3Count()}"></td>
-            <td th:text="${row.compResult4Count()}"></td>
             <td th:text="${row.compResult8Count()}"></td>
+            <td th:text="${row.compResult4Count()}"></td>
             <td th:text="${row.successRate()}"></td>
             <td th:text="${row.diff528FieldCount()}"></td>
           </tr>
