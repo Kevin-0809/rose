@@ -409,8 +409,22 @@ class DatabaseScriptLayoutTest {
                 "comp_result_8_count bigint not null default 0",
                 "diff_528_field_count bigint not null default 0",
                 "success_rate numeric(12,8) not null default 0",
+                "field_pass_transaction_count bigint not null default 0",
+                "comparison_pass_rate numeric(12,8) not null default 0",
+                "transaction_issue_count bigint not null default 0",
+                "field_issue_count bigint not null default 0",
+                "issue_total_count bigint not null default 0",
+                "duplicate_issue_count bigint not null default 0",
                 "constraint uk_ana_report_export_summary unique (batch_id, module_name)");
         summaryColumns.forEach(column -> assertThat(ddlLower).contains(column));
+        List<String> summaryMigrationColumns = List.of(
+                "add column if not exists field_pass_transaction_count bigint not null default 0",
+                "add column if not exists comparison_pass_rate numeric(12,8) not null default 0",
+                "add column if not exists transaction_issue_count bigint not null default 0",
+                "add column if not exists field_issue_count bigint not null default 0",
+                "add column if not exists issue_total_count bigint not null default 0",
+                "add column if not exists duplicate_issue_count bigint not null default 0");
+        summaryMigrationColumns.forEach(column -> assertThat(ddlLower).contains(column));
 
         List<String> commandColumns = List.of(
                 "command_id", "batch_id", "report_date", "status", "started_time", "ended_time",
@@ -419,6 +433,8 @@ class DatabaseScriptLayoutTest {
                 "summary_id", "batch_id", "report_date", "module_name", "covered_528_interface_count",
                 "sent_transaction_count", "comp_result_1_count", "comp_result_2_count", "comp_result_3_count",
                 "comp_result_4_count", "comp_result_8_count", "diff_528_field_count", "success_rate",
+                "field_pass_transaction_count", "comparison_pass_rate", "transaction_issue_count",
+                "field_issue_count", "issue_total_count", "duplicate_issue_count",
                 "created_time", "updated_at");
         assertThat(ddl).containsPattern("comment on table ana_report_export_command is '[\\p{IsHan}][^']*';");
         assertThat(ddl).containsPattern("comment on table ana_report_export_summary is '[\\p{IsHan}][^']*';");
@@ -426,6 +442,13 @@ class DatabaseScriptLayoutTest {
                 "comment on column ana_report_export_command\\." + column + " is '[\\p{IsHan}][^']*';"));
         summaryColumnNames.forEach(column -> assertThat(ddl).containsPattern(
                 "comment on column ana_report_export_summary\\." + column + " is '[\\p{IsHan}][^']*';"));
+        assertThat(ddl).contains("comment on column ana_report_export_summary.success_rate is '成功率';");
+        assertThat(ddl).contains("comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';");
+        assertThat(ddl).contains("comment on column ana_report_export_summary.comparison_pass_rate is '比对通过率';");
+        assertThat(ddl).contains("comment on column ana_report_export_summary.transaction_issue_count is '交易级差异总数';");
+        assertThat(ddl).contains("comment on column ana_report_export_summary.field_issue_count is '字段级差异总数';");
+        assertThat(ddl).contains("comment on column ana_report_export_summary.issue_total_count is '问题总数';");
+        assertThat(ddl).contains("comment on column ana_report_export_summary.duplicate_issue_count is '重复问题数';");
 
         assertThat(ddlLower).contains("""
                 create index if not exists idx_ana_report_export_command_status
