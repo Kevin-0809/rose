@@ -80,11 +80,8 @@ public class ReportExportExcelService {
         int lastColumn = current ? 20 : 17;
         Row titleRow = sheet.createRow(startRow);
         titleRow.setHeightInPoints(24f);
-        int batchInfoLastColumn = current ? 10 : 8;
-        mergedCell(sheet, startRow, startRow, 0, batchInfoLastColumn,
-                "批次号：" + (batchId == null || batchId.isBlank() ? "-" : batchId),
-                styles.summaryTitleStyle(current));
-        mergedCell(sheet, startRow, startRow, batchInfoLastColumn + 1, lastColumn, title,
+        mergedCell(sheet, startRow, startRow, 0, lastColumn,
+                "批次号：" + (batchId == null || batchId.isBlank() ? "-" : batchId) + "（" + title + "）",
                 styles.summaryTitleStyle(current));
 
         writeSummaryHeaders(sheet, startRow + 1, current, styles);
