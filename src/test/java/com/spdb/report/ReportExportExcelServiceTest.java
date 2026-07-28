@@ -123,8 +123,10 @@ class ReportExportExcelServiceTest {
             assertThat(workbook.getNumberOfSheets()).isEqualTo(1);
 
             var sheet = workbook.getSheetAt(0);
-            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).contains("上一批次");
-            assertMergedRegion(sheet, 0, 0, 0, 17);
+            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).contains("RPT20260716-101530-2048");
+            assertThat(sheet.getRow(0).getCell(9).getStringCellValue()).contains("上一批次");
+            assertMergedRegion(sheet, 0, 0, 0, 8);
+            assertMergedRegion(sheet, 0, 0, 9, 17);
             assertCellFill(sheet.getRow(0), 0, "B7D7C0");
             assertCellFontColor(workbook, sheet.getRow(0), 0, (short) 8);
             assertMainHeaders(sheet.getRow(1), false);
@@ -177,8 +179,10 @@ class ReportExportExcelServiceTest {
             assertBlankCells(sheet.getRow(5), 12, 17);
             assertThat(sheet.getRow(6)).isNull();
 
-            assertThat(sheet.getRow(7).getCell(0).getStringCellValue()).contains("本批次");
-            assertMergedRegion(sheet, 7, 7, 0, 20);
+            assertThat(sheet.getRow(7).getCell(0).getStringCellValue()).contains("RPT20260728-132831-6664");
+            assertThat(sheet.getRow(7).getCell(11).getStringCellValue()).contains("本批次");
+            assertMergedRegion(sheet, 7, 7, 0, 10);
+            assertMergedRegion(sheet, 7, 7, 11, 20);
             assertCellFill(sheet.getRow(7), 0, "F4CCCC");
             assertMainHeaders(sheet.getRow(8), true);
             assertCellFill(sheet.getRow(8), 0, "FCE4D6");

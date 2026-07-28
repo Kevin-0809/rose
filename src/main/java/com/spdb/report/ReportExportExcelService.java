@@ -66,8 +66,8 @@ public class ReportExportExcelService {
         String previousBatchId = previousSucceededBatchId(batchId);
         List<SummaryRow> previousRows = previousBatchId == null ? List.of() : summaryRows(previousBatchId);
 
-        int nextRow = writeSummarySection(sheet, 0, "上一批次", previousRows, Map.of(), false, styles);
-        writeSummarySection(sheet, nextRow + 2, "本批次", currentRows, issueTotalsByModule(previousRows), true, styles);
+        int nextRow = writeSummarySection(sheet, 0, previousBatchId, "上一批次", previousRows, Map.of(), false, styles);
+        writeSummarySection(sheet, nextRow + 2, batchId, "本批次", currentRows, issueTotalsByModule(previousRows), true, styles);
 
         for (int i = 0; i < 21; i++) {
             sheet.setColumnWidth(i, i == 1 ? 4600 : 3600);
@@ -75,12 +75,17 @@ public class ReportExportExcelService {
         sheet.createFreezePane(0, 2);
     }
 
-    private int writeSummarySection(SXSSFSheet sheet, int startRow, String title, List<SummaryRow> rows,
+    private int writeSummarySection(SXSSFSheet sheet, int startRow, String batchId, String title, List<SummaryRow> rows,
                                     Map<String, Long> previousIssueTotals, boolean current, Styles styles) {
         int lastColumn = current ? 20 : 17;
         Row titleRow = sheet.createRow(startRow);
         titleRow.setHeightInPoints(24f);
-        mergedCell(sheet, startRow, startRow, 0, lastColumn, title, styles.summaryTitleStyle(current));
+        int batchInfoLastColumn = current ? 10 : 8;
+        mergedCell(sheet, startRow, startRow, 0, batchInfoLastColumn,
+                "批次号：" + (batchId == null || batchId.isBlank() ? "-" : batchId),
+                styles.summaryTitleStyle(current));
+        mergedCell(sheet, startRow, startRow, batchInfoLastColumn + 1, lastColumn, title,
+                styles.summaryTitleStyle(current));
 
         writeSummaryHeaders(sheet, startRow + 1, current, styles);
 
