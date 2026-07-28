@@ -110,6 +110,7 @@ class ReportExportExcelServiceTest {
                 values ('RPT20260728-132831-6664','20260728','SUCCEEDED','2026-07-28 13:28:31')
                 """);
         insertSummary("RPT20260716-101530-2048", "20260716", "支付", 15, 0);
+        insertSummary("RPT20260716-101530-2048", "20260716", "贷款", 5, 0);
         insertSummary("RPT20260728-132831-6664", "20260728", "支付", 9, 3);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
@@ -150,47 +151,51 @@ class ReportExportExcelServiceTest {
             assertThat(sheet.getRow(3).getCell(11).getStringCellValue()).isEqualTo("15");
             assertBlankCells(sheet.getRow(3), 12, 17);
 
-            assertThat(sheet.getRow(4).getCell(1).getStringCellValue()).isEqualTo("合计");
-            assertPercentCell(sheet.getRow(4), 9, 0.7d);
-            assertPercentCell(sheet.getRow(4), 10, 0.7d);
-            assertThat(sheet.getRow(4).getCell(11).getStringCellValue()).isEqualTo("15");
+            assertThat(sheet.getRow(4).getCell(1).getStringCellValue()).isEqualTo("贷款");
+            assertThat(sheet.getRow(4).getCell(11).getStringCellValue()).isEqualTo("5");
             assertBlankCells(sheet.getRow(4), 12, 17);
-            assertThat(sheet.getRow(5)).isNull();
 
-            assertThat(sheet.getRow(6).getCell(0).getStringCellValue()).contains("本批次");
-            assertMergedRegion(sheet, 6, 6, 0, 20);
-            assertMainHeaders(sheet.getRow(7), true);
-            assertSubHeaders(sheet.getRow(8), 4, 15);
-            assertMergedRegion(sheet, 7, 8, 0, 0);
-            assertMergedRegion(sheet, 7, 8, 1, 1);
-            assertMergedRegion(sheet, 7, 8, 2, 2);
-            assertMergedRegion(sheet, 7, 8, 3, 3);
-            assertMergedRegion(sheet, 7, 7, 4, 8);
-            assertMergedRegion(sheet, 7, 8, 9, 9);
-            assertMergedRegion(sheet, 7, 8, 10, 10);
-            assertMergedRegion(sheet, 7, 8, 11, 11);
-            assertMergedRegion(sheet, 7, 8, 12, 12);
-            assertMergedRegion(sheet, 7, 8, 13, 13);
-            assertMergedRegion(sheet, 7, 8, 14, 14);
-            assertMergedRegion(sheet, 7, 7, 15, 19);
-            assertMergedRegion(sheet, 7, 8, 20, 20);
+            assertThat(sheet.getRow(5).getCell(1).getStringCellValue()).isEqualTo("合计");
+            assertPercentCell(sheet.getRow(5), 9, 0.7d);
+            assertPercentCell(sheet.getRow(5), 10, 0.7d);
+            assertThat(sheet.getRow(5).getCell(11).getStringCellValue()).isEqualTo("20");
+            assertBlankCells(sheet.getRow(5), 12, 17);
+            assertThat(sheet.getRow(6)).isNull();
 
-            assertThat(sheet.getRow(9).getCell(0).getStringCellValue()).isEqualTo("RPT20260728-132831-6664");
-            assertThat(sheet.getRow(9).getCell(1).getStringCellValue()).isEqualTo("支付");
-            assertThat(sheet.getRow(9).getCell(11).getStringCellValue()).isEqualTo("9");
-            assertThat(sheet.getRow(9).getCell(12).getStringCellValue()).isEqualTo("3");
-            assertPercentCell(sheet.getRow(9), 13, 3d / 9d);
-            assertPercentCell(sheet.getRow(9), 14, 12d / 15d);
-            assertBlankCells(sheet.getRow(9), 15, 20);
+            assertThat(sheet.getRow(7).getCell(0).getStringCellValue()).contains("本批次");
+            assertMergedRegion(sheet, 7, 7, 0, 20);
+            assertMainHeaders(sheet.getRow(8), true);
+            assertSubHeaders(sheet.getRow(9), 4, 15);
+            assertMergedRegion(sheet, 8, 9, 0, 0);
+            assertMergedRegion(sheet, 8, 9, 1, 1);
+            assertMergedRegion(sheet, 8, 9, 2, 2);
+            assertMergedRegion(sheet, 8, 9, 3, 3);
+            assertMergedRegion(sheet, 8, 8, 4, 8);
+            assertMergedRegion(sheet, 8, 9, 9, 9);
+            assertMergedRegion(sheet, 8, 9, 10, 10);
+            assertMergedRegion(sheet, 8, 9, 11, 11);
+            assertMergedRegion(sheet, 8, 9, 12, 12);
+            assertMergedRegion(sheet, 8, 9, 13, 13);
+            assertMergedRegion(sheet, 8, 9, 14, 14);
+            assertMergedRegion(sheet, 8, 8, 15, 19);
+            assertMergedRegion(sheet, 8, 9, 20, 20);
 
-            assertThat(sheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("合计");
+            assertThat(sheet.getRow(10).getCell(0).getStringCellValue()).isEqualTo("RPT20260728-132831-6664");
+            assertThat(sheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("支付");
             assertThat(sheet.getRow(10).getCell(11).getStringCellValue()).isEqualTo("9");
             assertThat(sheet.getRow(10).getCell(12).getStringCellValue()).isEqualTo("3");
-            assertPercentCell(sheet.getRow(10), 9, 0.7d);
-            assertPercentCell(sheet.getRow(10), 10, 0.7d);
             assertPercentCell(sheet.getRow(10), 13, 3d / 9d);
             assertPercentCell(sheet.getRow(10), 14, 12d / 15d);
             assertBlankCells(sheet.getRow(10), 15, 20);
+
+            assertThat(sheet.getRow(11).getCell(1).getStringCellValue()).isEqualTo("合计");
+            assertThat(sheet.getRow(11).getCell(11).getStringCellValue()).isEqualTo("9");
+            assertThat(sheet.getRow(11).getCell(12).getStringCellValue()).isEqualTo("3");
+            assertPercentCell(sheet.getRow(11), 9, 0.7d);
+            assertPercentCell(sheet.getRow(11), 10, 0.7d);
+            assertPercentCell(sheet.getRow(11), 13, 3d / 9d);
+            assertPercentCell(sheet.getRow(11), 14, 17d / 20d);
+            assertBlankCells(sheet.getRow(11), 15, 20);
         }
     }
 

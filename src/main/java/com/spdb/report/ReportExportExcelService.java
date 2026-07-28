@@ -183,9 +183,7 @@ public class ReportExportExcelService {
                 totals.sentTransactionCount()), styles.percentStyle(dataOrdinal));
         cell(excelRow, 11, text(totals.issueTotalCount()), rowStyle);
         if (current) {
-            long previousIssueTotal = rows.stream()
-                    .mapToLong(row -> previousIssueTotals.getOrDefault(row.moduleName(), 0L))
-                    .sum();
+            long previousIssueTotal = previousIssueTotals.values().stream().mapToLong(Long::longValue).sum();
             cell(excelRow, 12, text(totals.duplicateIssueCount()), rowStyle);
             percentCell(excelRow, 13, rate(totals.duplicateIssueCount(), totals.issueTotalCount()),
                     styles.percentStyle(dataOrdinal));
