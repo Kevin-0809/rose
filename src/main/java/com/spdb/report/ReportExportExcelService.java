@@ -102,6 +102,7 @@ public class ReportExportExcelService {
 
         CellStyle mainStyle = styles.summaryMainHeaderStyle(current);
         CellStyle subStyle = styles.summarySubHeaderStyle(current);
+        CellStyle issueStyle = styles.summaryIssueHeaderStyle();
 
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 0, 0, "批次", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 1, 1, "领域", mainStyle);
@@ -117,21 +118,21 @@ public class ReportExportExcelService {
 
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 9, 9, "成功率", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "比对通过率", mainStyle);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "问题总数", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "问题总数", issueStyle);
 
         if (current) {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "重复问题", mainStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "重复率", mainStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 14, 14, "上轮问题解决率", mainStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "重复问题", issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "重复率", issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 14, 14, "上轮问题解决率", issueStyle);
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 15, 19,
-                    "已解决问题分类统计（待验证）", mainStyle);
-            writeSolvedIssueSubHeaders(subHeader, 15, subStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 20, 20, "问题解决进度", mainStyle);
+                    "已解决问题分类统计（待验证）", issueStyle);
+            writeSolvedIssueSubHeaders(subHeader, 15, issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 20, 20, "问题解决进度", issueStyle);
         } else {
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 12, 16,
-                    "已解决问题分类统计（待验证）", mainStyle);
-            writeSolvedIssueSubHeaders(subHeader, 12, subStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 17, 17, "问题解决进度", mainStyle);
+                    "已解决问题分类统计（待验证）", issueStyle);
+            writeSolvedIssueSubHeaders(subHeader, 12, issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 17, 17, "问题解决进度", issueStyle);
         }
     }
 
@@ -144,7 +145,7 @@ public class ReportExportExcelService {
 
     private void writeSummaryDataRow(Row excelRow, SummaryRow row, Long previousIssueTotal,
                                      boolean current, int dataOrdinal, Styles styles) {
-        CellStyle rowStyle = styles.rowStyle(dataOrdinal);
+        CellStyle rowStyle = styles.summaryBodyStyle();
         cell(excelRow, 0, row.batchId(), rowStyle);
         cell(excelRow, 1, row.moduleName(), rowStyle);
         cell(excelRow, 2, text(row.covered528InterfaceCount()), rowStyle);
@@ -154,13 +155,13 @@ public class ReportExportExcelService {
         cell(excelRow, 6, text(row.compResult3Count()), rowStyle);
         cell(excelRow, 7, text(row.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(row.compResult4Count()), rowStyle);
-        percentCell(excelRow, 9, row.successRate(), styles.percentStyle(dataOrdinal));
-        percentCell(excelRow, 10, row.comparisonPassRate(), styles.percentStyle(dataOrdinal));
+        percentCell(excelRow, 9, row.successRate(), styles.summaryPercentStyle());
+        percentCell(excelRow, 10, row.comparisonPassRate(), styles.summaryPercentStyle());
         cell(excelRow, 11, text(row.issueTotalCount()), rowStyle);
         if (current) {
             cell(excelRow, 12, text(row.duplicateIssueCount()), rowStyle);
-            percentCell(excelRow, 13, rate(row.duplicateIssueCount(), row.issueTotalCount()), styles.percentStyle(dataOrdinal));
-            percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, row.duplicateIssueCount()), styles.percentStyle(dataOrdinal));
+            percentCell(excelRow, 13, rate(row.duplicateIssueCount(), row.issueTotalCount()), styles.summaryPercentStyle());
+            percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, row.duplicateIssueCount()), styles.summaryPercentStyle());
             blankCells(excelRow, 15, 20, rowStyle);
         } else {
             blankCells(excelRow, 12, 17, rowStyle);
@@ -169,7 +170,7 @@ public class ReportExportExcelService {
 
     private void writeSummaryTotalRow(Row excelRow, List<SummaryRow> rows, Map<String, Long> previousIssueTotals,
                                       boolean current, int dataOrdinal, Styles styles) {
-        CellStyle rowStyle = styles.rowStyle(dataOrdinal);
+        CellStyle rowStyle = styles.summaryTotalStyle();
         SummaryTotals totals = SummaryTotals.of(rows);
         cell(excelRow, 0, "", rowStyle);
         cell(excelRow, 1, "合计", rowStyle);
@@ -181,17 +182,17 @@ public class ReportExportExcelService {
         cell(excelRow, 7, text(totals.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(totals.compResult4Count()), rowStyle);
         percentCell(excelRow, 9, rate(totals.compResult3Count() + totals.compResult4Count(),
-                totals.sentTransactionCount()), styles.percentStyle(dataOrdinal));
+                totals.sentTransactionCount()), styles.summaryTotalPercentStyle());
         percentCell(excelRow, 10, rate(totals.fieldPassTransactionCount() + totals.compResult3Count(),
-                totals.sentTransactionCount()), styles.percentStyle(dataOrdinal));
+                totals.sentTransactionCount()), styles.summaryTotalPercentStyle());
         cell(excelRow, 11, text(totals.issueTotalCount()), rowStyle);
         if (current) {
             long previousIssueTotal = previousIssueTotals.values().stream().mapToLong(Long::longValue).sum();
             cell(excelRow, 12, text(totals.duplicateIssueCount()), rowStyle);
             percentCell(excelRow, 13, rate(totals.duplicateIssueCount(), totals.issueTotalCount()),
-                    styles.percentStyle(dataOrdinal));
+                    styles.summaryTotalPercentStyle());
             percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, totals.duplicateIssueCount()),
-                    styles.percentStyle(dataOrdinal));
+                    styles.summaryTotalPercentStyle());
             blankCells(excelRow, 15, 20, rowStyle);
         } else {
             blankCells(excelRow, 12, 17, rowStyle);
@@ -420,6 +421,8 @@ public class ReportExportExcelService {
         private static final String PREVIOUS_SUB_GREEN = "E2F0D9";
         private static final String CURRENT_TITLE_PINK = "F4CCCC";
         private static final String CURRENT_HEADER_PINK = "FCE4D6";
+        private static final String SUMMARY_ISSUE_YELLOW = "FFF2CC";
+        private static final String SUMMARY_TOTAL_BLUE = "EEF2F7";
         private final CellStyle summaryHeader;
         private final CellStyle detailHeader;
         private final CellStyle previousSummaryTitle;
@@ -427,6 +430,11 @@ public class ReportExportExcelService {
         private final CellStyle previousSummarySubHeader;
         private final CellStyle currentSummaryTitle;
         private final CellStyle currentSummaryHeader;
+        private final CellStyle summaryIssueHeader;
+        private final CellStyle summaryBody;
+        private final CellStyle summaryPercent;
+        private final CellStyle summaryTotal;
+        private final CellStyle summaryTotalPercent;
         private final CellStyle oddBody;
         private final CellStyle evenBody;
         private final CellStyle oddPercent;
@@ -440,11 +448,18 @@ public class ReportExportExcelService {
             previousSummarySubHeader = headerStyle(book, PREVIOUS_SUB_GREEN);
             currentSummaryTitle = headerStyle(book, CURRENT_TITLE_PINK);
             currentSummaryHeader = headerStyle(book, CURRENT_HEADER_PINK);
+            summaryIssueHeader = headerStyle(book, SUMMARY_ISSUE_YELLOW);
+            summaryBody = style(book, WHITE);
+            summaryPercent = style(book, WHITE);
+            summaryTotal = style(book, SUMMARY_TOTAL_BLUE);
+            summaryTotalPercent = style(book, SUMMARY_TOTAL_BLUE);
             oddBody = style(book, STRIPE_BLUE);
             evenBody = style(book, WHITE);
             oddPercent = style(book, STRIPE_BLUE);
             evenPercent = style(book, WHITE);
             DataFormat format = book.createDataFormat();
+            summaryPercent.setDataFormat(format.getFormat("0.00%"));
+            summaryTotalPercent.setDataFormat(format.getFormat("0.00%"));
             oddPercent.setDataFormat(format.getFormat("0.00%"));
             evenPercent.setDataFormat(format.getFormat("0.00%"));
         }
@@ -467,6 +482,26 @@ public class ReportExportExcelService {
 
         private CellStyle summarySubHeaderStyle(boolean current) {
             return current ? currentSummaryHeader : previousSummarySubHeader;
+        }
+
+        private CellStyle summaryIssueHeaderStyle() {
+            return summaryIssueHeader;
+        }
+
+        private CellStyle summaryBodyStyle() {
+            return summaryBody;
+        }
+
+        private CellStyle summaryPercentStyle() {
+            return summaryPercent;
+        }
+
+        private CellStyle summaryTotalStyle() {
+            return summaryTotal;
+        }
+
+        private CellStyle summaryTotalPercentStyle() {
+            return summaryTotalPercent;
         }
 
         private static CellStyle headerStyle(SXSSFWorkbook book, String color) {
