@@ -67,13 +67,15 @@ class ReportExportExcelServiceTest {
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getNumericCellValue()).isEqualTo(0.7d);
             assertThat(workbook.getSheetAt(0).getRow(2).getCell(8).getCellStyle().getDataFormatString()).isEqualTo("0.00%");
             assertThat(workbook.getSheet("支付").getPaneInformation().isFreezePane()).isTrue();
-            assertThat(workbook.getSheet("支付").getRow(0).getCell(18).getStringCellValue()).isEqualTo("历史出现次数");
+            assertThat(workbook.getSheet("支付").getRow(0).getCell(17).getStringCellValue()).isEqualTo("备注");
+            assertThat(workbook.getSheet("支付").getRow(1).getCell(17).getStringCellValue()).isBlank();
+            assertThat(workbook.getSheet("支付").getRow(0).getCell(19).getStringCellValue()).isEqualTo("历史出现次数");
             assertThat(workbook.getSheet("支付").getRow(1).getCell(5).getStringCellValue()).isEqualTo("交易级");
-            assertThat(workbook.getSheet("支付").getRow(1).getCell(18).getStringCellValue()).isEqualTo("3");
-            assertThat(workbook.getSheet("支付").getRow(1).getCell(19).getStringCellValue()).isEqualTo("2026-07-01");
-            assertThat(workbook.getSheet("支付").getRow(1).getCell(20).getStringCellValue()).isEqualTo("2026-07-20");
+            assertThat(workbook.getSheet("支付").getRow(1).getCell(19).getStringCellValue()).isEqualTo("3");
+            assertThat(workbook.getSheet("支付").getRow(1).getCell(20).getStringCellValue()).isEqualTo("2026-07-01");
+            assertThat(workbook.getSheet("支付").getRow(1).getCell(21).getStringCellValue()).isEqualTo("2026-07-20");
             assertThat(workbook.getSheet("支付").getRow(2).getCell(8).getStringCellValue()).isEqualTo("528：有值；CCBS：无值");
-            assertThat(workbook.getSheet("支付").getRow(2).getCell(18).getStringCellValue()).isEqualTo("2");
+            assertThat(workbook.getSheet("支付").getRow(2).getCell(19).getStringCellValue()).isEqualTo("2");
         }
         assertThat(output.toString()).doesNotContain("secret");
     }

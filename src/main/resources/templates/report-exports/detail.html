@@ -34,7 +34,7 @@
                 th:text="${command.status()}"></span>
         </div>
         <p class="muted" th:if="${command.errorMessage() != null}" th:text="${command.errorMessage()}"></p>
-        <ol class="report-stage-list" aria-label="导出执行阶段">
+        <ol id="report-export-stage-list" class="report-stage-list" aria-label="导出执行阶段">
           <li th:each="stage : ${stageViews}" th:classappend="${'is-' + stage.state()}">
             <span class="report-stage-icon" th:text="${stage.state() == 'completed' ? '✓' : stage.number()}"></span>
             <span class="report-stage-name" th:text="${stage.label()}"></span>
@@ -159,9 +159,25 @@
 <script th:if="${command != null and (command.status() == 'PENDING' or command.status() == 'RUNNING')}" th:inline="javascript">
   (() => {
     const progressUrl = /*[[@{/report-exports/{batchId}/progress(batchId=${command.batchId()})}]]*/ '';
+    const renderStages = (stages) => {
+      const list = document.querySelector('#report-export-stage-list');
+      if (!list || !Array.isArray(stages)) return;
+      list.replaceChildren(...stages.map((stage) => {
+        const item = document.createElement('li');
+        item.className = `is-${stage.state}`;
+        item.innerHTML = `<span class="report-stage-icon"></span><span class="report-stage-name"></span><span class="report-stage-state"></span>`;
+        item.querySelector('.report-stage-icon').textContent = stage.state === 'completed' ? '✓' : stage.number;
+        item.querySelector('.report-stage-name').textContent = stage.label;
+        item.querySelector('.report-stage-state').textContent = stage.stateLabel;
+        return item;
+      }));
+    };
     const intervalId = window.setInterval(() => fetch(progressUrl).then(response => response.json()).then((current) => {
       if (!current || current.status === 'SUCCEEDED' || current.status === 'FAILED') window.location.reload();
-      else document.querySelector('#report-export-status').textContent = current.status;
+      else {
+        document.querySelector('#report-export-status').textContent = current.status;
+        renderStages(current.stageViews);
+      }
     }).catch(() => window.clearInterval(intervalId)), 3000);
     window.addEventListener('pagehide', () => window.clearInterval(intervalId));
   })();

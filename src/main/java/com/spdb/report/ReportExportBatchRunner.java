@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import javax.sql.DataSource;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -59,9 +60,20 @@ public class ReportExportBatchRunner {
     }
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime) {
+        run(batchId, reportDate, exportTime, ignored -> {});
+    }
+
+    public void run(String batchId, String reportDate, LocalDateTime exportTime, Consumer<ReportExportStage> stageConsumer) {
         try {
-            Map<String, Catalog> catalogs = transactionTemplate.execute(status -> runInTransaction(batchId, reportDate, exportTime));
-            streamTransactionDetails(batchId, reportDate, exportTime, catalogs);
+            SourceData source = transactionTemplate.execute(status -> sourceData());
+            stageConsumer.accept(ReportExportStage.TRANSACTION_DETAILS);
+            streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs());
+            transactionTemplate.executeWithoutResult(status -> {
+                stageConsumer.accept(ReportExportStage.FIELD_DETAILS);
+                insertFieldDetails(batchId, reportDate, exportTime, source.fields(), source.catalogs(), source.fieldMappings());
+                stageConsumer.accept(ReportExportStage.SUMMARY);
+                insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs());
+            });
             issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
         } catch (RuntimeException exception) {
             cleanupBatchArtifacts(batchId);
@@ -69,14 +81,8 @@ public class ReportExportBatchRunner {
         }
     }
 
-    private Map<String, Catalog> runInTransaction(String batchId, String reportDate, LocalDateTime exportTime) {
-        Map<String, Catalog> catalogs = catalogs();
-        List<FieldMapping> fieldMappings = fieldMappings();
-        List<Tran> transactions = transactions();
-        List<Field> fields = fields();
-        insertSummaries(batchId, reportDate, transactions, fields, catalogs);
-        insertFieldDetails(batchId, reportDate, exportTime, fields, catalogs, fieldMappings);
-        return catalogs;
+    private SourceData sourceData() {
+        return new SourceData(catalogs(), fieldMappings(), transactions(), fields());
     }
 
     private Map<String, Catalog> catalogs() {
@@ -351,4 +357,5 @@ public class ReportExportBatchRunner {
     private record Retcode(String serviceCode, String origCode, String origDesc, String destCode, String destDesc) {}
     private record Tran(String mesgSeq, String origCdate, int convIndex, int convCindex, String destTrcd, String compResult) {}
     private record Field(String mesgSeq, String origCdate, int convIndex, int convCindex, int fieldIndex, String destTrcd, String origFieldName, String origValue, String destFieldName, String destValue) {}
+    private record SourceData(Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings, List<Tran> transactions, List<Field> fields) {}
 }

@@ -98,8 +98,11 @@ public class ReportExportController {
 
     @GetMapping("/report-exports/{batchId}/progress")
     @ResponseBody
-    public ReportExportCommandRow progress(@PathVariable String batchId) {
-        return reportExportCommandService.findByBatchId(batchId);
+    public ReportExportProgressResponse progress(@PathVariable String batchId) {
+        ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
+        return command == null ? null : new ReportExportProgressResponse(
+                command.status(), command.currentStage(),
+                ReportExportStageView.forCommand(command.status(), command.currentStage()));
     }
 
     @GetMapping("/report-exports/{batchId}/excel")
@@ -121,4 +124,6 @@ public class ReportExportController {
         LocalDateTime time = LocalDateTime.now(clock);
         return "回放报表明细-" + EXPORT_FILENAME_TIME.format(time) + ".xlsx";
     }
+
+    public record ReportExportProgressResponse(String status, String currentStage, List<ReportExportStageView> stageViews) {}
 }

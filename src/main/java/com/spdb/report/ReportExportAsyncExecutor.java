@@ -46,7 +46,8 @@ public class ReportExportAsyncExecutor implements ReportExportTaskLauncher {
         try {
             ReportExportCommandRow command = commandService.findByBatchId(batchId);
             if (command == null) throw new IllegalArgumentException("报表导出批次不存在：" + batchId);
-            batchRunner.run(batchId, command.reportDate(), LocalDateTime.now(clock));
+            batchRunner.run(batchId, command.reportDate(), LocalDateTime.now(clock),
+                    stage -> commandService.markStage(batchId, stage));
             commandService.markSucceeded(batchId);
         } catch (RuntimeException exception) {
             log.error("报表明细导出失败，batchId={}", batchId, exception);
