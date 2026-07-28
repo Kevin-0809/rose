@@ -107,7 +107,8 @@ class DatabaseScriptLayoutTest {
 
     @Test
     void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
-        String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8);
+        String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8)
+                .replace("\r\n", "\n");
         String sql = rawSql.toLowerCase();
 
         assertThat(sql).contains("create table if not exists ana_report_export_command");
