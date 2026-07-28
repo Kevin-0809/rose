@@ -107,10 +107,34 @@ class DatabaseScriptLayoutTest {
 
     @Test
     void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
-        String sql = Files.readString(Path.of("db/manual-create-ana-report-export.sql")).toLowerCase();
+        String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8);
+        String sql = rawSql.toLowerCase();
 
         assertThat(sql).contains("create table if not exists ana_report_export_command");
         assertThat(sql).contains("create table if not exists ana_report_export_summary");
+        List<String> summaryColumns = List.of(
+                "field_pass_transaction_count bigint not null default 0",
+                "comparison_pass_rate numeric(12,8) not null default 0",
+                "transaction_issue_count bigint not null default 0",
+                "field_issue_count bigint not null default 0",
+                "issue_total_count bigint not null default 0",
+                "duplicate_issue_count bigint not null default 0");
+        summaryColumns.forEach(column -> assertThat(sql).contains(column));
+        List<String> summaryMigrationColumns = List.of(
+                "alter table ana_report_export_summary\nadd column if not exists field_pass_transaction_count bigint not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists comparison_pass_rate numeric(12,8) not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists transaction_issue_count bigint not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists field_issue_count bigint not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists issue_total_count bigint not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists duplicate_issue_count bigint not null default 0;");
+        summaryMigrationColumns.forEach(column -> assertThat(sql).contains(column));
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.success_rate is '成功率';");
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';");
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.comparison_pass_rate is '比对通过率';");
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.transaction_issue_count is '交易级差异总数';");
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.field_issue_count is '字段级差异总数';");
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.issue_total_count is '问题总数';");
+        assertThat(rawSql).contains("comment on column ana_report_export_summary.duplicate_issue_count is '重复问题数';");
         assertThat(sql).contains("idx_ana_report_export_command_status");
         assertThat(sql).contains("idx_ana_report_export_summary_batch");
     }

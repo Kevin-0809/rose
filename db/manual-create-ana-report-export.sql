@@ -33,10 +33,37 @@ create table if not exists ana_report_export_summary (
     comp_result_8_count bigint not null default 0,
     diff_528_field_count bigint not null default 0,
     success_rate numeric(12,8) not null default 0,
+    field_pass_transaction_count bigint not null default 0,
+    comparison_pass_rate numeric(12,8) not null default 0,
+    transaction_issue_count bigint not null default 0,
+    field_issue_count bigint not null default 0,
+    issue_total_count bigint not null default 0,
+    duplicate_issue_count bigint not null default 0,
     created_time timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
     constraint uk_ana_report_export_summary unique (batch_id, module_name)
 );
+
+alter table ana_report_export_summary
+add column if not exists field_pass_transaction_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists comparison_pass_rate numeric(12,8) not null default 0;
+alter table ana_report_export_summary
+add column if not exists transaction_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists field_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists issue_total_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists duplicate_issue_count bigint not null default 0;
+
+comment on column ana_report_export_summary.success_rate is '成功率';
+comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';
+comment on column ana_report_export_summary.comparison_pass_rate is '比对通过率';
+comment on column ana_report_export_summary.transaction_issue_count is '交易级差异总数';
+comment on column ana_report_export_summary.field_issue_count is '字段级差异总数';
+comment on column ana_report_export_summary.issue_total_count is '问题总数';
+comment on column ana_report_export_summary.duplicate_issue_count is '重复问题数';
 
 create index if not exists idx_ana_report_export_command_status
 on ana_report_export_command(status, created_time desc);
