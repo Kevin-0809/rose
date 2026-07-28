@@ -126,6 +126,65 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void persistsExtendedSummaryMetricsForFieldPassProblemsAndDuplicates() {
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC1', '交易一', '支付', '负责人')");
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('OK-FIELD-PASS', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('OK-FIELD-DIFF', '20260728', 2, 1, 'SVC1&soap', '4'),
+                ('FAIL-SAME', '20260728', 3, 1, 'SVC1&soap', '3'),
+                ('FAIL-DIFF', '20260728', 4, 1, 'SVC1&soap', '3'),
+                ('ORIG-FAIL', '20260728', 5, 1, 'SVC1&soap', '1')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp values
+                ('FAIL-SAME', '20260728', 'SVC1&soap', 'E1', 'orig failed', 'E1', 'dest failed'),
+                ('FAIL-DIFF', '20260728', 'SVC1&soap', 'E2', 'orig failed', 'E3', 'dest failed'),
+                ('ORIG-FAIL', '20260728', 'SVC1&soap', 'E4', 'orig failed', '000000000000', 'dest ok')
+                """);
+        jdbc.update("""
+                insert into tss_field_comp values
+                ('OK-FIELD-DIFF', '20260728', 2, 1, 1, 'SVC1&soap', 'Request.amount', '100', 'ignored', '200')
+                """);
+        jdbc.update("""
+                insert into ana_diff_issue(issue_key, issue_level, service_code, tran_code, tran_name, module_name,
+                    transaction_owner, orig_error_code, dest_error_code, normalized_source_field_name,
+                    problem_description, issue_status, first_seen_date, last_seen_date, first_seen_batch_id,
+                    last_seen_batch_id, occurrence_batch_count)
+                values
+                ('TRAN|svc1|e4|000000000000', 'TRANSACTION', 'SVC1', 'T001', '交易一', '支付',
+                    '负责人', 'E4', '000000000000', null, '历史交易问题', 'OPEN',
+                    date '2026-07-20', date '2026-07-20', 'BATCH-OLD', 'BATCH-OLD', 1),
+                ('FIELD|svc1|request.amount', 'FIELD', 'SVC1', 'T001', '交易一', '支付',
+                    '负责人', null, null, 'request.amount', '历史字段问题', 'OPEN',
+                    date '2026-07-20', date '2026-07-20', 'BATCH-OLD', 'BATCH-OLD', 1)
+                """);
+
+        runner.run("BATCH-EXTENDED-SUMMARY", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select sent_transaction_count, comp_result_1_count, comp_result_3_count, comp_result_4_count,
+                       comp_result_8_count, field_pass_transaction_count, transaction_issue_count,
+                       field_issue_count, issue_total_count, duplicate_issue_count, success_rate,
+                       comparison_pass_rate
+                from ana_report_export_summary
+                where batch_id = 'BATCH-EXTENDED-SUMMARY' and module_name = '支付'
+                """);
+        assertThat(summary).containsEntry("sent_transaction_count", 5L)
+                .containsEntry("comp_result_1_count", 1L)
+                .containsEntry("comp_result_3_count", 1L)
+                .containsEntry("comp_result_4_count", 2L)
+                .containsEntry("comp_result_8_count", 1L)
+                .containsEntry("field_pass_transaction_count", 1L)
+                .containsEntry("transaction_issue_count", 3L)
+                .containsEntry("field_issue_count", 1L)
+                .containsEntry("issue_total_count", 4L)
+                .containsEntry("duplicate_issue_count", 2L);
+        assertThat(summary.get("success_rate").toString()).isEqualTo("0.60000000");
+        assertThat(summary.get("comparison_pass_rate").toString()).isEqualTo("0.40000000");
+    }
+
+    @Test
     void classifiesTransactionStatesAndResponseCodes() {
         jdbc.update("""
                 insert into tss_tran_comp values
@@ -315,7 +374,7 @@ class ReportExportBatchRunnerTest {
         jdbc.execute("create table tss_tran_comp (mesg_seq varchar(64), orig_cdate varchar(8), conv_index integer, conv_cindex integer, dest_trcd varchar(200), comp_result varchar(1))");
         jdbc.execute("create table tss_field_comp (mesg_seq varchar(64), orig_cdate varchar(8), conv_index integer, conv_cindex integer, field_index integer, dest_trcd varchar(200), orig_field_name varchar(200), orig_field_value varchar(2000), dest_field_name varchar(200), dest_field_value varchar(2000))");
         jdbc.execute("create table tss_retcode_comp (mesg_seq varchar(64), orig_cdate varchar(8), service_code varchar(200), orig_error_code varchar(64), orig_error_desc varchar(500), dest_error_code varchar(64), dest_error_desc varchar(500))");
-        jdbc.execute("create table ana_report_export_summary (batch_id varchar(64), report_date varchar(8), module_name varchar(100), covered_528_interface_count bigint, sent_transaction_count bigint, comp_result_1_count bigint, comp_result_2_count bigint, comp_result_3_count bigint, comp_result_4_count bigint, comp_result_8_count bigint, success_rate decimal(12,8), diff_528_field_count bigint)");
+        jdbc.execute("create table ana_report_export_summary (batch_id varchar(64), report_date varchar(8), module_name varchar(100), covered_528_interface_count bigint, sent_transaction_count bigint, comp_result_1_count bigint, comp_result_2_count bigint, comp_result_3_count bigint, comp_result_4_count bigint, comp_result_8_count bigint, success_rate decimal(12,8), diff_528_field_count bigint, field_pass_transaction_count bigint, comparison_pass_rate decimal(12,8), transaction_issue_count bigint, field_issue_count bigint, issue_total_count bigint, duplicate_issue_count bigint)");
         jdbc.execute("create table ana_diff_issue (issue_id bigint generated by default as identity primary key, issue_key varchar(600) unique not null, issue_level varchar(16) not null, service_code varchar(200) not null, tran_code varchar(32), tran_name varchar(200), module_name varchar(100), transaction_owner varchar(100), orig_error_code varchar(64), dest_error_code varchar(64), normalized_source_field_name varchar(500), problem_type varchar(100), problem_description varchar(2000), preliminary_analysis varchar(2000), final_solution varchar(2000), issue_status varchar(16) not null, coordination_required varchar(100), resolver varchar(100), resolution_date date, defect_fix_date date, first_seen_date date not null, last_seen_date date not null, first_seen_batch_id varchar(64) not null, last_seen_batch_id varchar(64) not null, occurrence_batch_count bigint not null, created_at timestamp default current_timestamp, updated_at timestamp default current_timestamp)");
         jdbc.execute("create table ana_tran_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), orig_error_code varchar(64), dest_error_code varchar(64), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), orig_error_desc varchar(500), dest_error_desc varchar(500), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), issue_id bigint, issue_key varchar(600), historical_occurrence_count bigint default 0, first_seen_date date, previous_seen_date date, problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), coordination_required varchar(100), resolver varchar(100), resolution_date varchar(8), defect_fix_date varchar(8), constraint uk_ana_tran_diff_tracking_export_batch_issue unique (source_batch_id, service_code, orig_error_code, dest_error_code))");
         jdbc.execute("create table ana_field_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), sop_field_name varchar(200), soap_field_name varchar(200), bizjson_field_name varchar(200), field_cn_name varchar(200), mapping_status varchar(32), orig_field_value varchar(2000), dest_field_value varchar(2000), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), issue_id bigint, issue_key varchar(600), historical_occurrence_count bigint default 0, first_seen_date date, previous_seen_date date, problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), coordination_required varchar(100), resolver varchar(100), resolution_date varchar(8), defect_fix_date varchar(8))");
