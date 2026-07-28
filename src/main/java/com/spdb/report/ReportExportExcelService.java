@@ -80,7 +80,7 @@ public class ReportExportExcelService {
         int lastColumn = current ? 20 : 17;
         Row titleRow = sheet.createRow(startRow);
         titleRow.setHeightInPoints(24f);
-        mergedCell(sheet, startRow, startRow, 0, lastColumn, title, styles.summaryHeader);
+        mergedCell(sheet, startRow, startRow, 0, lastColumn, title, styles.summaryTitleStyle(current));
 
         writeSummaryHeaders(sheet, startRow + 1, current, styles);
 
@@ -100,42 +100,45 @@ public class ReportExportExcelService {
         mainHeader.setHeightInPoints(22f);
         subHeader.setHeightInPoints(22f);
 
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 0, 0, "批次", styles.detailHeader);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 1, 1, "领域", styles.detailHeader);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 2, 2, "覆盖528接口", styles.detailHeader);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 3, 3, "发送交易量", styles.detailHeader);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 4, 8, "交易状态分类统计", styles.detailHeader);
+        CellStyle mainStyle = styles.summaryMainHeaderStyle(current);
+        CellStyle subStyle = styles.summarySubHeaderStyle(current);
+
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 0, 0, "批次", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 1, 1, "领域", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 2, 2, "覆盖528接口", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 3, 3, "发送交易量", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 4, 8, "交易状态分类统计", mainStyle);
 
         String[] statusHeaders = {"528成功/CCBS失败", "528失败/CCBS成功", "二者均失败响应码一致",
                 "二者均失败响应码不一致", "二者均成功"};
         for (int i = 0; i < statusHeaders.length; i++) {
-            cell(subHeader, 4 + i, statusHeaders[i], styles.detailHeader);
+            cell(subHeader, 4 + i, statusHeaders[i], subStyle);
         }
 
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 9, 9, "成功率", styles.detailHeader);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "比对通过率", styles.detailHeader);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "问题总数", styles.detailHeader);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 9, 9, "成功率", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "比对通过率", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "问题总数", mainStyle);
 
         if (current) {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "重复问题", styles.detailHeader);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "重复率", styles.detailHeader);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 14, 14, "上轮问题解决率", styles.detailHeader);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "重复问题", mainStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "重复率", mainStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 14, 14, "上轮问题解决率", mainStyle);
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 15, 19,
-                    "已解决问题分类统计（待验证）", styles.detailHeader);
-            writeSolvedIssueSubHeaders(subHeader, 15, styles);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 20, 20, "问题解决进度", styles.detailHeader);
+                    "已解决问题分类统计（待验证）", mainStyle);
+            writeSolvedIssueSubHeaders(subHeader, 15, subStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 20, 20, "问题解决进度", mainStyle);
         } else {
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 12, 16,
-                    "已解决问题分类统计（待验证）", styles.detailHeader);
-            writeSolvedIssueSubHeaders(subHeader, 12, styles);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 17, 17, "问题解决进度", styles.detailHeader);
+                    "已解决问题分类统计（待验证）", mainStyle);
+            writeSolvedIssueSubHeaders(subHeader, 12, subStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 17, 17, "问题解决进度", mainStyle);
         }
     }
 
-    private void writeSolvedIssueSubHeaders(Row subHeader, int firstColumn, Styles styles) {
+    private void writeSolvedIssueSubHeaders(Row subHeader, int firstColumn, CellStyle style) {
         String[] solvedHeaders = {"迁移问题", "防腐问题", "功能问题", "新核心下线", "其他问题"};
         for (int i = 0; i < solvedHeaders.length; i++) {
-            cell(subHeader, firstColumn + i, solvedHeaders[i], styles.detailHeader);
+            cell(subHeader, firstColumn + i, solvedHeaders[i], style);
         }
     }
 
@@ -412,8 +415,18 @@ public class ReportExportExcelService {
         private static final String TABLE_TEAL = "0E566F";
         private static final String STRIPE_BLUE = "BDE7F4";
         private static final String WHITE = "FFFFFF";
+        private static final String PREVIOUS_TITLE_GREEN = "B7D7C0";
+        private static final String PREVIOUS_MAIN_GREEN = "C6E0B4";
+        private static final String PREVIOUS_SUB_GREEN = "E2F0D9";
+        private static final String CURRENT_TITLE_PINK = "F4CCCC";
+        private static final String CURRENT_HEADER_PINK = "FCE4D6";
         private final CellStyle summaryHeader;
         private final CellStyle detailHeader;
+        private final CellStyle previousSummaryTitle;
+        private final CellStyle previousSummaryMainHeader;
+        private final CellStyle previousSummarySubHeader;
+        private final CellStyle currentSummaryTitle;
+        private final CellStyle currentSummaryHeader;
         private final CellStyle oddBody;
         private final CellStyle evenBody;
         private final CellStyle oddPercent;
@@ -422,6 +435,11 @@ public class ReportExportExcelService {
         private Styles(SXSSFWorkbook book) {
             summaryHeader = headerStyle(book, TITLE_NAVY);
             detailHeader = headerStyle(book, TABLE_TEAL);
+            previousSummaryTitle = headerStyle(book, PREVIOUS_TITLE_GREEN);
+            previousSummaryMainHeader = headerStyle(book, PREVIOUS_MAIN_GREEN);
+            previousSummarySubHeader = headerStyle(book, PREVIOUS_SUB_GREEN);
+            currentSummaryTitle = headerStyle(book, CURRENT_TITLE_PINK);
+            currentSummaryHeader = headerStyle(book, CURRENT_HEADER_PINK);
             oddBody = style(book, STRIPE_BLUE);
             evenBody = style(book, WHITE);
             oddPercent = style(book, STRIPE_BLUE);
@@ -437,6 +455,18 @@ public class ReportExportExcelService {
 
         private CellStyle percentStyle(int oneBasedDataRow) {
             return oneBasedDataRow % 2 == 1 ? oddPercent : evenPercent;
+        }
+
+        private CellStyle summaryTitleStyle(boolean current) {
+            return current ? currentSummaryTitle : previousSummaryTitle;
+        }
+
+        private CellStyle summaryMainHeaderStyle(boolean current) {
+            return current ? currentSummaryHeader : previousSummaryMainHeader;
+        }
+
+        private CellStyle summarySubHeaderStyle(boolean current) {
+            return current ? currentSummaryHeader : previousSummarySubHeader;
         }
 
         private static CellStyle headerStyle(SXSSFWorkbook book, String color) {

@@ -67,8 +67,9 @@ class ReportExportExcelServiceTest {
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             assertThat(workbook.getSheetAt(0).getSheetName()).isEqualTo("汇总信息");
-            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(0), 0, "16365C");
-            assertHeaderStyle(workbook, workbook.getSheetAt(0).getRow(1), 4, "0E566F");
+            assertCellFill(workbook.getSheetAt(0).getRow(0), 0, "B7D7C0");
+            assertCellFill(workbook.getSheetAt(0).getRow(1), 4, "C6E0B4");
+            assertCellFill(workbook.getSheetAt(0).getRow(2), 4, "E2F0D9");
             assertHeaderStyle(workbook, workbook.getSheet("支付").getRow(0), 0, "0E566F");
             assertCellFill(workbook.getSheetAt(0).getRow(8), 0, "BDE7F4");
             assertCellFill(workbook.getSheet("支付").getRow(1), 0, "BDE7F4");
@@ -124,8 +125,14 @@ class ReportExportExcelServiceTest {
             var sheet = workbook.getSheetAt(0);
             assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).contains("上一批次");
             assertMergedRegion(sheet, 0, 0, 0, 17);
+            assertCellFill(sheet.getRow(0), 0, "B7D7C0");
             assertMainHeaders(sheet.getRow(1), false);
+            assertCellFill(sheet.getRow(1), 0, "C6E0B4");
+            assertCellFill(sheet.getRow(1), 4, "C6E0B4");
+            assertCellFill(sheet.getRow(1), 12, "C6E0B4");
             assertSubHeaders(sheet.getRow(2), 4, 12);
+            assertCellFill(sheet.getRow(2), 4, "E2F0D9");
+            assertCellFill(sheet.getRow(2), 12, "E2F0D9");
             assertMergedRegion(sheet, 1, 2, 0, 0);
             assertMergedRegion(sheet, 1, 2, 1, 1);
             assertMergedRegion(sheet, 1, 2, 2, 2);
@@ -164,8 +171,14 @@ class ReportExportExcelServiceTest {
 
             assertThat(sheet.getRow(7).getCell(0).getStringCellValue()).contains("本批次");
             assertMergedRegion(sheet, 7, 7, 0, 20);
+            assertCellFill(sheet.getRow(7), 0, "F4CCCC");
             assertMainHeaders(sheet.getRow(8), true);
+            assertCellFill(sheet.getRow(8), 0, "FCE4D6");
+            assertCellFill(sheet.getRow(8), 4, "FCE4D6");
+            assertCellFill(sheet.getRow(8), 15, "FCE4D6");
             assertSubHeaders(sheet.getRow(9), 4, 15);
+            assertCellFill(sheet.getRow(9), 4, "FCE4D6");
+            assertCellFill(sheet.getRow(9), 15, "FCE4D6");
             assertMergedRegion(sheet, 8, 9, 0, 0);
             assertMergedRegion(sheet, 8, 9, 1, 1);
             assertMergedRegion(sheet, 8, 9, 2, 2);
