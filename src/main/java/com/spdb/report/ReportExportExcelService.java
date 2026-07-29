@@ -507,7 +507,7 @@ public class ReportExportExcelService {
     private String issueSnapshotSql(String dimensionKind) {
         String dimensionExpression;
         if ("resolver".equals(dimensionKind)) {
-            dimensionExpression = "coalesce(nullif(resolver, ''), '未分配')";
+            dimensionExpression = "coalesce(nullif(resolver, ''), nullif(transaction_owner, ''), '未分配')";
         } else {
             dimensionExpression = "coalesce(nullif(module_name, ''), '未归属')";
         }

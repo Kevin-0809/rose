@@ -115,6 +115,7 @@ class ReportExportExcelServiceTest {
         insertIssue("ana_tran_diff_tracking_export", "RPT1", "支付", "T1", "张三", "ISSUE-A", 1, LocalDate.parse("2026-07-27"));
         insertIssue("ana_field_diff_tracking_export", "RPT1", "支付", "T1", "张三", "ISSUE-E", 4, LocalDate.parse("2026-07-23"));
         insertIssue("ana_tran_diff_tracking_export", "RPT1", "贷款", "T2", "李四", "ISSUE-F", 2, LocalDate.parse("2026-07-25"));
+        insertIssue("ana_tran_diff_tracking_export", "RPT1", "贷款", "T5", null, "王五", "ISSUE-G", 0, LocalDate.parse("2026-07-28"));
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         service.stream("RPT1", output);
@@ -135,6 +136,9 @@ class ReportExportExcelServiceTest {
             Row zhangSanRepeat = findRow(sheet, repeatHeader.getRowNum() + 1, "张三");
             assertThat(zhangSanRepeat.getCell(5).getStringCellValue()).isEqualTo("1");
             assertThat(zhangSanRepeat.getCell(8).getStringCellValue()).isEqualTo("1");
+            Row ownerFallback = findRow(sheet, 5, "王五");
+            assertThat(ownerFallback.getCell(1).getStringCellValue()).isEqualTo("1");
+            assertThat(ownerFallback.getCell(2).getStringCellValue()).isEqualTo("1");
         }
     }
 
@@ -392,11 +396,16 @@ class ReportExportExcelServiceTest {
 
     private void insertIssue(String table, String batchId, String module, String tranCode, String resolver,
                              String issueKey, long historicalCount, LocalDate firstSeenDate) {
+        insertIssue(table, batchId, module, tranCode, resolver, resolver, issueKey, historicalCount, firstSeenDate);
+    }
+
+    private void insertIssue(String table, String batchId, String module, String tranCode, String resolver,
+                             String transactionOwner, String issueKey, long historicalCount, LocalDate firstSeenDate) {
         jdbc.update("insert into " + table + "(source_batch_id,module_name,row_no,issue_id,issue_key,tran_code,tran_name,"
-                        + "problem_description,resolver,historical_occurrence_count,first_seen_date) "
-                        + "values (?,?,?,?,?,?,?,?,?,?,?)",
+                        + "problem_description,transaction_owner,resolver,historical_occurrence_count,first_seen_date) "
+                        + "values (?,?,?,?,?,?,?,?,?,?,?,?)",
                 batchId, module, 1L, Math.abs(issueKey.hashCode()), issueKey, tranCode, "交易", "问题",
-                resolver, historicalCount, firstSeenDate);
+                transactionOwner, resolver, historicalCount, firstSeenDate);
     }
 
     private static Row findRow(Sheet sheet, int fromRow, String firstCellValue) {
