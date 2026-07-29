@@ -134,11 +134,11 @@ class ReportExportExcelServiceTest {
             assertCellFill(sheet.getRow(1), 4, "C6E0B4");
             assertCellFill(sheet.getRow(1), 11, "FFF2CC");
             assertCellFontColor(workbook, sheet.getRow(1), 11, (short) 8);
-            assertCellFill(sheet.getRow(1), 12, "FFF2CC");
-            assertCellFill(sheet.getRow(1), 17, "FFF2CC");
+            assertCellFill(sheet.getRow(1), 12, "FFF8E1");
+            assertCellFill(sheet.getRow(1), 17, "FFF8E1");
             assertSubHeaders(sheet.getRow(2), 4, 12);
             assertCellFill(sheet.getRow(2), 4, "E2F0D9");
-            assertCellFill(sheet.getRow(2), 12, "FFF2CC");
+            assertCellFill(sheet.getRow(2), 12, "FFF8E1");
             assertMergedRegion(sheet, 1, 2, 0, 0);
             assertMergedRegion(sheet, 1, 2, 1, 1);
             assertMergedRegion(sheet, 1, 2, 2, 2);
@@ -164,6 +164,7 @@ class ReportExportExcelServiceTest {
             assertPercentCell(sheet.getRow(3), 10, 0.7d);
             assertThat(sheet.getRow(3).getCell(11).getStringCellValue()).isEqualTo("15");
             assertBlankCells(sheet.getRow(3), 12, 17);
+            assertCellFill(sheet.getRow(3), 12, "FFF8E1");
 
             assertThat(sheet.getRow(4).getCell(1).getStringCellValue()).isEqualTo("贷款");
             assertCellFill(sheet.getRow(4), 0, "FFFFFF");
@@ -180,7 +181,7 @@ class ReportExportExcelServiceTest {
 
             assertThat(sheet.getRow(7).getCell(0).getStringCellValue())
                     .isEqualTo("批次号：RPT20260728-132831-6664（本批次）");
-            assertMergedRegion(sheet, 7, 7, 0, 20);
+            assertMergedRegion(sheet, 7, 7, 0, 19);
             assertCellFill(sheet.getRow(7), 0, "F4CCCC");
             assertMainHeaders(sheet.getRow(8), true);
             assertCellFill(sheet.getRow(8), 0, "FCE4D6");
@@ -188,12 +189,11 @@ class ReportExportExcelServiceTest {
             assertCellFill(sheet.getRow(8), 11, "FFF2CC");
             assertCellFill(sheet.getRow(8), 12, "FFF2CC");
             assertCellFill(sheet.getRow(8), 13, "FFF2CC");
-            assertCellFill(sheet.getRow(8), 14, "FFF2CC");
-            assertCellFill(sheet.getRow(8), 15, "FFF2CC");
-            assertCellFill(sheet.getRow(8), 20, "FFF2CC");
-            assertSubHeaders(sheet.getRow(9), 4, 15);
+            assertCellFill(sheet.getRow(8), 14, "FFF8E1");
+            assertCellFill(sheet.getRow(8), 19, "FFF8E1");
+            assertSubHeaders(sheet.getRow(9), 4, 14);
             assertCellFill(sheet.getRow(9), 4, "FCE4D6");
-            assertCellFill(sheet.getRow(9), 15, "FFF2CC");
+            assertCellFill(sheet.getRow(9), 14, "FFF8E1");
             assertMergedRegion(sheet, 8, 9, 0, 0);
             assertMergedRegion(sheet, 8, 9, 1, 1);
             assertMergedRegion(sheet, 8, 9, 2, 2);
@@ -204,18 +204,17 @@ class ReportExportExcelServiceTest {
             assertMergedRegion(sheet, 8, 9, 11, 11);
             assertMergedRegion(sheet, 8, 9, 12, 12);
             assertMergedRegion(sheet, 8, 9, 13, 13);
-            assertMergedRegion(sheet, 8, 9, 14, 14);
-            assertMergedRegion(sheet, 8, 8, 15, 19);
-            assertMergedRegion(sheet, 8, 9, 20, 20);
+            assertMergedRegion(sheet, 8, 8, 14, 18);
+            assertMergedRegion(sheet, 8, 9, 19, 19);
 
             assertThat(sheet.getRow(10).getCell(0).getStringCellValue()).isEqualTo("RPT20260728-132831-6664");
             assertCellFill(sheet.getRow(10), 0, "FFFFFF");
             assertThat(sheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("支付");
             assertThat(sheet.getRow(10).getCell(11).getStringCellValue()).isEqualTo("9");
             assertThat(sheet.getRow(10).getCell(12).getStringCellValue()).isEqualTo("3");
-            assertPercentCell(sheet.getRow(10), 13, 3d / 9d);
-            assertPercentCell(sheet.getRow(10), 14, 12d / 15d);
-            assertBlankCells(sheet.getRow(10), 15, 20);
+            assertPercentCell(sheet.getRow(10), 13, 12d / 15d);
+            assertBlankCells(sheet.getRow(10), 14, 19);
+            assertCellFill(sheet.getRow(10), 14, "FFF8E1");
 
             assertThat(sheet.getRow(11).getCell(1).getStringCellValue()).isEqualTo("合计");
             assertCellFill(sheet.getRow(11), 0, "F8F3F0");
@@ -223,9 +222,8 @@ class ReportExportExcelServiceTest {
             assertThat(sheet.getRow(11).getCell(12).getStringCellValue()).isEqualTo("3");
             assertPercentCell(sheet.getRow(11), 9, 0.7d);
             assertPercentCell(sheet.getRow(11), 10, 0.7d);
-            assertPercentCell(sheet.getRow(11), 13, 3d / 9d);
-            assertPercentCell(sheet.getRow(11), 14, 17d / 20d);
-            assertBlankCells(sheet.getRow(11), 15, 20);
+            assertPercentCell(sheet.getRow(11), 13, 17d / 20d);
+            assertBlankCells(sheet.getRow(11), 14, 19);
         }
     }
 
@@ -263,10 +261,9 @@ class ReportExportExcelServiceTest {
         assertThat(row.getCell(11).getStringCellValue()).isEqualTo("问题总数");
         if (current) {
             assertThat(row.getCell(12).getStringCellValue()).isEqualTo("重复问题");
-            assertThat(row.getCell(13).getStringCellValue()).isEqualTo("重复率");
-            assertThat(row.getCell(14).getStringCellValue()).isEqualTo("上轮问题解决率");
-            assertThat(row.getCell(15).getStringCellValue()).isEqualTo("已解决问题分类统计（待验证）");
-            assertThat(row.getCell(20).getStringCellValue()).isEqualTo("问题解决进度");
+            assertThat(row.getCell(13).getStringCellValue()).isEqualTo("上轮问题解决率");
+            assertThat(row.getCell(14).getStringCellValue()).isEqualTo("已解决问题分类统计（待验证）");
+            assertThat(row.getCell(19).getStringCellValue()).isEqualTo("问题解决进度");
         } else {
             assertThat(row.getCell(12).getStringCellValue()).isEqualTo("已解决问题分类统计（待验证）");
             assertThat(row.getCell(17).getStringCellValue()).isEqualTo("问题解决进度");
