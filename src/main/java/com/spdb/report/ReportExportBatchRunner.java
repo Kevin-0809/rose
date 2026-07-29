@@ -1,5 +1,7 @@
 package com.spdb.report;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -37,6 +39,7 @@ import java.util.TreeSet;
 /** Materializes one report-export batch from the current replay comparison tables. */
 @Component
 public class ReportExportBatchRunner {
+    private static final Logger log = LoggerFactory.getLogger(ReportExportBatchRunner.class);
     private static final String UNCONFIGURED_MODULE = "未配置领域";
 
     private static final int TRANSACTION_FETCH_SIZE = 500;
@@ -66,22 +69,39 @@ public class ReportExportBatchRunner {
     }
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime, Consumer<ReportExportStage> stageConsumer) {
+        long started = System.nanoTime();
+        log.info("报表明细生成开始，batchId={}, reportDate={}, exportTime={}", batchId, reportDate, exportTime);
         try {
+            log.info("报表明细旧数据清理开始，batchId={}", batchId);
             cleanupBatchArtifacts(batchId);
+            log.info("报表明细旧数据清理完成，batchId={}", batchId);
             SourceData source = transactionTemplate.execute(status -> sourceData());
+            log.info("报表明细源数据加载完成，batchId={}, catalogCount={}, fieldMappingCount={}, transactionCount={}, fieldCount={}, retcodeCount={}",
+                    batchId, source.catalogs().size(), source.fieldMappings().size(), source.transactions().size(),
+                    source.fields().size(), source.retcodes().size());
             stageConsumer.accept(ReportExportStage.TRANSACTION_DETAILS);
+            log.info("报表明细交易明细生成开始，batchId={}", batchId);
             streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs());
+            log.info("报表明细交易明细生成完成，batchId={}", batchId);
             transactionTemplate.executeWithoutResult(status -> {
                 stageConsumer.accept(ReportExportStage.FIELD_DETAILS);
+                log.info("报表明细字段明细生成开始，batchId={}", batchId);
                 insertFieldDetails(batchId, reportDate, exportTime, source.fields(), source.catalogs(), source.fieldMappings());
+                log.info("报表明细字段明细生成完成，batchId={}", batchId);
                 stageConsumer.accept(ReportExportStage.SUMMARY);
+                log.info("报表明细汇总生成开始，batchId={}", batchId);
                 insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
+                log.info("报表明细汇总生成完成，batchId={}", batchId);
             });
             transactionTemplate.executeWithoutResult(status -> {
+                log.info("报表明细问题台账物化开始，batchId={}", batchId);
                 issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
                 updateSummaryIssueMetrics(batchId);
+                log.info("报表明细问题台账物化完成，batchId={}", batchId);
             });
+            log.info("报表明细生成完成，batchId={}, elapsedMs={}", batchId, elapsedMs(started));
         } catch (RuntimeException exception) {
+            log.error("报表明细生成失败，batchId={}, elapsedMs={}", batchId, elapsedMs(started), exception);
             cleanupBatchArtifacts(batchId);
             throw exception;
         }
@@ -437,6 +457,7 @@ public class ReportExportBatchRunner {
     private static String transactionIdentity(String mesgSeq, String origCdate, int convIndex, int convCindex) { return text(mesgSeq) + "|" + text(origCdate) + "|" + convIndex + "|" + convCindex; }
     private static <T> Set<T> union(Set<T> first, Set<T> second) { Set<T> result = new TreeSet<>(); result.addAll(first); result.addAll(second); return result; }
     private static MapSqlParameterSource params(String batchId, String reportDate) { return new MapSqlParameterSource("batchId", batchId).addValue("reportDate", reportDate); }
+    private static long elapsedMs(long started) { return (System.nanoTime() - started) / 1_000_000L; }
 
     private record Catalog(String tranCode, String tranName, String moduleName, String owner) {}
     private record FieldMapping(String tranCode, String serviceCode, String sopFieldName, String soapFieldName, String bizjsonFieldName, String fieldCnName) {}

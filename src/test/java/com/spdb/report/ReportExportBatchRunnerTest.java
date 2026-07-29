@@ -1,7 +1,12 @@
 package com.spdb.report;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -29,6 +34,38 @@ class ReportExportBatchRunnerTest {
         jdbc = new JdbcTemplate(dataSource);
         runner = new ReportExportBatchRunner(new NamedParameterJdbcTemplate(dataSource), new JdbcTransactionManager(dataSource));
         createSchema();
+    }
+
+    @Test
+    void runLogsGenerationProgress() {
+        ListAppender<ILoggingEvent> appender = attachAppender();
+        try {
+            runner.run("BATCH-LOG", "20260729", LocalDateTime.of(2026, 7, 29, 10, 0));
+        } finally {
+            detachAppender(appender);
+        }
+
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage())
+                    .contains("报表明细生成开始")
+                    .contains("batchId=BATCH-LOG")
+                    .contains("reportDate=20260729");
+        });
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage())
+                    .contains("报表明细源数据加载完成")
+                    .contains("catalogCount=")
+                    .contains("transactionCount=");
+        });
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage())
+                    .contains("报表明细生成完成")
+                    .contains("batchId=BATCH-LOG")
+                    .contains("elapsedMs=");
+        });
     }
 
     @Test
@@ -398,6 +435,19 @@ class ReportExportBatchRunnerTest {
                 .containsEntry("last_seen_batch_id", "BATCH-OLD");
         assertThat(jdbc.queryForObject("select count(*) from ana_report_export_summary where batch_id = 'BATCH-ROLLBACK'", Long.class)).isZero();
         assertThat(jdbc.queryForObject("select count(*) from ana_tran_diff_tracking_export where source_batch_id = 'BATCH-ROLLBACK'", Long.class)).isZero();
+    }
+
+    private ListAppender<ILoggingEvent> attachAppender() {
+        Logger logger = (Logger) LoggerFactory.getLogger(ReportExportBatchRunner.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        return appender;
+    }
+
+    private void detachAppender(ListAppender<ILoggingEvent> appender) {
+        Logger logger = (Logger) LoggerFactory.getLogger(ReportExportBatchRunner.class);
+        logger.detachAppender(appender);
     }
 
     private void createSchema() {

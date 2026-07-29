@@ -107,6 +107,11 @@ public class ReportExportController {
 
     @GetMapping("/report-exports/{batchId}/excel")
     public void download(@PathVariable String batchId, HttpServletResponse response) throws IOException {
+        downloadDaily(batchId, response);
+    }
+
+    @GetMapping("/report-exports/{batchId}/daily")
+    public void downloadDaily(@PathVariable String batchId, HttpServletResponse response) throws IOException {
         ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
         if (command == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到导出批次");
@@ -120,9 +125,20 @@ public class ReportExportController {
         reportExportExcelService.stream(batchId, response.getOutputStream());
     }
 
+    @GetMapping("/report-exports/{batchId}/weekly")
+    public void downloadWeekly(@PathVariable String batchId, HttpServletResponse response) throws IOException {
+        ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
+        if (command == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到导出批次");
+        if (!"SUCCEEDED".equals(command.status())) throw new ResponseStatusException(HttpStatus.CONFLICT, "批次尚未完成");
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", ContentDisposition.attachment()
+                .filename("周期周报-" + EXPORT_FILENAME_TIME.format(LocalDateTime.now(clock)) + ".xlsx", StandardCharsets.UTF_8).build().toString());
+        reportExportExcelService.streamWeekly(batchId, response.getOutputStream());
+    }
+
     private String exportFilename() {
         LocalDateTime time = LocalDateTime.now(clock);
-        return "回放报表明细-" + EXPORT_FILENAME_TIME.format(time) + ".xlsx";
+        return "日报明细-" + EXPORT_FILENAME_TIME.format(time) + ".xlsx";
     }
 
     public record ReportExportProgressResponse(String status, String currentStage, List<ReportExportStageView> stageViews) {}

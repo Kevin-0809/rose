@@ -39,11 +39,10 @@
 
       <section class="panel table-wrap command-table-wrap">
         <table class="command-table report-export-command-table">
-          <thead><tr><th class="col-batch">批次号</th><th class="col-date">业务日期</th><th class="col-status">状态</th><th class="col-progress">执行进度</th><th class="col-time">创建时间</th><th class="col-time">开始时间</th><th class="col-time">结束时间</th><th class="col-error">失败原因</th><th class="col-actions">操作</th></tr></thead>
+          <thead><tr><th class="col-batch">批次号</th><th class="col-status">状态</th><th class="col-progress">执行进度</th><th class="col-time">开始时间</th><th class="col-time">结束时间</th><th class="col-error">失败原因</th><th class="col-actions">操作</th></tr></thead>
           <tbody>
           <tr th:each="row : ${result.rows()}" th:with="stages=${stageViewsByBatchId.get(row.batchId())}">
             <td class="col-batch" th:title="${row.batchId()}"><span class="cell-clip" th:text="${row.batchId()}"></span></td>
-            <td class="col-date" th:text="${row.reportDate()}"></td>
             <td class="col-status"><span class="tag" th:classappend="${row.status() == 'SUCCEEDED'} ? 'green' : (${row.status() == 'FAILED'} ? 'yellow' : '')" th:text="${row.status()}"></span></td>
             <td class="col-progress">
               <ol class="report-stage-list report-stage-list-compact" th:attr="aria-label=${'批次 ' + row.batchId() + ' 的执行阶段'}">
@@ -54,13 +53,12 @@
                 </li>
               </ol>
             </td>
-            <td class="col-time" th:text="${row.createdTime()}"></td>
             <td class="col-time" th:text="${row.startedTime()}"></td>
             <td class="col-time" th:title="${row.endedTime()}" th:text="${row.endedTime()}"></td>
             <td class="col-error" th:title="${row.errorMessage()}"><span class="cell-clip" th:text="${row.errorMessage()}"></span></td>
-            <td class="col-actions command-actions"><a class="btn" th:href="@{/report-exports/{batchId}(batchId=${row.batchId()})}">查看结果</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/excel(batchId=${row.batchId()})}">导出 Excel</a></td>
+            <td class="col-actions command-actions"><a class="btn" th:href="@{/report-exports/{batchId}(batchId=${row.batchId()})}">查看结果</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/daily(batchId=${row.batchId()})}">导出日报</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/weekly(batchId=${row.batchId()})}">导出周报</a></td>
           </tr>
-          <tr th:if="${result.rows().isEmpty()}"><td colspan="9" class="muted">未找到匹配的导出批次。</td></tr>
+          <tr th:if="${result.rows().isEmpty()}"><td colspan="7" class="muted">未找到匹配的导出批次。</td></tr>
           </tbody>
         </table>
       </section>

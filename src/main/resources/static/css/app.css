@@ -1023,6 +1023,18 @@ td {
 
 .report-export-command-table .col-progress { width: 160px; }
 
+.report-export-command-table {
+  min-width: 0;
+}
+
+.report-export-command-table-wrap {
+  overflow-x: hidden;
+}
+
+.report-export-command-table .col-actions {
+  width: 260px;
+}
+
 .report-export-command-table .col-error .cell-clip { -webkit-line-clamp: 2; }
 
 .report-stage-list-compact { gap: 3px; margin: 0; max-width: none; }

@@ -46,7 +46,7 @@
       <section class="panel table-wrap" th:if="${command != null and command.status() == 'SUCCEEDED'}">
         <div class="page-head compact-head">
           <h2>汇总报表</h2>
-          <a class="btn" th:href="@{/report-exports/{batchId}/excel(batchId=${command.batchId()})}">下载 Excel</a>
+          <a class="btn" th:href="@{/report-exports/{batchId}/daily(batchId=${command.batchId()})}">导出日报</a>
         </div>
         <table>
           <thead>
