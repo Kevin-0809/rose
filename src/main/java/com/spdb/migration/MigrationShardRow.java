@@ -9,6 +9,7 @@ public record MigrationShardRow(
         long migratedRows,
         long skippedRows,
         long droppedRows,
+        Integer actualLookbackDays,
         int attempts,
         long durationSeconds,
         String errorMessage
@@ -25,7 +26,7 @@ public record MigrationShardRow(
             long durationSeconds,
             String errorMessage
     ) {
-        this(shardSeq, null, timeFrom, timeTo, status, migratedRows, skippedRows, droppedRows, attempts,
+        this(shardSeq, null, timeFrom, timeTo, status, migratedRows, skippedRows, droppedRows, null, attempts,
                 durationSeconds, errorMessage);
     }
 }

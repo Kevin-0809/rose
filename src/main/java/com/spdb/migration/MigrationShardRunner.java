@@ -131,21 +131,22 @@ public class MigrationShardRunner {
         if (maxRowsPerMessageType <= 0) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=sample size is not positive",
                     shardId, tranCode);
-            return new MigrationShardResult(0L, 0L, 0L);
+            return new MigrationShardResult(0L, 0L, 0L, 0);
         }
         if (lookbackDays <= 0) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=lookback days is not positive",
                     shardId, tranCode);
-            return new MigrationShardResult(0L, 0L, 0L);
+            return new MigrationShardResult(0L, 0L, 0L, 0);
         }
         List<String> serviceCodes = loadServiceCodes(tranCode);
         if (serviceCodes.isEmpty()) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=no service code mapping",
                     shardId, tranCode);
-            return new MigrationShardResult(0L, 0L, 0L);
+            return new MigrationShardResult(0L, 0L, 0L, 0);
         }
 
         BatchResult total = new BatchResult();
+        int actualLookbackDays = 0;
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
         long currentTime = clock.instant().toEpochMilli();
         log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
@@ -156,6 +157,7 @@ public class MigrationShardRunner {
                     .distinct()
                     .toList();
             int effectiveLookbackDays = effectiveLookbackDays(txnCodes, lookbackDays, currentDate);
+            actualLookbackDays = Math.max(actualLookbackDays, effectiveLookbackDays);
             long migratedRows = 0L;
             for (int dayOffset = 0; dayOffset < effectiveLookbackDays && migratedRows < maxRowsPerMessageType; dayOffset++) {
                 long dayFrom = currentDate.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
@@ -183,7 +185,7 @@ public class MigrationShardRunner {
         }
         log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}",
                 shardId, tranCode, total.migratedRows, total.skippedRows);
-        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L);
+        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, actualLookbackDays);
     }
 
     private List<String> loadServiceCodes(String tranCode) {

@@ -42,6 +42,7 @@ class MigrationProgressTemplateTest {
         assertThat(html).contains("#strings.replace(progress.tranCodes, ',', ', ')");
         assertThat(html).contains("${progress.sampleSize}");
         assertThat(html).contains("${shard.tranCode}");
+        assertThat(html).contains("${shard.actualLookbackDays == null ? '-' : shard.actualLookbackDays}");
         assertThat(html).contains("migration-tran-codes");
         assertThat(html).contains("#strings.replace(progress.tranCodes, ',', ', ')");
     }

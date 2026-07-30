@@ -109,7 +109,7 @@ public class MigrationBatchRunner {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             }
             if ("TRAN_CODE".equals(command.commandType()) && isEmpty(result)) {
-                commandService.markShardSkipped(shardId);
+                commandService.markShardSkipped(shardId, result);
                 log.info("Migration shard skipped, commandId={}, shardId={}, shardSeq={}, reason=no eligible complete pairs",
                         commandId, shardId, shard.shardSeq());
             } else {

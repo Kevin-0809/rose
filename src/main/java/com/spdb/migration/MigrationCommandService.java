@@ -261,39 +261,47 @@ public class MigrationCommandService {
     }
 
     void markShardCompleted(long shardId, long migratedRows, long skippedRows, long droppedRows) {
+        markShardCompleted(shardId, new MigrationShardResult(migratedRows, skippedRows, droppedRows));
+    }
+
+    void markShardCompleted(long shardId, MigrationShardResult result) {
         jdbc.update("""
                 update ana_migration_shard
                    set status = 'COMPLETED',
                        migrated_rows = :migratedRows,
                        skipped_rows = :skippedRows,
                        dropped_rows = :droppedRows,
+                       actual_lookback_days = :actualLookbackDays,
                        ended_time = current_timestamp,
                        error_message = null,
                        updated_at = current_timestamp
                  where shard_id = :shardId
                 """, new MapSqlParameterSource()
                 .addValue("shardId", shardId)
-                .addValue("migratedRows", migratedRows)
-                .addValue("skippedRows", skippedRows)
-                .addValue("droppedRows", droppedRows));
-    }
-
-    void markShardCompleted(long shardId, MigrationShardResult result) {
-        markShardCompleted(shardId, result.migratedRows(), result.skippedRows(), result.droppedRows());
+                .addValue("migratedRows", result.migratedRows())
+                .addValue("skippedRows", result.skippedRows())
+                .addValue("droppedRows", result.droppedRows())
+                .addValue("actualLookbackDays", result.actualLookbackDays()));
     }
 
     void markShardSkipped(long shardId) {
+        markShardSkipped(shardId, null);
+    }
+
+    void markShardSkipped(long shardId, MigrationShardResult result) {
         jdbc.update("""
                 update ana_migration_shard
                    set status = 'SKIPPED',
                        migrated_rows = 0,
                        skipped_rows = 0,
                        dropped_rows = 0,
+                       actual_lookback_days = :actualLookbackDays,
                        ended_time = current_timestamp,
                        error_message = null,
                        updated_at = current_timestamp
                  where shard_id = :shardId
-                """, new MapSqlParameterSource("shardId", shardId));
+                """, new MapSqlParameterSource("shardId", shardId)
+                .addValue("actualLookbackDays", result == null ? null : result.actualLookbackDays()));
     }
 
     void markShardFailed(long shardId, String errorMessage) {
@@ -631,6 +639,7 @@ public class MigrationCommandService {
                 rs.getLong("migrated_rows"),
                 rs.getLong("skipped_rows"),
                 rs.getLong("dropped_rows"),
+                rs.getObject("actual_lookback_days", Integer.class),
                 rs.getInt("attempts"),
                 durationSeconds(rs.getTimestamp("started_time"), rs.getTimestamp("ended_time")),
                 rs.getString("error_message")

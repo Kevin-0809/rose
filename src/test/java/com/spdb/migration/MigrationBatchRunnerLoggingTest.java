@@ -84,6 +84,7 @@ class MigrationBatchRunnerLoggingTest {
                     migrated_rows bigint not null default 0,
                     skipped_rows bigint not null default 0,
                     dropped_rows bigint not null default 0,
+                    actual_lookback_days integer,
                     error_message varchar(2000),
                     attempts integer not null default 0,
                     created_time timestamp default current_timestamp,

@@ -79,6 +79,7 @@ class MigrationCommandServiceTest {
                     migrated_rows bigint not null default 0,
                     skipped_rows bigint not null default 0,
                     dropped_rows bigint not null default 0,
+                    actual_lookback_days integer,
                     error_message varchar(2000),
                     attempts integer not null default 0,
                     created_time timestamp default current_timestamp,
@@ -471,12 +472,13 @@ class MigrationCommandServiceTest {
         assertThat(service.shard(firstShardId).status()).isEqualTo("RUNNING");
         assertThat(service.shard(firstShardId).attempts()).isEqualTo(1);
 
-        service.markShardCompleted(firstShardId, 10L, 2L, 1L);
+        service.markShardCompleted(firstShardId, new MigrationShardResult(10L, 2L, 1L, 7));
         MigrationShardRow completedShard = service.shard(firstShardId);
         assertThat(completedShard.status()).isEqualTo("COMPLETED");
         assertThat(completedShard.migratedRows()).isEqualTo(10L);
         assertThat(completedShard.skippedRows()).isEqualTo(2L);
         assertThat(completedShard.droppedRows()).isEqualTo(1L);
+        assertThat(completedShard.actualLookbackDays()).isEqualTo(7);
 
         assertThat(service.tryStartShard(secondShardId)).isTrue();
         service.markShardFailed(secondShardId, "boom");

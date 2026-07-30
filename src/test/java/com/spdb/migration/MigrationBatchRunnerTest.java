@@ -91,6 +91,7 @@ class MigrationBatchRunnerTest {
                     migrated_rows bigint not null default 0,
                     skipped_rows bigint not null default 0,
                     dropped_rows bigint not null default 0,
+                    actual_lookback_days integer,
                     error_message varchar(2000),
                     attempts integer not null default 0,
                     created_time timestamp default current_timestamp,
@@ -185,7 +186,7 @@ class MigrationBatchRunnerTest {
         ));
         Long shardId = shardIds(commandId).get(0);
         when(shardRunner.runTranCode(shardId, "TRAN001", 3, 5))
-                .thenReturn(new MigrationShardResult(0L, 0L, 0L));
+                .thenReturn(new MigrationShardResult(0L, 0L, 0L, 5));
 
         batchRunner.run(commandId);
 
@@ -193,6 +194,7 @@ class MigrationBatchRunnerTest {
         assertThat(progress.status()).isEqualTo("COMPLETED");
         assertThat(progress.completedShardCount()).isEqualTo(1L);
         assertThat(progress.shards()).extracting(MigrationShardRow::status).containsExactly("SKIPPED");
+        assertThat(progress.shards()).extracting(MigrationShardRow::actualLookbackDays).containsExactly(5);
         verify(shardRunner).runTranCode(shardId, "TRAN001", 3, 5);
         verify(shardRunner, never()).run(anyLong(), anyLong(), anyLong(), anyInt());
         verify(shardRunner, never()).runSql(anyLong(), org.mockito.ArgumentMatchers.anyString(), anyInt());

@@ -178,6 +178,7 @@ class MigrationShardRunnerTest {
         assertThat(result.migratedRows()).isEqualTo(6L);
         assertThat(result.skippedRows()).isZero();
         assertThat(result.droppedRows()).isZero();
+        assertThat(result.actualLookbackDays()).isEqualTo(5);
         assertThat(targetExists("msg_flow_log_response", "10.0.1.1", "BZ-TODAY")).isTrue();
         assertThat(targetExists("msg_flow_log_response", "10.0.1.2", "BZ-YESTERDAY-NEW")).isTrue();
         assertThat(targetExists("msg_flow_log_response", "10.0.1.3", "BZ-YESTERDAY-OLD")).isFalse();
@@ -197,8 +198,8 @@ class MigrationShardRunnerTest {
         MigrationShardResult missingService = runnerWithFixedClock().runTranCode(11L, "UNKNOWN", 3);
         MigrationShardResult noCompletePair = runnerWithFixedClock().runTranCode(12L, "TRAN002", 3);
 
-        assertThat(missingService).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
-        assertThat(noCompletePair).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
+        assertThat(missingService).isEqualTo(new MigrationShardResult(0L, 0L, 0L, 0));
+        assertThat(noCompletePair).isEqualTo(new MigrationShardResult(0L, 0L, 0L, 5));
         assertThat(targetCount("msg_flow_log_request")).isZero();
         assertThat(targetCount("msg_flow_log_response")).isZero();
     }
@@ -218,6 +219,7 @@ class MigrationShardRunnerTest {
 
         assertThat(result.migratedRows()).isEqualTo(2L);
         assertThat(result.skippedRows()).isEqualTo(1L);
+        assertThat(result.actualLookbackDays()).isEqualTo(5);
         assertThat(targetExists("msg_flow_log_response", "10.0.5.2", "BZ-TODAY-NEW")).isTrue();
         assertThat(targetExists("msg_flow_log_response", "10.0.5.3", "BZ-YESTERDAY-NEW")).isTrue();
     }
@@ -232,7 +234,7 @@ class MigrationShardRunnerTest {
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(14L, "TRAN004", 1);
 
-        assertThat(result).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
+        assertThat(result).isEqualTo(new MigrationShardResult(0L, 0L, 0L, 5));
         assertThat(targetCount("msg_flow_log_request")).isZero();
         assertThat(targetCount("msg_flow_log_response")).isZero();
     }
@@ -253,6 +255,7 @@ class MigrationShardRunnerTest {
         );
 
         assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(result.actualLookbackDays()).isEqualTo(21);
         assertThat(targetExists("msg_flow_log_response", "10.0.10.2", "BZ-HISTORICAL")).isTrue();
     }
 
@@ -266,6 +269,7 @@ class MigrationShardRunnerTest {
         MigrationShardResult result = runnerWithFixedClock().runTranCode(15L, "TRAN005", 1);
 
         assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(result.actualLookbackDays()).isEqualTo(5);
         assertThat(targetExists("msg_flow_log_response", "10.0.7.1", "FUTURE")).isFalse();
         assertThat(targetExists("msg_flow_log_response", "10.0.7.2", "CURRENT")).isTrue();
     }

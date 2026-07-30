@@ -592,6 +592,7 @@ create table if not exists ana_migration_shard (
     migrated_rows bigint not null default 0,
     skipped_rows bigint not null default 0,
     dropped_rows bigint not null default 0,
+    actual_lookback_days integer,
     error_message varchar(2000),
     attempts integer not null default 0,
     created_time timestamp not null default current_timestamp,
@@ -603,6 +604,9 @@ create table if not exists ana_migration_shard (
 
 alter table ana_migration_shard
 add column if not exists tran_code varchar(32);
+
+alter table ana_migration_shard
+add column if not exists actual_lookback_days integer;
 
 alter table ana_migration_shard drop constraint if exists ck_ana_migration_shard_status;
 alter table ana_migration_shard add constraint ck_ana_migration_shard_status

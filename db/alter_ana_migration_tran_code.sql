@@ -19,6 +19,9 @@ where command_type = 'TRAN_CODE'
 alter table tss.ana_migration_shard
     add column if not exists tran_code varchar(32);
 
+alter table tss.ana_migration_shard
+    add column if not exists actual_lookback_days integer;
+
 alter table tss.ana_migration_command
     drop constraint if exists ck_ana_migration_command_type;
 
