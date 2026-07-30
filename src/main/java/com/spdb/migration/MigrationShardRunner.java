@@ -33,7 +33,7 @@ public class MigrationShardRunner {
     private static final Logger log = LoggerFactory.getLogger(MigrationShardRunner.class);
     private static final int MAX_TARGET_CHUNK_SIZE = 500;
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
-    private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap");
+    private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap", "sop2cbsp");
     private static final String SOURCE_QUERY = """
             with filtered_response as (
                 select source_ip, trans_id, txn_code, response_time, message_type,

@@ -220,6 +220,19 @@ class MigrationShardRunnerTest {
     }
 
     @Test
+    void tranCodeMigrationIncludesSop2cbspMessageType() {
+        insertServiceCode("TRANCBSP", "ABC.DEF");
+        long today = dayStartMillis(0);
+        insertSourcePair("10.0.9.2", "SOP2CBSP", "ABCDEF&sop2cbsp", today, today + 1_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(19L, "TRANCBSP", 1);
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetTxnCode("msg_flow_log_request", "10.0.9.2", "SOP2CBSP")).isEqualTo("ABCDEF&sop2cbsp");
+        assertThat(targetTxnCode("msg_flow_log_response", "10.0.9.2", "SOP2CBSP")).isEqualTo("ABCDEF&sop2cbsp");
+    }
+
+    @Test
     void tranCodeMigrationReturnsZeroWhenServiceIsMissingOrNoCompletePairExists() {
         insertServiceCode("TRAN002", "ABC.DEF");
         insertSourceResponseOnly("10.0.4.1", "ORPHAN", "ABCDEF&bzjson", dayStartMillis(0) + 1_000L);
