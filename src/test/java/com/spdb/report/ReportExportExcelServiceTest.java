@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 class ReportExportExcelServiceTest {
@@ -125,20 +126,21 @@ class ReportExportExcelServiceTest {
             Sheet sheet = workbook.getSheet("问题处理延迟分布");
             assertThat(sheet).isNotNull();
             assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("解决人员");
-            assertThat(sheet.getRow(4).getCell(4).getStringCellValue()).isEqualTo("延期1天");
+            assertThat(sheet.getRow(4).getCell(2).getStringCellValue()).isEqualTo("未解决问题数量");
+            assertThat(sheet.getRow(4).getCell(3).getStringCellValue()).isEqualTo("延期1天");
+            assertThat(sheet.getRow(4).getCell(8).getStringCellValue()).isEqualTo("统计口径");
+            assertThat(sheet.getRow(4).getCell(9)).isNull();
             Row zhangSanDelay = findRow(sheet, 5, "张三");
             assertThat(zhangSanDelay.getCell(1).getStringCellValue()).isEqualTo("1");
-            assertThat(zhangSanDelay.getCell(2).getStringCellValue()).isEqualTo("2");
-            assertThat(zhangSanDelay.getCell(3).getStringCellValue()).isEqualTo("1");
-            assertThat(zhangSanDelay.getCell(4).getStringCellValue()).isEqualTo("1");
-            assertThat(zhangSanDelay.getCell(8).getStringCellValue()).isEqualTo("0");
+            assertThat(zhangSanDelay.getCell(2).getStringCellValue()).isEqualTo("1");
+            assertThat(zhangSanDelay.getCell(3).getStringCellValue()).isEqualTo("0");
+            assertThat(zhangSanDelay.getCell(7).getStringCellValue()).isEqualTo("0");
             Row repeatHeader = findRow(sheet, 0, "解决人员", "重复1次");
             Row zhangSanRepeat = findRow(sheet, repeatHeader.getRowNum() + 1, "张三");
-            assertThat(zhangSanRepeat.getCell(5).getStringCellValue()).isEqualTo("1");
-            assertThat(zhangSanRepeat.getCell(8).getStringCellValue()).isEqualTo("1");
-            Row ownerFallback = findRow(sheet, 5, "王五");
-            assertThat(ownerFallback.getCell(1).getStringCellValue()).isEqualTo("1");
-            assertThat(ownerFallback.getCell(2).getStringCellValue()).isEqualTo("1");
+            assertThat(zhangSanRepeat.getCell(4).getStringCellValue()).isEqualTo("1");
+            assertThat(zhangSanRepeat.getCell(7).getStringCellValue()).isEqualTo("0");
+            assertThatThrownBy(() -> findRow(sheet, 5, "王五"))
+                    .hasMessageContaining("王五");
         }
     }
 
@@ -172,12 +174,13 @@ class ReportExportExcelServiceTest {
             assertPercentCell(currentPay, 13, 11d / 12d);
             Sheet distribution = workbook.getSheet("问题处理延迟分布");
             assertThat(distribution.getRow(4).getCell(0).getStringCellValue()).isEqualTo("领域");
+            assertThat(distribution.getRow(4).getCell(2).getStringCellValue()).isEqualTo("未解决问题数量");
+            assertThat(distribution.getRow(4).getCell(3).getStringCellValue()).isEqualTo("延期1天");
             Row payDelay = findRow(distribution, 5, "支付");
-            assertThat(payDelay.getCell(1).getStringCellValue()).isEqualTo("2");
-            assertThat(payDelay.getCell(2).getStringCellValue()).isEqualTo("2");
-            assertThat(payDelay.getCell(3).getStringCellValue()).isEqualTo("2");
-            assertThat(payDelay.getCell(4).getStringCellValue()).isEqualTo("0");
-            assertThat(payDelay.getCell(7).getStringCellValue()).isEqualTo("0");
+            assertThat(payDelay.getCell(1).getStringCellValue()).isEqualTo("1");
+            assertThat(payDelay.getCell(2).getStringCellValue()).isEqualTo("1");
+            assertThat(payDelay.getCell(3).getStringCellValue()).isEqualTo("0");
+            assertThat(payDelay.getCell(6).getStringCellValue()).isEqualTo("0");
         }
     }
 
@@ -419,16 +422,19 @@ class ReportExportExcelServiceTest {
         throw new AssertionError("未找到首列为 " + firstCellValue + " 的行");
     }
 
-    private static Row findRow(Sheet sheet, int fromRow, String firstCellValue, String fifthCellValue) {
+    private static Row findRow(Sheet sheet, int fromRow, String firstCellValue, String anotherCellValue) {
         for (int rowIndex = fromRow; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
             Row row = sheet.getRow(rowIndex);
-            if (row != null && row.getCell(0) != null && row.getCell(4) != null
+            if (row != null && row.getCell(0) != null
                     && firstCellValue.equals(row.getCell(0).getStringCellValue())
-                    && fifthCellValue.equals(row.getCell(4).getStringCellValue())) {
+                    && java.util.stream.IntStream.range(0, row.getLastCellNum())
+                            .mapToObj(row::getCell)
+                            .filter(java.util.Objects::nonNull)
+                            .anyMatch(cell -> anotherCellValue.equals(cell.getStringCellValue()))) {
                 return row;
             }
         }
-        throw new AssertionError("未找到首列为 " + firstCellValue + " 且第 5 列为 " + fifthCellValue + " 的行");
+        throw new AssertionError("未找到首列为 " + firstCellValue + " 且包含 " + anotherCellValue + " 的行");
     }
 
     private static void assertPercentCell(Row row, int column, double expected) {

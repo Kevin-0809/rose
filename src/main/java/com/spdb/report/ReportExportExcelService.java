@@ -454,8 +454,8 @@ public class ReportExportExcelService {
                 new String[] {"重复1次", "重复2次", "重复3次", "重复4次", "重复4次以上"},
                 rows, false, styles);
 
-        for (int i = 0; i < 10; i++) {
-            sheet.setColumnWidth(i, i == 9 ? 7600 : 4200);
+        for (int i = 0; i < 9; i++) {
+            sheet.setColumnWidth(i, i == 8 ? 7600 : 4200);
         }
         sheet.createFreezePane(0, 5);
         log.info("{}处理延迟分布Sheet写入完成，batchId={}, baselineBatchId={}, dimension={}, currentIssueCount={}, baselineIssueCount={}, rowCount={}, currentReportDate={}, delayGraceDays={}, elapsedMs={}",
@@ -466,14 +466,14 @@ public class ReportExportExcelService {
     private int writeDistributionTable(SXSSFSheet sheet, int headerRowIndex, String dimension, String[] bucketHeaders,
                                        Map<String, DelayDistributionRow> rows, boolean delay, Styles styles) {
         Row header = sheet.createRow(headerRowIndex);
-        String[] fixedHeaders = {dimension, "交易数量（覆盖交易数）", "问题总量", "问题解决数量"};
+        String[] fixedHeaders = {dimension, "交易数量（覆盖交易数）", "未解决问题数量"};
         for (int i = 0; i < fixedHeaders.length; i++) {
             cell(header, i, fixedHeaders[i], styles.detailHeader);
         }
         for (int i = 0; i < bucketHeaders.length; i++) {
-            cell(header, 4 + i, bucketHeaders[i], styles.detailHeader);
+            cell(header, 3 + i, bucketHeaders[i], styles.detailHeader);
         }
-        cell(header, 9, "统计口径", styles.detailHeader);
+        cell(header, 8, "统计口径", styles.detailHeader);
 
         int rowIndex = headerRowIndex + 1;
         DelayDistributionRow total = new DelayDistributionRow("合计");
@@ -488,13 +488,12 @@ public class ReportExportExcelService {
     private void writeDistributionDataRow(Row row, DelayDistributionRow data, boolean delay, CellStyle style) {
         cell(row, 0, data.dimension(), style);
         cell(row, 1, text(data.transactionCount()), style);
-        cell(row, 2, text(data.issueTotal()), style);
-        cell(row, 3, text(data.resolvedIssueCount()), style);
+        cell(row, 2, text(data.unresolvedIssueCount()), style);
         long[] buckets = delay ? data.delayBuckets() : data.repeatBuckets();
         for (int i = 0; i < buckets.length; i++) {
-            cell(row, 4 + i, text(buckets[i]), style);
+            cell(row, 3 + i, text(buckets[i]), style);
         }
-        cell(row, 9, delay ? "当前批次日期 - 首次出现日期（自然日）" : "历史出现次数 + 1", style);
+        cell(row, 8, delay ? "本批次重复问题：当前批次日期 - 首次出现日期（自然日）" : "本批次重复问题：历史出现次数 + 1", style);
     }
 
     private List<IssueSnapshot> issueSnapshots(String batchId, String dimensionKind) {
@@ -534,51 +533,20 @@ public class ReportExportExcelService {
                                                                     List<IssueSnapshot> baselineIssues,
                                                                     LocalDate currentReportDate) {
         Map<String, DelayDistributionRow> result = new LinkedHashMap<>();
-        Map<String, Long> baselineIssueTotals = issueTotalsByDimension(baselineIssues);
-        Map<String, Long> repeatedIssues = repeatedIssueCountsByDimension(currentIssues, baselineIssues);
-        currentIssues.stream()
+        Map<String, Set<String>> baselineKeysByDimension = issueKeysByDimension(baselineIssues);
+        List<IssueSnapshot> unresolvedIssues = currentIssues.stream()
+                .filter(issue -> issue.issueKey() != null
+                        && baselineKeysByDimension.getOrDefault(issue.dimension(), Set.of()).contains(issue.issueKey()))
+                .toList();
+        unresolvedIssues.stream()
                 .map(IssueSnapshot::dimension)
                 .distinct()
                 .sorted(Comparator.naturalOrder())
                 .forEach(dimension -> result.put(dimension, new DelayDistributionRow(dimension)));
-        for (IssueSnapshot issue : currentIssues) {
+        for (IssueSnapshot issue : unresolvedIssues) {
             DelayDistributionRow row = result.computeIfAbsent(issue.dimension(), DelayDistributionRow::new);
             row.addIssue(issue, currentReportDate, delayGraceDays);
         }
-        for (DelayDistributionRow row : result.values()) {
-            long baselineTotal = baselineIssueTotals.getOrDefault(row.dimension(), 0L);
-            long repeated = repeatedIssues.getOrDefault(row.dimension(), 0L);
-            row.setResolvedIssueCount(Math.max(0, baselineTotal - repeated));
-        }
-        return result;
-    }
-
-    private Map<String, Long> issueTotalsByDimension(List<IssueSnapshot> issues) {
-        Map<String, Set<String>> keysByDimension = new HashMap<>();
-        Map<String, Long> fallbackCounts = new HashMap<>();
-        for (IssueSnapshot issue : issues) {
-            fallbackCounts.merge(issue.dimension(), 1L, Long::sum);
-            if (issue.issueKey() != null && !issue.issueKey().isBlank()) {
-                keysByDimension.computeIfAbsent(issue.dimension(), ignored -> new HashSet<>()).add(issue.issueKey());
-            }
-        }
-        Map<String, Long> result = new HashMap<>(fallbackCounts);
-        keysByDimension.forEach((dimension, keys) -> result.put(dimension, (long) keys.size()));
-        return result;
-    }
-
-    private Map<String, Long> repeatedIssueCountsByDimension(List<IssueSnapshot> currentIssues,
-                                                             List<IssueSnapshot> baselineIssues) {
-        Map<String, Set<String>> baselineKeysByDimension = issueKeysByDimension(baselineIssues);
-        Map<String, Set<String>> repeatedByDimension = new HashMap<>();
-        for (IssueSnapshot issue : currentIssues) {
-            Set<String> baselineKeys = baselineKeysByDimension.get(issue.dimension());
-            if (baselineKeys != null && issue.issueKey() != null && baselineKeys.contains(issue.issueKey())) {
-                repeatedByDimension.computeIfAbsent(issue.dimension(), ignored -> new HashSet<>()).add(issue.issueKey());
-            }
-        }
-        Map<String, Long> result = new HashMap<>();
-        repeatedByDimension.forEach((dimension, keys) -> result.put(dimension, (long) keys.size()));
         return result;
     }
 
@@ -731,15 +699,14 @@ public class ReportExportExcelService {
         private final Set<String> tranCodes = new HashSet<>();
         private final long[] delayBuckets = new long[5];
         private final long[] repeatBuckets = new long[5];
-        private long issueTotal;
-        private long resolvedIssueCount;
+        private long unresolvedIssueCount;
 
         private DelayDistributionRow(String dimension) {
             this.dimension = dimension;
         }
 
         private void addIssue(IssueSnapshot issue, LocalDate currentReportDate, int delayGraceDays) {
-            issueTotal++;
+            unresolvedIssueCount++;
             if (issue.tranCode() != null && !issue.tranCode().isBlank()) {
                 tranCodes.add(issue.tranCode());
             }
@@ -752,16 +719,11 @@ public class ReportExportExcelService {
 
         private void add(DelayDistributionRow other) {
             tranCodes.addAll(other.tranCodes);
-            issueTotal += other.issueTotal;
-            resolvedIssueCount += other.resolvedIssueCount;
+            unresolvedIssueCount += other.unresolvedIssueCount;
             for (int i = 0; i < 5; i++) {
                 delayBuckets[i] += other.delayBuckets[i];
                 repeatBuckets[i] += other.repeatBuckets[i];
             }
-        }
-
-        private void setResolvedIssueCount(long resolvedIssueCount) {
-            this.resolvedIssueCount = resolvedIssueCount;
         }
 
         private String dimension() {
@@ -772,12 +734,8 @@ public class ReportExportExcelService {
             return tranCodes.size();
         }
 
-        private long issueTotal() {
-            return issueTotal;
-        }
-
-        private long resolvedIssueCount() {
-            return resolvedIssueCount;
+        private long unresolvedIssueCount() {
+            return unresolvedIssueCount;
         }
 
         private long[] delayBuckets() {
