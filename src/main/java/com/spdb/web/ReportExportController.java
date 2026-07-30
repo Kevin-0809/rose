@@ -112,6 +112,15 @@ public class ReportExportController {
 
     @GetMapping("/report-exports/{batchId}/daily")
     public void downloadDaily(@PathVariable String batchId, HttpServletResponse response) throws IOException {
+        downloadDaily(batchId, response, false);
+    }
+
+    @GetMapping("/report-exports/{batchId}/daily-raw")
+    public void downloadRawDaily(@PathVariable String batchId, HttpServletResponse response) throws IOException {
+        downloadDaily(batchId, response, true);
+    }
+
+    private void downloadDaily(String batchId, HttpServletResponse response, boolean rawFieldValues) throws IOException {
         ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
         if (command == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到导出批次");
@@ -121,8 +130,12 @@ public class ReportExportController {
         }
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition", ContentDisposition.attachment()
-                .filename(exportFilename(), StandardCharsets.UTF_8).build().toString());
-        reportExportExcelService.stream(batchId, response.getOutputStream());
+                .filename(exportFilename(rawFieldValues), StandardCharsets.UTF_8).build().toString());
+        if (rawFieldValues) {
+            reportExportExcelService.streamRawDaily(batchId, response.getOutputStream());
+        } else {
+            reportExportExcelService.stream(batchId, response.getOutputStream());
+        }
     }
 
     @GetMapping("/report-exports/{batchId}/weekly")
@@ -137,8 +150,12 @@ public class ReportExportController {
     }
 
     private String exportFilename() {
+        return exportFilename(false);
+    }
+
+    private String exportFilename(boolean rawFieldValues) {
         LocalDateTime time = LocalDateTime.now(clock);
-        return "日报明细-" + EXPORT_FILENAME_TIME.format(time) + ".xlsx";
+        return (rawFieldValues ? "日报明细-未脱敏-" : "日报明细-") + EXPORT_FILENAME_TIME.format(time) + ".xlsx";
     }
 
     public record ReportExportProgressResponse(String status, String currentStage, List<ReportExportStageView> stageViews) {}

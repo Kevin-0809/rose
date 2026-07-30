@@ -51,6 +51,10 @@ public class ReportExportExcelService {
     private static final String[] DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
             "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
             "解决人员", "流水号", "缺陷修复日期", "备注", "历史出现次数", "首次出现日期", "上次出现日期"};
+    private static final String[] RAW_DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
+            "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
+            "解决人员", "流水号", "缺陷修复日期", "备注", "历史出现次数", "首次出现日期", "上次出现日期",
+            "528字段值", "CCBS字段值"};
     private final NamedParameterJdbcTemplate jdbc;
     private final int delayGraceDays;
 
@@ -66,8 +70,16 @@ public class ReportExportExcelService {
     }
 
     public void stream(String batchId, OutputStream output) throws IOException {
+        streamDaily(batchId, output, false);
+    }
+
+    public void streamRawDaily(String batchId, OutputStream output) throws IOException {
+        streamDaily(batchId, output, true);
+    }
+
+    private void streamDaily(String batchId, OutputStream output, boolean rawFieldValues) throws IOException {
         long started = System.nanoTime();
-        log.info("日报导出开始，batchId={}, delayGraceDays={}", batchId, delayGraceDays);
+        log.info("{}导出开始，batchId={}, delayGraceDays={}", rawFieldValues ? "未脱敏日报" : "日报", batchId, delayGraceDays);
         SXSSFWorkbook workbook = new SXSSFWorkbook(200);
         workbook.setCompressTempFiles(true);
         try {
@@ -78,14 +90,14 @@ public class ReportExportExcelService {
                     batchId, previousBatchId, modules.size());
             writeSummary(workbook, batchId, previousBatchId, false, styles);
             for (String module : modules) {
-                writeModule(workbook, batchId, module, styles);
+                writeModule(workbook, batchId, module, rawFieldValues, styles);
             }
             writeDelayDistribution(workbook, batchId, previousSucceededBatchId(batchId), "解决人员", false, styles);
             workbook.write(output);
-            log.info("日报导出完成，batchId={}, previousBatchId={}, sheetCount={}, elapsedMs={}",
-                    batchId, previousBatchId, workbook.getNumberOfSheets(), elapsedMs(started));
+            log.info("{}导出完成，batchId={}, previousBatchId={}, sheetCount={}, elapsedMs={}",
+                    rawFieldValues ? "未脱敏日报" : "日报", batchId, previousBatchId, workbook.getNumberOfSheets(), elapsedMs(started));
         } catch (IOException | RuntimeException e) {
-            log.error("日报导出失败，batchId={}, elapsedMs={}", batchId, elapsedMs(started), e);
+            log.error("{}导出失败，batchId={}, elapsedMs={}", rawFieldValues ? "未脱敏日报" : "日报", batchId, elapsedMs(started), e);
             throw e;
         } finally {
             workbook.dispose();
@@ -412,24 +424,25 @@ public class ReportExportExcelService {
         return result;
     }
 
-    private void writeModule(SXSSFWorkbook book, String batchId, String module, Styles styles) {
+    private void writeModule(SXSSFWorkbook book, String batchId, String module, boolean rawFieldValues, Styles styles) {
         long started = System.nanoTime();
         SXSSFSheet sheet = book.createSheet(uniqueSheetName(book, module));
         Row header = sheet.createRow(0);
         header.setHeightInPoints(24f);
-        for (int i = 0; i < DETAIL_HEADERS.length; i++) {
-            cell(header, i, DETAIL_HEADERS[i], styles.detailHeader);
+        String[] headers = rawFieldValues ? RAW_DETAIL_HEADERS : DETAIL_HEADERS;
+        for (int i = 0; i < headers.length; i++) {
+            cell(header, i, headers[i], styles.detailHeader);
         }
         int[] row = {1};
-        int tranRows = streamDetails(sheet, batchId, module, "ana_tran_diff_tracking_export", row, styles);
-        int fieldRows = streamDetails(sheet, batchId, module, "ana_field_diff_tracking_export", row, styles);
-        sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, DETAIL_HEADERS.length - 1));
+        int tranRows = streamDetails(sheet, batchId, module, "ana_tran_diff_tracking_export", row, rawFieldValues, styles);
+        int fieldRows = streamDetails(sheet, batchId, module, "ana_field_diff_tracking_export", row, rawFieldValues, styles);
+        sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, headers.length - 1));
         sheet.createFreezePane(0, 1);
-        for (int i = 0; i < DETAIL_HEADERS.length; i++) {
+        for (int i = 0; i < headers.length; i++) {
             sheet.setColumnWidth(i, i == 8 || i == 11 || i == 12 ? 9000 : 3600);
         }
-        log.info("日报明细Sheet写入完成，batchId={}, module={}, tranRows={}, fieldRows={}, elapsedMs={}",
-                batchId, module, tranRows, fieldRows, elapsedMs(started));
+        log.info("{}明细Sheet写入完成，batchId={}, module={}, tranRows={}, fieldRows={}, elapsedMs={}",
+                rawFieldValues ? "未脱敏日报" : "日报", batchId, module, tranRows, fieldRows, elapsedMs(started));
     }
 
     private void writeDelayDistribution(SXSSFWorkbook book, String batchId, String baselineBatchId, String dimension,
@@ -560,12 +573,15 @@ public class ReportExportExcelService {
         return result;
     }
 
-    private int streamDetails(SXSSFSheet sheet, String batchId, String module, String table, int[] row, Styles styles) {
+    private int streamDetails(SXSSFSheet sheet, String batchId, String module, String table, int[] row,
+                              boolean rawFieldValues, Styles styles) {
         int startRow = row[0];
         String sql = "select module_name,row_no,source_batch_id,tran_code,tran_name,problem_level,registration_date,"
                 + "field_name,problem_description,transaction_owner,problem_type,preliminary_analysis,final_solution,"
                 + "resolution_date,coordination_required,resolver,tran_seq_no,defect_fix_date,"
-                + "historical_occurrence_count,first_seen_date,previous_seen_date from " + table
+                + "historical_occurrence_count,first_seen_date,previous_seen_date"
+                + (rawFieldValues && "ana_field_diff_tracking_export".equals(table) ? ",orig_field_value,dest_field_value" : "")
+                + " from " + table
                 + " where source_batch_id=? and module_name=? order by row_no";
         jdbc.getJdbcTemplate().query((PreparedStatementCreator) connection -> {
             PreparedStatement statement = connection.prepareStatement(sql);
@@ -579,6 +595,10 @@ public class ReportExportExcelService {
             CellStyle rowStyle = styles.rowStyle(dataOrdinal);
             for (int i = 0; i < DETAIL_HEADERS.length; i++) {
                 cell(r, i, i == 18 ? "" : text(rs.getObject(i < 18 ? i + 1 : i)), rowStyle);
+            }
+            if (rawFieldValues) {
+                cell(r, 22, "ana_field_diff_tracking_export".equals(table) ? text(rs.getObject(22)) : "", rowStyle);
+                cell(r, 23, "ana_field_diff_tracking_export".equals(table) ? text(rs.getObject(23)) : "", rowStyle);
             }
         });
         return row[0] - startRow;

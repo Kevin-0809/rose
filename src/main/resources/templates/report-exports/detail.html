@@ -47,6 +47,7 @@
         <div class="page-head compact-head">
           <h2>汇总报表</h2>
           <a class="btn" th:href="@{/report-exports/{batchId}/daily(batchId=${command.batchId()})}">导出日报</a>
+          <a class="btn" th:href="@{/report-exports/{batchId}/daily-raw(batchId=${command.batchId()})}">导出日报（未脱敏）</a>
         </div>
         <table>
           <thead>

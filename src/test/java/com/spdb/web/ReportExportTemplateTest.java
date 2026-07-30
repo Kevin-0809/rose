@@ -23,7 +23,9 @@ class ReportExportTemplateTest {
                 .contains("row.previousSeenDate()")
                 .contains("@{/diff-issues/{id}(id=${row.issueId()})}")
                 .contains("导出日报")
-                .contains("@{/report-exports/{batchId}/daily(batchId=${command.batchId()})}");
+                .contains("导出日报（未脱敏）")
+                .contains("@{/report-exports/{batchId}/daily(batchId=${command.batchId()})}")
+                .contains("@{/report-exports/{batchId}/daily-raw(batchId=${command.batchId()})}");
     }
 
     @Test
@@ -36,8 +38,10 @@ class ReportExportTemplateTest {
         assertThat(html)
                 .contains("查看结果")
                 .contains("导出日报")
+                .contains("导出日报（未脱敏）")
                 .contains("导出周报")
                 .contains("@{/report-exports/{batchId}/daily(batchId=${row.batchId()})}")
+                .contains("@{/report-exports/{batchId}/daily-raw(batchId=${row.batchId()})}")
                 .contains("@{/report-exports/{batchId}/weekly(batchId=${row.batchId()})}")
                 .doesNotContain("业务日期")
                 .doesNotContain("创建时间")

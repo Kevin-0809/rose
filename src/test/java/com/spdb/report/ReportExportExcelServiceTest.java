@@ -104,6 +104,38 @@ class ReportExportExcelServiceTest {
     }
 
     @Test
+    void rawDailyExportAddsFieldValuesWithoutChangingMaskedDailyExport() throws Exception {
+        jdbc.update("""
+                insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,
+                    sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,
+                    comp_result_4_count,comp_result_8_count,success_rate,diff_528_field_count,
+                    field_pass_transaction_count,comparison_pass_rate,transaction_issue_count,field_issue_count,
+                    issue_total_count,duplicate_issue_count)
+                values ('RPT-RAW','20260727','支付',1,10,1,2,3,4,5,0.7,6,4,0.7,1,5,6,2)
+                """);
+        jdbc.update("""
+                insert into ana_field_diff_tracking_export(source_batch_id,module_name,row_no,tran_code,tran_name,
+                    problem_level,registration_date,field_name,problem_description,orig_field_value,dest_field_value,
+                    historical_occurrence_count,first_seen_date,previous_seen_date)
+                values ('RPT-RAW','支付',1,'T1','交易一','字段级','20260727','A | B','字段值已脱敏','原始-secret-528','原始-secret-CCBS',2,?,?)
+                """, LocalDate.parse("2026-07-02"), LocalDate.parse("2026-07-18"));
+        ByteArrayOutputStream masked = new ByteArrayOutputStream();
+        ByteArrayOutputStream raw = new ByteArrayOutputStream();
+
+        service.stream("RPT-RAW", masked);
+        service.streamRawDaily("RPT-RAW", raw);
+
+        assertThat(masked.toString()).doesNotContain("原始-secret-528").doesNotContain("原始-secret-CCBS");
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(raw.toByteArray()))) {
+            Sheet sheet = workbook.getSheet("支付");
+            assertThat(sheet.getRow(0).getCell(22).getStringCellValue()).isEqualTo("528字段值");
+            assertThat(sheet.getRow(0).getCell(23).getStringCellValue()).isEqualTo("CCBS字段值");
+            assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("原始-secret-528");
+            assertThat(sheet.getRow(1).getCell(23).getStringCellValue()).isEqualTo("原始-secret-CCBS");
+        }
+    }
+
+    @Test
     void dailyExportAddsDelayDistributionSheetWithoutRemovingExistingSheets() throws Exception {
         jdbc.update("insert into ana_report_export_command(batch_id,report_date,status,created_time) values ('RPT0','20260726','SUCCEEDED','2026-07-26 09:00:00')");
         jdbc.update("insert into ana_report_export_command(batch_id,report_date,status,created_time) values ('RPT1','20260728','SUCCEEDED','2026-07-28 09:00:00')");

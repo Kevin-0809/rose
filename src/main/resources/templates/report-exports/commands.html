@@ -56,7 +56,7 @@
             <td class="col-time" th:text="${row.startedTime()}"></td>
             <td class="col-time" th:title="${row.endedTime()}" th:text="${row.endedTime()}"></td>
             <td class="col-error" th:title="${row.errorMessage()}"><span class="cell-clip" th:text="${row.errorMessage()}"></span></td>
-            <td class="col-actions command-actions"><a class="btn" th:href="@{/report-exports/{batchId}(batchId=${row.batchId()})}">查看结果</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/daily(batchId=${row.batchId()})}">导出日报</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/weekly(batchId=${row.batchId()})}">导出周报</a></td>
+            <td class="col-actions command-actions"><a class="btn" th:href="@{/report-exports/{batchId}(batchId=${row.batchId()})}">查看结果</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/daily(batchId=${row.batchId()})}">导出日报</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/daily-raw(batchId=${row.batchId()})}">导出日报（未脱敏）</a><a class="btn" th:if="${row.status() == 'SUCCEEDED'}" th:href="@{/report-exports/{batchId}/weekly(batchId=${row.batchId()})}">导出周报</a></td>
           </tr>
           <tr th:if="${result.rows().isEmpty()}"><td colspan="7" class="muted">未找到匹配的导出批次。</td></tr>
           </tbody>
