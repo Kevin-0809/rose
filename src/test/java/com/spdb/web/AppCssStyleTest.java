@@ -64,7 +64,10 @@ class AppCssStyleTest {
         assertThat(css).contains(".command-actions .btn");
         assertThat(css).contains(".report-export-command-table {\n  min-width: 0");
         assertThat(css).contains(".report-export-command-table-wrap {\n  overflow-x: hidden");
-        assertThat(css).contains(".report-export-command-table .col-actions {\n  width: 260px");
+        assertThat(css).contains(".report-export-command-table .col-actions {\n  width: 96px");
+        assertThat(css).contains(".action-menu");
+        assertThat(css).contains(".action-menu-list");
+        assertThat(css).contains(".action-menu[open] .action-menu-list");
         assertThat(css).contains(".summary-actions");
         assertThat(css).contains("grid-column: span 4");
         assertThat(css).contains("flex-wrap: nowrap");

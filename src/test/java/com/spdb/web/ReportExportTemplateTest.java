@@ -36,13 +36,17 @@ class ReportExportTemplateTest {
         );
 
         assertThat(html)
-                .contains("查看结果")
+                .contains(">查看</a>")
+                .contains("更多操作")
+                .contains("class=\"action-menu\"")
+                .contains("class=\"action-menu-list\"")
                 .contains("导出日报")
                 .contains("导出日报（未脱敏）")
                 .contains("导出周报")
                 .contains("@{/report-exports/{batchId}/daily(batchId=${row.batchId()})}")
                 .contains("@{/report-exports/{batchId}/daily-raw(batchId=${row.batchId()})}")
                 .contains("@{/report-exports/{batchId}/weekly(batchId=${row.batchId()})}")
+                .doesNotContain("导出日报</a><a class=\"btn\"")
                 .doesNotContain("业务日期")
                 .doesNotContain("创建时间")
                 .doesNotContain("row.reportDate()")
