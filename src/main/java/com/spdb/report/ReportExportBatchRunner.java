@@ -199,12 +199,14 @@ public class ReportExportBatchRunner {
                                sum(case when historical_occurrence_count > 0 then 1 else 0 end) duplicate_issue_count
                           from ana_tran_diff_tracking_export
                          where source_batch_id = :batchId
+                           and issue_key is not null
                          group by module_name
                          union all
                         select module_name, 0 transaction_issue_count, count(*) field_issue_count,
                                sum(case when historical_occurrence_count > 0 then 1 else 0 end) duplicate_issue_count
                           from ana_field_diff_tracking_export
                          where source_batch_id = :batchId
+                           and issue_key is not null
                          group by module_name
                        ) issue_metrics
                  group by module_name
@@ -310,7 +312,7 @@ public class ReportExportBatchRunner {
         jdbc.update(insert,
                 params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", rowNo)
                         .addValue("service", service).addValue("origCode", status == null ? retcode == null ? null : retcode.origCode() : status).addValue("destCode", status == null ? retcode == null ? null : retcode.destCode() : status)
-                        .addValue("issueKey", transactionIssueKey(service, status == null ? retcode == null ? null : retcode.origCode() : status, status == null ? retcode == null ? null : retcode.destCode() : status))
+                        .addValue("issueKey", transactionIssueKey(service, status, retcode))
                         .addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
                         .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("origDesc", status == null ? retcode == null ? null : retcode.origDesc() : status)
                         .addValue("destDesc", status == null ? retcode == null ? null : retcode.destDesc() : status).addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", tran.mesgSeq())
@@ -437,6 +439,7 @@ public class ReportExportBatchRunner {
     private static String transactionStatus(String result) { return switch (result) { case "0" -> "未比对"; case "5" -> "忽略比对"; case "6" -> "比对中"; case "7" -> "对比异常"; default -> null; }; }
     private static boolean bothSucceeded(Retcode retcode) { return retcode != null && successCode(retcode.origCode()) && successCode(retcode.destCode()); }
     private static boolean successCode(String code) { return "AAAAAAA".equals(code) || "000000000000".equals(code); }
+    private static boolean bothFailedSameResponse(Retcode retcode) { return retcode != null && !missingResponseCode(retcode.origCode()) && !missingResponseCode(retcode.destCode()) && !successCode(retcode.origCode()) && !successCode(retcode.destCode()) && text(retcode.origCode()).equals(text(retcode.destCode())); }
     private static String transactionFieldName(Retcode retcode) {
         if (retcode == null || missingResponseCode(retcode.origCode()) || missingResponseCode(retcode.destCode())) return "二者都失败响应码不一致";
         if (successCode(retcode == null ? null : retcode.origCode())) return "528成功ccbs失败";
@@ -450,6 +453,7 @@ public class ReportExportBatchRunner {
     private static String moduleName(Catalog catalog) { return catalog.moduleName() == null || catalog.moduleName().isBlank() ? UNCONFIGURED_MODULE : catalog.moduleName(); }
     private static String key(String value) { return text(value).toLowerCase(Locale.ROOT); }
     private static String transactionIssueKey(String service, String origCode, String destCode) { return "TRAN|" + issuePart(service) + "|" + issuePart(origCode) + "|" + issuePart(destCode); }
+    private static String transactionIssueKey(String service, String status, Retcode retcode) { return status == null && bothFailedSameResponse(retcode) ? null : transactionIssueKey(service, status == null ? retcode == null ? null : retcode.origCode() : status, status == null ? retcode == null ? null : retcode.destCode() : status); }
     private static String fieldIssueKey(String service, String sourceField) { return "FIELD|" + issuePart(service) + "|" + issuePart(sourceField); }
     private static String issuePart(String value) { return text(value).trim().toLowerCase(Locale.ROOT); }
     private static String text(String value) { return value == null ? "" : value; }

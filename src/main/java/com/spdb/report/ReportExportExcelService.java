@@ -513,11 +513,11 @@ public class ReportExportExcelService {
         }
         return "select " + dimensionExpression + " as dimension, tran_code, issue_key, "
                 + "historical_occurrence_count, first_seen_date "
-                + "from ana_tran_diff_tracking_export where source_batch_id=:batchId "
+                + "from ana_tran_diff_tracking_export where source_batch_id=:batchId and issue_key is not null "
                 + "union all "
                 + "select " + dimensionExpression + " as dimension, tran_code, issue_key, "
                 + "historical_occurrence_count, first_seen_date "
-                + "from ana_field_diff_tracking_export where source_batch_id=:batchId";
+                + "from ana_field_diff_tracking_export where source_batch_id=:batchId and issue_key is not null";
     }
 
     private IssueSnapshot issueSnapshot(ResultSet rs) throws java.sql.SQLException {

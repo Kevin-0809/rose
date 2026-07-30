@@ -213,12 +213,24 @@ class ReportExportBatchRunnerTest {
                 .containsEntry("comp_result_4_count", 2L)
                 .containsEntry("comp_result_8_count", 1L)
                 .containsEntry("field_pass_transaction_count", 1L)
-                .containsEntry("transaction_issue_count", 3L)
+                .containsEntry("transaction_issue_count", 2L)
                 .containsEntry("field_issue_count", 1L)
-                .containsEntry("issue_total_count", 4L)
+                .containsEntry("issue_total_count", 3L)
                 .containsEntry("duplicate_issue_count", 2L);
         assertThat(summary.get("success_rate").toString()).isEqualTo("0.60000000");
         assertThat(summary.get("comparison_pass_rate").toString()).isEqualTo("0.40000000");
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                  from ana_diff_issue
+                 where issue_key = 'TRAN|svc1|e1|e1'
+                """, Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                select issue_key
+                  from ana_tran_diff_tracking_export
+                 where source_batch_id = 'BATCH-EXTENDED-SUMMARY'
+                   and orig_error_code = 'E1'
+                   and dest_error_code = 'E1'
+                """, String.class)).isNull();
     }
 
     @Test
