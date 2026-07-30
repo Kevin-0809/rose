@@ -53,7 +53,8 @@ class MigrationShardRunnerTest {
         String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
 
         assertThat(source).contains("int lookbackDays");
-        assertThat(source).contains("dayOffset < lookbackDays");
+        assertThat(source).contains("effectiveLookbackDays(txnCodes, lookbackDays, currentDate)");
+        assertThat(source).contains("dayOffset < effectiveLookbackDays");
     }
 
     private JdbcTemplate sourceJdbc;
@@ -234,6 +235,25 @@ class MigrationShardRunnerTest {
         assertThat(result).isEqualTo(new MigrationShardResult(0L, 0L, 0L));
         assertThat(targetCount("msg_flow_log_request")).isZero();
         assertThat(targetCount("msg_flow_log_response")).isZero();
+    }
+
+    @Test
+    void tranCodeMigrationAllLookbackDaysScansBackToEarliestResponseDate() {
+        insertServiceCode("TRANALL", "ABC.DEF");
+        long earliestDay = dayStartMillis(-20);
+        long historicalDay = dayStartMillis(-14);
+        insertSourceResponseOnly("10.0.10.1", "BZ-EARLIEST-ORPHAN", "ABCDEF&bzjson", earliestDay + 1_000L);
+        insertSourcePair("10.0.10.2", "BZ-HISTORICAL", "ABCDEF&bzjson", historicalDay, historicalDay + 2_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                18L,
+                "TRANALL",
+                1,
+                MigrationTranCodeCommandForm.ALL_LOOKBACK_DAYS
+        );
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetExists("msg_flow_log_response", "10.0.10.2", "BZ-HISTORICAL")).isTrue();
     }
 
     @Test

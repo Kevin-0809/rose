@@ -42,7 +42,13 @@
         </div>
         <div>
           <label>回溯自然日数</label>
-          <input name="lookbackDays" type="number" th:value="*{lookbackDays}" min="1" required>
+          <select name="lookbackDays" required>
+            <option value="5" th:selected="*{lookbackDays == 5}">5天</option>
+            <option value="7" th:selected="*{lookbackDays == 7}">7天</option>
+            <option value="15" th:selected="*{lookbackDays == 15}">15天</option>
+            <option value="30" th:selected="*{lookbackDays == 30}">30天</option>
+            <option value="10000" th:selected="*{lookbackDays == 10000}">全部天数</option>
+          </select>
         </div>
         <div>
           <label>并行度</label>

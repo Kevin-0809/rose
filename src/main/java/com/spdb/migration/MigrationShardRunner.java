@@ -17,8 +17,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -153,8 +155,9 @@ public class MigrationShardRunner {
                     .map(serviceCode -> serviceCode.replace(".", "") + "&" + messageType)
                     .distinct()
                     .toList();
+            int effectiveLookbackDays = effectiveLookbackDays(txnCodes, lookbackDays, currentDate);
             long migratedRows = 0L;
-            for (int dayOffset = 0; dayOffset < lookbackDays && migratedRows < maxRowsPerMessageType; dayOffset++) {
+            for (int dayOffset = 0; dayOffset < effectiveLookbackDays && migratedRows < maxRowsPerMessageType; dayOffset++) {
                 long dayFrom = currentDate.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 long dayTo = dayOffset == 0
                         ? currentTime
@@ -189,6 +192,33 @@ public class MigrationShardRunner {
                 from tp_online_service_in
                 where tran_code = :tranCode
                 """, new MapSqlParameterSource("tranCode", tranCode), String.class);
+    }
+
+    private int effectiveLookbackDays(List<String> txnCodes, int lookbackDays, LocalDate currentDate) {
+        if (lookbackDays != MigrationTranCodeCommandForm.ALL_LOOKBACK_DAYS) {
+            return lookbackDays;
+        }
+        Long earliestResponseTime = earliestResponseTime(txnCodes);
+        if (earliestResponseTime == null) {
+            return 0;
+        }
+        LocalDate earliestDate = Instant.ofEpochMilli(earliestResponseTime).atZone(SHANGHAI).toLocalDate();
+        long days = ChronoUnit.DAYS.between(earliestDate, currentDate) + 1;
+        if (days <= 0) {
+            return 1;
+        }
+        return days > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) days;
+    }
+
+    private Long earliestResponseTime(List<String> txnCodes) {
+        if (txnCodes.isEmpty()) {
+            return null;
+        }
+        return sourceJdbc.queryForObject("""
+                select min(response_time)
+                from msg_flow_log_response
+                where txn_code in (:txnCodes)
+                """, new MapSqlParameterSource("txnCodes", txnCodes), Long.class);
     }
 
     private List<MigrationSourceRow> loadTranCodeRows(List<String> txnCodes,
