@@ -138,8 +138,8 @@ public class MigrationShardRunner {
                     shardId, tranCode);
             return new MigrationShardResult(0L, 0L, 0L, 0);
         }
-        List<String> serviceCodes = loadServiceCodes(tranCode);
-        if (serviceCodes.isEmpty()) {
+        List<ServiceCodeMapping> serviceMappings = loadServiceCodeMappings(tranCode);
+        if (serviceMappings.isEmpty()) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=no service code mapping",
                     shardId, tranCode);
             return new MigrationShardResult(0L, 0L, 0L, 0);
@@ -150,12 +150,10 @@ public class MigrationShardRunner {
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
         long currentTime = clock.instant().toEpochMilli();
         log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
-                shardId, tranCode, serviceCodes.size(), maxRowsPerMessageType, lookbackDays, currentDate);
+                shardId, tranCode, serviceMappings.size(), maxRowsPerMessageType, lookbackDays, currentDate);
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
-            List<String> txnCodes = serviceCodes.stream()
-                    .map(serviceCode -> serviceCode.replace(".", "") + "&" + messageType)
-                    .distinct()
-                    .toList();
+            Map<String, String> targetTxnCodeBySourceTxnCode = txnCodeMappings(serviceMappings, messageType);
+            List<String> txnCodes = new ArrayList<>(targetTxnCodeBySourceTxnCode.keySet());
             int effectiveLookbackDays = effectiveLookbackDays(txnCodes, lookbackDays, currentDate);
             actualLookbackDays = Math.max(actualLookbackDays, effectiveLookbackDays);
             long migratedRows = 0L;
@@ -173,7 +171,13 @@ public class MigrationShardRunner {
                     if (rows.isEmpty()) {
                         break;
                     }
-                    BatchResult result = transactionTemplate.execute(status -> writeBatch(rows));
+                    List<MigrationSourceRow> targetRows = rows.stream()
+                            .map(row -> withTxnCode(row, targetTxnCodeBySourceTxnCode.getOrDefault(
+                                    row.responseTxnCode(),
+                                    row.responseTxnCode()
+                            )))
+                            .toList();
+                    BatchResult result = transactionTemplate.execute(status -> writeBatch(targetRows));
                     BatchResult batchResult = result == null ? new BatchResult() : result;
                     total.add(batchResult);
                     migratedRows += batchResult.migratedRows;
@@ -188,12 +192,77 @@ public class MigrationShardRunner {
         return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, actualLookbackDays);
     }
 
-    private List<String> loadServiceCodes(String tranCode) {
-        return targetJdbc.queryForList("""
+    private List<ServiceCodeMapping> loadServiceCodeMappings(String tranCode) {
+        List<ServiceCodeMapping> mappedServiceCodes = targetJdbc.query("""
+                select "528_service_code" as lookup_service_code,
+                       ccbs_service_code as target_service_code
+                from ana_tran_code_service_mapping
+                where tran_code = :tranCode
+                order by mapping_id
+                """, new MapSqlParameterSource("tranCode", tranCode), (rs, rowNum) -> new ServiceCodeMapping(
+                rs.getString("lookup_service_code"),
+                rs.getString("target_service_code")
+        ));
+        if (!mappedServiceCodes.isEmpty()) {
+            return distinctServiceMappings(mappedServiceCodes);
+        }
+        List<ServiceCodeMapping> onlineServiceCodes = targetJdbc.query("""
                 select esf_service_code
                 from tp_online_service_in
                 where tran_code = :tranCode
-                """, new MapSqlParameterSource("tranCode", tranCode), String.class);
+                """, new MapSqlParameterSource("tranCode", tranCode), (rs, rowNum) -> {
+            String serviceCode = rs.getString("esf_service_code");
+            return new ServiceCodeMapping(serviceCode, serviceCode);
+        });
+        return distinctServiceMappings(onlineServiceCodes);
+    }
+
+    private List<ServiceCodeMapping> distinctServiceMappings(List<ServiceCodeMapping> serviceMappings) {
+        Map<String, ServiceCodeMapping> mappings = new LinkedHashMap<>();
+        for (ServiceCodeMapping mapping : serviceMappings) {
+            String lookupServiceCode = normalizeServiceCode(mapping.lookupServiceCode());
+            String targetServiceCode = normalizeServiceCode(mapping.targetServiceCode());
+            if (lookupServiceCode.isEmpty() || targetServiceCode.isEmpty()) {
+                continue;
+            }
+            mappings.putIfAbsent(lookupServiceCode + "\n" + targetServiceCode,
+                    new ServiceCodeMapping(lookupServiceCode, targetServiceCode));
+        }
+        return new ArrayList<>(mappings.values());
+    }
+
+    private Map<String, String> txnCodeMappings(List<ServiceCodeMapping> serviceMappings, String messageType) {
+        Map<String, String> mappings = new LinkedHashMap<>();
+        for (ServiceCodeMapping mapping : serviceMappings) {
+            mappings.putIfAbsent(
+                    mapping.lookupServiceCode() + "&" + messageType,
+                    mapping.targetServiceCode() + "&" + messageType
+            );
+        }
+        return mappings;
+    }
+
+    private String normalizeServiceCode(String serviceCode) {
+        return serviceCode == null ? "" : serviceCode.trim().replace(".", "");
+    }
+
+    private MigrationSourceRow withTxnCode(MigrationSourceRow row, String txnCode) {
+        return new MigrationSourceRow(
+                row.sourceIp(),
+                row.transId(),
+                txnCode,
+                row.txnTime(),
+                row.requestMessageType(),
+                row.requestMessage(),
+                row.globalSeqNo(),
+                row.tranTellerNo(),
+                txnCode,
+                row.responseTime(),
+                row.responseMessageType(),
+                row.responseMessage(),
+                row.returnCode(),
+                row.returnMsg()
+        );
     }
 
     private int effectiveLookbackDays(List<String> txnCodes, int lookbackDays, LocalDate currentDate) {
@@ -681,6 +750,12 @@ public class MigrationShardRunner {
             byte[] responseMessage,
             String returnCode,
             String returnMsg
+    ) {
+    }
+
+    private record ServiceCodeMapping(
+            String lookupServiceCode,
+            String targetServiceCode
     ) {
     }
 
