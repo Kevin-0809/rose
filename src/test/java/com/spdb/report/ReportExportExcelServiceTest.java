@@ -104,7 +104,7 @@ class ReportExportExcelServiceTest {
     }
 
     @Test
-    void rawDailyExportAddsFieldValuesWithoutChangingMaskedDailyExport() throws Exception {
+    void rawDailyExportShowsFieldValuesInExistingDescriptionColumnWithoutAddingColumns() throws Exception {
         jdbc.update("""
                 insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,
                     sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,
@@ -117,7 +117,7 @@ class ReportExportExcelServiceTest {
                 insert into ana_field_diff_tracking_export(source_batch_id,module_name,row_no,tran_code,tran_name,
                     problem_level,registration_date,field_name,problem_description,orig_field_value,dest_field_value,
                     historical_occurrence_count,first_seen_date,previous_seen_date)
-                values ('RPT-RAW','支付',1,'T1','交易一','字段级','20260727','A | B','字段值已脱敏','原始-secret-528','原始-secret-CCBS',2,?,?)
+                values ('RPT-RAW','支付',1,'T1','交易一','字段级','20260727','A | B','528：有值；CCBS：有值','原始-secret-528','原始-secret-CCBS',2,?,?)
                 """, LocalDate.parse("2026-07-02"), LocalDate.parse("2026-07-18"));
         ByteArrayOutputStream masked = new ByteArrayOutputStream();
         ByteArrayOutputStream raw = new ByteArrayOutputStream();
@@ -128,10 +128,11 @@ class ReportExportExcelServiceTest {
         assertThat(masked.toString()).doesNotContain("原始-secret-528").doesNotContain("原始-secret-CCBS");
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(raw.toByteArray()))) {
             Sheet sheet = workbook.getSheet("支付");
-            assertThat(sheet.getRow(0).getCell(22).getStringCellValue()).isEqualTo("528字段值");
-            assertThat(sheet.getRow(0).getCell(23).getStringCellValue()).isEqualTo("CCBS字段值");
-            assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("原始-secret-528");
-            assertThat(sheet.getRow(1).getCell(23).getStringCellValue()).isEqualTo("原始-secret-CCBS");
+            assertThat(sheet.getRow(0).getLastCellNum()).isEqualTo((short) 22);
+            assertThat(sheet.getRow(0).getCell(8).getStringCellValue()).isEqualTo("问题描述");
+            assertThat(sheet.getRow(1).getCell(8).getStringCellValue())
+                    .isEqualTo("528字段值：原始-secret-528；CCBS字段值：原始-secret-CCBS");
+            assertThat(sheet.getRow(1).getCell(22)).isNull();
         }
     }
 

@@ -51,10 +51,6 @@ public class ReportExportExcelService {
     private static final String[] DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
             "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
             "解决人员", "流水号", "缺陷修复日期", "备注", "历史出现次数", "首次出现日期", "上次出现日期"};
-    private static final String[] RAW_DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
-            "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
-            "解决人员", "流水号", "缺陷修复日期", "备注", "历史出现次数", "首次出现日期", "上次出现日期",
-            "528字段值", "CCBS字段值"};
     private final NamedParameterJdbcTemplate jdbc;
     private final int delayGraceDays;
 
@@ -429,7 +425,7 @@ public class ReportExportExcelService {
         SXSSFSheet sheet = book.createSheet(uniqueSheetName(book, module));
         Row header = sheet.createRow(0);
         header.setHeightInPoints(24f);
-        String[] headers = rawFieldValues ? RAW_DETAIL_HEADERS : DETAIL_HEADERS;
+        String[] headers = DETAIL_HEADERS;
         for (int i = 0; i < headers.length; i++) {
             cell(header, i, headers[i], styles.detailHeader);
         }
@@ -593,15 +589,19 @@ public class ReportExportExcelService {
             int dataOrdinal = row[0];
             Row r = sheet.createRow(row[0]++);
             CellStyle rowStyle = styles.rowStyle(dataOrdinal);
+            boolean rawFieldRow = rawFieldValues && "ana_field_diff_tracking_export".equals(table);
             for (int i = 0; i < DETAIL_HEADERS.length; i++) {
-                cell(r, i, i == 18 ? "" : text(rs.getObject(i < 18 ? i + 1 : i)), rowStyle);
-            }
-            if (rawFieldValues) {
-                cell(r, 22, "ana_field_diff_tracking_export".equals(table) ? text(rs.getObject(22)) : "", rowStyle);
-                cell(r, 23, "ana_field_diff_tracking_export".equals(table) ? text(rs.getObject(23)) : "", rowStyle);
+                String value = rawFieldRow && i == 8
+                        ? rawFieldDescription(rs.getString(22), rs.getString(23))
+                        : text(rs.getObject(i < 18 ? i + 1 : i));
+                cell(r, i, i == 18 ? "" : value, rowStyle);
             }
         });
         return row[0] - startRow;
+    }
+
+    private static String rawFieldDescription(String origFieldValue, String destFieldValue) {
+        return "528字段值：" + text(origFieldValue) + "；CCBS字段值：" + text(destFieldValue);
     }
 
     private List<String> modules(String batchId) {
