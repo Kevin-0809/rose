@@ -435,7 +435,11 @@ public class ReportExportBatchRunner {
                 .findFirst().orElse(null);
     }
     private static String transactionDescription(Retcode retcode) { return "528错误码：" + text(retcode == null ? null : retcode.origCode()) + "；描述：" + text(retcode == null ? null : retcode.origDesc()) + "；CCBS错误码：" + text(retcode == null ? null : retcode.destCode()) + "；CCBS错误描述：" + text(retcode == null ? null : retcode.destDesc()); }
-    private static boolean shouldExportTransaction(Tran tran, Retcode retcode) { return !"4".equals(tran.compResult()) && (transactionStatus(tran.compResult()) != null || !bothSucceeded(retcode)); }
+    private static boolean shouldExportTransaction(Tran tran, Retcode retcode) {
+        if ("4".equals(tran.compResult())) return false;
+        if (transactionStatus(tran.compResult()) != null) return true;
+        return !bothSucceeded(retcode) && !bothFailedSameResponse(retcode);
+    }
     private static String transactionStatus(String result) { return switch (result) { case "0" -> "未比对"; case "5" -> "忽略比对"; case "6" -> "比对中"; case "7" -> "对比异常"; default -> null; }; }
     private static boolean bothSucceeded(Retcode retcode) { return retcode != null && successCode(retcode.origCode()) && successCode(retcode.destCode()); }
     private static boolean successCode(String code) { return "AAAAAAA".equals(code) || "000000000000".equals(code); }

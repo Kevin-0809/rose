@@ -225,12 +225,12 @@ class ReportExportBatchRunnerTest {
                  where issue_key = 'TRAN|svc1|e1|e1'
                 """, Long.class)).isZero();
         assertThat(jdbc.queryForObject("""
-                select issue_key
+                select count(*)
                   from ana_tran_diff_tracking_export
                  where source_batch_id = 'BATCH-EXTENDED-SUMMARY'
                    and orig_error_code = 'E1'
                    and dest_error_code = 'E1'
-                """, String.class)).isNull();
+                """, Long.class)).isZero();
     }
 
     @Test
@@ -268,8 +268,12 @@ class ReportExportBatchRunnerTest {
                 select tran_seq_no, orig_error_code, dest_error_code, orig_error_desc, dest_error_desc, field_name
                 from ana_tran_diff_tracking_export order by row_no
                 """);
-        assertThat(transactions).hasSize(11);
-        assertThat(transactions).extracting(row -> row.get("tran_seq_no"), row -> row.get("orig_error_code"), row -> row.get("dest_error_code"),
+        assertThat(transactions).hasSize(10);
+        assertThat(transactions).extracting(row -> row.get("tran_seq_no")).doesNotContain("FF-S");
+        List<Map<String, Object>> comparableTransactions = transactions.stream()
+                .filter(row -> !"FF-S".equals(row.get("tran_seq_no")))
+                .toList();
+        assertThat(comparableTransactions).extracting(row -> row.get("tran_seq_no"), row -> row.get("orig_error_code"), row -> row.get("dest_error_code"),
                         row -> row.get("orig_error_desc"), row -> row.get("dest_error_desc"), row -> row.get("field_name"))
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("S0", "未比对", "未比对", "未比对", "未比对", "未比对"),
@@ -279,7 +283,6 @@ class ReportExportBatchRunnerTest {
                         org.assertj.core.groups.Tuple.tuple("OF", "AAAAAAA", "E1", "528 ok", "ccbs failed", "528成功ccbs失败"),
                         org.assertj.core.groups.Tuple.tuple("FO", "E2", "000000000000", "528 failed", "ccbs ok", "528失败ccbs成功"),
                         org.assertj.core.groups.Tuple.tuple("FF-D", "E3", "E4", "528 failed", "ccbs failed", "二者都失败响应码不一致"),
-                        org.assertj.core.groups.Tuple.tuple("FF-S", "E5", "E5", "528 failed", "ccbs failed", "二者都失败响应码一致"),
                         org.assertj.core.groups.Tuple.tuple("MISSING", null, null, null, null, "二者都失败响应码不一致"),
                         org.assertj.core.groups.Tuple.tuple("EMPTY", "", "", "528 empty", "ccbs empty", "二者都失败响应码不一致"),
                         org.assertj.core.groups.Tuple.tuple("NULL-EMPTY", null, "", "528 null", "ccbs empty", "二者都失败响应码不一致"));
