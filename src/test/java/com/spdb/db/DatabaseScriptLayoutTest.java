@@ -106,6 +106,18 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlContainsTranCodeServiceMappingTable() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql")).toLowerCase();
+
+        assertThat(ddl).contains("create table if not exists ana_tran_code_service_mapping");
+        assertThat(ddl).contains("tran_code varchar(32) not null");
+        assertThat(ddl).contains("\"528_service_code\" varchar(200) not null");
+        assertThat(ddl).contains("ccbs_service_code varchar(200) not null");
+        assertThat(ddl).contains("constraint uk_ana_tran_code_service_mapping unique (tran_code, \"528_service_code\", ccbs_service_code)");
+        assertThat(ddl).contains("idx_ana_tran_code_service_mapping_tran");
+    }
+
+    @Test
     void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
         String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8)
                 .replace("\r\n", "\n");
