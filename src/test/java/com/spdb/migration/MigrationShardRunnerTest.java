@@ -57,6 +57,14 @@ class MigrationShardRunnerTest {
         assertThat(source).contains("dayOffset < effectiveLookbackDays");
     }
 
+    @Test
+    void tranCodeQueryFiltersRequestByTxnTimeWindow() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
+
+        assertThat(source).contains("and req.txn_time >= :timeFrom");
+        assertThat(source).contains("and req.txn_time < :timeTo");
+    }
+
     private JdbcTemplate sourceJdbc;
     private JdbcTemplate targetJdbc;
     private MigrationShardRunner runner;
@@ -220,16 +228,16 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void tranCodeMigrationIncludesSop2cbspMessageType() {
+    void tranCodeMigrationDoesNotIncludeSop2cbspMessageType() {
         insertServiceCode("TRANCBSP", "ABC.DEF");
         long today = dayStartMillis(0);
         insertSourcePair("10.0.9.2", "SOP2CBSP", "ABCDEF&sop2cbsp", today, today + 1_000L);
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(19L, "TRANCBSP", 1);
 
-        assertThat(result.migratedRows()).isEqualTo(1L);
-        assertThat(targetTxnCode("msg_flow_log_request", "10.0.9.2", "SOP2CBSP")).isEqualTo("ABCDEF&sop2cbsp");
-        assertThat(targetTxnCode("msg_flow_log_response", "10.0.9.2", "SOP2CBSP")).isEqualTo("ABCDEF&sop2cbsp");
+        assertThat(result.migratedRows()).isZero();
+        assertThat(targetExists("msg_flow_log_request", "10.0.9.2", "SOP2CBSP")).isFalse();
+        assertThat(targetExists("msg_flow_log_response", "10.0.9.2", "SOP2CBSP")).isFalse();
     }
 
     @Test

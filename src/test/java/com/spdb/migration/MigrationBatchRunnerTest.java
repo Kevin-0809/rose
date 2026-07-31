@@ -15,7 +15,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -372,6 +375,46 @@ class MigrationBatchRunnerTest {
             assertThat(progress.shards()).extracting(MigrationShardRow::status)
                     .containsExactly("COMPLETED", "PENDING");
             verify(shardRunner, never()).run(shardIds.get(1), 150_000L, 200_000L, 1000);
+        } finally {
+            shardExecutor.shutdown();
+        }
+    }
+
+    @Test
+    void schedulesNextShardWhenAnyInFlightShardCompletes() throws Exception {
+        ThreadPoolTaskExecutor shardExecutor = executor("test-migration-refill-", 2, 2, 0);
+        try {
+            MigrationBatchRunner runner = new MigrationBatchRunner(commandService, shardRunner, shardExecutor);
+            long commandId = commandService.createCommand(new MigrationCommandForm(100_000L, 250_000L, 50L, 2, "refill"));
+            List<Long> shardIds = shardIds(commandId);
+            CountDownLatch firstStarted = new CountDownLatch(1);
+            CountDownLatch releaseFirst = new CountDownLatch(1);
+            CountDownLatch secondCompleted = new CountDownLatch(1);
+            CountDownLatch thirdStarted = new CountDownLatch(1);
+
+            doAnswer(invocation -> {
+                firstStarted.countDown();
+                assertThat(releaseFirst.await(5, TimeUnit.SECONDS)).isTrue();
+                return new MigrationShardResult(10L, 0L, 0L);
+            }).when(shardRunner).run(shardIds.get(0), 100_000L, 150_000L, 1000);
+            doAnswer(invocation -> {
+                secondCompleted.countDown();
+                return new MigrationShardResult(20L, 0L, 0L);
+            }).when(shardRunner).run(shardIds.get(1), 150_000L, 200_000L, 1000);
+            doAnswer(invocation -> {
+                thirdStarted.countDown();
+                return new MigrationShardResult(30L, 0L, 0L);
+            }).when(shardRunner).run(shardIds.get(2), 200_000L, 250_000L, 1000);
+
+            CompletableFuture<Void> runFuture = CompletableFuture.runAsync(() -> runner.run(commandId));
+            assertThat(firstStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(secondCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(thirdStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            releaseFirst.countDown();
+            runFuture.get(5, TimeUnit.SECONDS);
+            assertThat(commandService.progress(commandId).status()).isEqualTo("COMPLETED");
         } finally {
             shardExecutor.shutdown();
         }

@@ -6,8 +6,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -59,9 +58,9 @@ public class MigrationBatchRunner {
     private void runRunnableShards(MigrationCommandRow command, int parallelism) {
         long commandId = command.commandId();
         List<Long> shardIds = commandService.runnableShardIds(commandId);
-        Deque<CompletableFuture<Void>> inFlight = new ArrayDeque<>();
+        List<CompletableFuture<Void>> inFlight = new ArrayList<>();
         for (Long shardId : shardIds) {
-            joinCompletedCapacity(inFlight, parallelism);
+            joinAnyCompletedAtCapacity(inFlight, parallelism);
             if (commandService.isCancelRequested(commandId)) {
                 break;
             }
@@ -70,15 +69,17 @@ public class MigrationBatchRunner {
         joinAll(inFlight);
     }
 
-    private void joinCompletedCapacity(Deque<CompletableFuture<Void>> inFlight, int parallelism) {
+    private void joinAnyCompletedAtCapacity(List<CompletableFuture<Void>> inFlight, int parallelism) {
         while (inFlight.size() >= parallelism) {
-            inFlight.removeFirst().join();
+            CompletableFuture.anyOf(inFlight.toArray(CompletableFuture[]::new)).join();
+            inFlight.removeIf(CompletableFuture::isDone);
         }
     }
 
-    private void joinAll(Deque<CompletableFuture<Void>> inFlight) {
+    private void joinAll(List<CompletableFuture<Void>> inFlight) {
         while (!inFlight.isEmpty()) {
-            inFlight.removeFirst().join();
+            CompletableFuture.anyOf(inFlight.toArray(CompletableFuture[]::new)).join();
+            inFlight.removeIf(CompletableFuture::isDone);
         }
     }
 

@@ -33,7 +33,7 @@ public class MigrationShardRunner {
     private static final Logger log = LoggerFactory.getLogger(MigrationShardRunner.class);
     private static final int MAX_TARGET_CHUNK_SIZE = 500;
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
-    private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap", "sop2cbsp");
+    private static final List<String> TRAN_CODE_MESSAGE_TYPES = List.of("bzjson", "sop", "soap");
     private static final String SOURCE_QUERY = """
             with filtered_response as (
                 select source_ip, trans_id, txn_code, response_time, message_type,
@@ -333,6 +333,8 @@ public class MigrationShardRunner {
                 join msg_flow_log_request req
                   on req.trans_id = resp.trans_id
                  and req.source_ip = resp.source_ip
+                 and req.txn_time >= :timeFrom
+                 and req.txn_time < :timeTo
                 order by resp.source_ip, resp.trans_id
                 limit :limit
                 offset :offset
