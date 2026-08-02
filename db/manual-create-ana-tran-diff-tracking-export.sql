@@ -28,9 +28,22 @@ create table if not exists ana_tran_diff_tracking_export (
     coordination_required varchar(100),
     resolver varchar(100),
     defect_fix_date varchar(8),
+    issue_id bigint,
+    issue_key varchar(600),
+    affected_tran_count bigint not null default 0,
+    historical_occurrence_count bigint not null default 0,
+    first_seen_date date,
+    previous_seen_date date,
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp
 );
+
+alter table ana_tran_diff_tracking_export add column if not exists issue_id bigint;
+alter table ana_tran_diff_tracking_export add column if not exists issue_key varchar(600);
+alter table ana_tran_diff_tracking_export add column if not exists affected_tran_count bigint not null default 0;
+alter table ana_tran_diff_tracking_export add column if not exists historical_occurrence_count bigint not null default 0;
+alter table ana_tran_diff_tracking_export add column if not exists first_seen_date date;
+alter table ana_tran_diff_tracking_export add column if not exists previous_seen_date date;
 
 comment on table ana_tran_diff_tracking_export is '交易级差异问题跟踪导出表';
 comment on column ana_tran_diff_tracking_export.export_id is '导出记录ID';
@@ -59,6 +72,12 @@ comment on column ana_tran_diff_tracking_export.resolution_date is '解决日期
 comment on column ana_tran_diff_tracking_export.coordination_required is '需协调';
 comment on column ana_tran_diff_tracking_export.resolver is '解决人员';
 comment on column ana_tran_diff_tracking_export.defect_fix_date is '缺陷修复日期';
+comment on column ana_tran_diff_tracking_export.issue_id is '统一问题台账ID快照';
+comment on column ana_tran_diff_tracking_export.issue_key is '稳定业务键快照';
+comment on column ana_tran_diff_tracking_export.affected_tran_count is '该问题出现在的交易笔数';
+comment on column ana_tran_diff_tracking_export.historical_occurrence_count is '本批次前历史出现批次数';
+comment on column ana_tran_diff_tracking_export.first_seen_date is '问题首次出现日期快照';
+comment on column ana_tran_diff_tracking_export.previous_seen_date is '本次前最近出现日期快照';
 comment on column ana_tran_diff_tracking_export.created_at is '创建时间';
 comment on column ana_tran_diff_tracking_export.updated_at is '更新时间';
 

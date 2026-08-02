@@ -74,24 +74,28 @@ comment on column ana_diff_issue.updated_at is '更新时间';
 
 alter table ana_tran_diff_tracking_export add column if not exists issue_id bigint;
 alter table ana_tran_diff_tracking_export add column if not exists issue_key varchar(600);
+alter table ana_tran_diff_tracking_export add column if not exists affected_tran_count bigint not null default 0;
 alter table ana_tran_diff_tracking_export add column if not exists historical_occurrence_count bigint not null default 0;
 alter table ana_tran_diff_tracking_export add column if not exists first_seen_date date;
 alter table ana_tran_diff_tracking_export add column if not exists previous_seen_date date;
 
 comment on column ana_tran_diff_tracking_export.issue_id is '统一问题台账ID快照';
 comment on column ana_tran_diff_tracking_export.issue_key is '稳定业务键快照';
+comment on column ana_tran_diff_tracking_export.affected_tran_count is '该问题出现在的交易笔数';
 comment on column ana_tran_diff_tracking_export.historical_occurrence_count is '本批次前历史出现批次数';
 comment on column ana_tran_diff_tracking_export.first_seen_date is '问题首次出现日期快照';
 comment on column ana_tran_diff_tracking_export.previous_seen_date is '本次前最近出现日期快照';
 
 alter table ana_field_diff_tracking_export add column if not exists issue_id bigint;
 alter table ana_field_diff_tracking_export add column if not exists issue_key varchar(600);
+alter table ana_field_diff_tracking_export add column if not exists affected_tran_count bigint not null default 0;
 alter table ana_field_diff_tracking_export add column if not exists historical_occurrence_count bigint not null default 0;
 alter table ana_field_diff_tracking_export add column if not exists first_seen_date date;
 alter table ana_field_diff_tracking_export add column if not exists previous_seen_date date;
 
 comment on column ana_field_diff_tracking_export.issue_id is '统一问题台账ID快照';
 comment on column ana_field_diff_tracking_export.issue_key is '稳定业务键快照';
+comment on column ana_field_diff_tracking_export.affected_tran_count is '该问题出现在的交易笔数';
 comment on column ana_field_diff_tracking_export.historical_occurrence_count is '本批次前历史出现批次数';
 comment on column ana_field_diff_tracking_export.first_seen_date is '问题首次出现日期快照';
 comment on column ana_field_diff_tracking_export.previous_seen_date is '本次前最近出现日期快照';

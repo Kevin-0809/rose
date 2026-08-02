@@ -57,10 +57,12 @@ class ReportExportControllerTest {
         MockHttpServletResponse dailyResponse = new MockHttpServletResponse();
         MockHttpServletResponse rawDailyResponse = new MockHttpServletResponse();
         MockHttpServletResponse weeklyResponse = new MockHttpServletResponse();
+        MockHttpServletResponse issuesResponse = new MockHttpServletResponse();
 
         controller.downloadDaily("RPT1", dailyResponse);
         controller.downloadRawDaily("RPT1", rawDailyResponse);
         controller.downloadWeekly("RPT1", weeklyResponse);
+        controller.downloadFullIssueList("RPT1", issuesResponse);
 
         assertThat(dailyResponse.getHeader("Content-Disposition"))
                 .contains("%E6%97%A5%E6%8A%A5%E6%98%8E%E7%BB%86-202607271935.xlsx");
@@ -68,14 +70,19 @@ class ReportExportControllerTest {
                 .contains("%E6%97%A5%E6%8A%A5%E6%98%8E%E7%BB%86-%E6%9C%AA%E8%84%B1%E6%95%8F-202607271935.xlsx");
         assertThat(weeklyResponse.getHeader("Content-Disposition"))
                 .contains("%E5%91%A8%E6%9C%9F%E5%91%A8%E6%8A%A5-202607271935.xlsx");
+        assertThat(issuesResponse.getHeader("Content-Disposition"))
+                .contains("%E5%85%A8%E9%87%8F%E9%97%AE%E9%A2%98%E6%B8%85%E5%8D%95-202607271935.xlsx");
         verify(excel).stream("RPT1", dailyResponse.getOutputStream());
         verify(excel).streamRawDaily("RPT1", rawDailyResponse.getOutputStream());
         verify(excel).streamWeekly("RPT1", weeklyResponse.getOutputStream());
+        verify(excel).streamFullIssueList("RPT1", issuesResponse.getOutputStream());
 
         service.command = command("RUNNING");
         assertThatThrownBy(() -> controller.downloadRawDaily("RPT1", new MockHttpServletResponse()))
                 .isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> controller.downloadWeekly("RPT1", new MockHttpServletResponse()))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> controller.downloadFullIssueList("RPT1", new MockHttpServletResponse()))
                 .isInstanceOf(ResponseStatusException.class);
     }
 

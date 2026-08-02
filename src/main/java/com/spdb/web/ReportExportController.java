@@ -149,6 +149,17 @@ public class ReportExportController {
         reportExportExcelService.streamWeekly(batchId, response.getOutputStream());
     }
 
+    @GetMapping("/report-exports/{batchId}/issues")
+    public void downloadFullIssueList(@PathVariable String batchId, HttpServletResponse response) throws IOException {
+        ReportExportCommandRow command = reportExportCommandService.findByBatchId(batchId);
+        if (command == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到导出批次");
+        if (!"SUCCEEDED".equals(command.status())) throw new ResponseStatusException(HttpStatus.CONFLICT, "批次尚未完成");
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", ContentDisposition.attachment()
+                .filename("全量问题清单-" + EXPORT_FILENAME_TIME.format(LocalDateTime.now(clock)) + ".xlsx", StandardCharsets.UTF_8).build().toString());
+        reportExportExcelService.streamFullIssueList(batchId, response.getOutputStream());
+    }
+
     private String exportFilename() {
         return exportFilename(false);
     }
