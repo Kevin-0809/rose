@@ -48,9 +48,13 @@ import java.util.Set;
 public class ReportExportExcelService {
     private static final Logger log = LoggerFactory.getLogger(ReportExportExcelService.class);
     private static final int DEFAULT_DELAY_GRACE_DAYS = 4;
-    private static final String[] DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
+    private static final String[] BASE_DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
             "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
             "解决人员", "流水号", "缺陷修复日期", "备注", "该问题出现在的交易笔数", "issue_id", "issue_key",
+            "历史出现次数", "首次出现日期", "上次出现日期"};
+    private static final String[] DAILY_DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
+            "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
+            "解决人员", "流水号", "全局流水号", "缺陷修复日期", "备注", "该问题出现在的交易笔数", "issue_id", "issue_key",
             "历史出现次数", "首次出现日期", "上次出现日期"};
     private final NamedParameterJdbcTemplate jdbc;
     private final int delayGraceDays;
@@ -443,36 +447,36 @@ public class ReportExportExcelService {
     private void writeModule(SXSSFWorkbook book, String batchId, String module, boolean rawFieldValues, Styles styles) {
         long started = System.nanoTime();
         SXSSFSheet sheet = book.createSheet(uniqueSheetName(book, module));
-        writeDetailHeader(sheet, styles);
+        writeDetailHeader(sheet, DAILY_DETAIL_HEADERS, styles);
         int[] row = {1};
-        int tranRows = streamDetails(sheet, batchId, module, "ana_tran_diff_tracking_export", row, rawFieldValues, styles);
-        int fieldRows = streamDetails(sheet, batchId, module, "ana_field_diff_tracking_export", row, rawFieldValues, styles);
-        finishDetailSheet(sheet);
+        int tranRows = streamDetails(sheet, batchId, module, "ana_tran_diff_tracking_export", row, rawFieldValues, true, styles);
+        int fieldRows = streamDetails(sheet, batchId, module, "ana_field_diff_tracking_export", row, rawFieldValues, true, styles);
+        finishDetailSheet(sheet, DAILY_DETAIL_HEADERS.length);
         log.info("{}明细Sheet写入完成，batchId={}, module={}, tranRows={}, fieldRows={}, elapsedMs={}",
                 rawFieldValues ? "未脱敏日报" : "日报", batchId, module, tranRows, fieldRows, elapsedMs(started));
     }
 
     private int writeFullIssueList(SXSSFWorkbook book, String batchId, Styles styles) {
         SXSSFSheet sheet = book.createSheet("全量问题清单");
-        writeDetailHeader(sheet, styles);
+        writeDetailHeader(sheet, BASE_DETAIL_HEADERS, styles);
         int[] row = {1};
         streamAllDetails(sheet, batchId, row, styles);
-        finishDetailSheet(sheet);
+        finishDetailSheet(sheet, BASE_DETAIL_HEADERS.length);
         return row[0] - 1;
     }
 
-    private void writeDetailHeader(SXSSFSheet sheet, Styles styles) {
+    private void writeDetailHeader(SXSSFSheet sheet, String[] headers, Styles styles) {
         Row header = sheet.createRow(0);
         header.setHeightInPoints(24f);
-        for (int i = 0; i < DETAIL_HEADERS.length; i++) {
-            cell(header, i, DETAIL_HEADERS[i], styles.detailHeader);
+        for (int i = 0; i < headers.length; i++) {
+            cell(header, i, headers[i], styles.detailHeader);
         }
     }
 
-    private void finishDetailSheet(SXSSFSheet sheet) {
-        sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, DETAIL_HEADERS.length - 1));
+    private void finishDetailSheet(SXSSFSheet sheet, int headerCount) {
+        sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, headerCount - 1));
         sheet.createFreezePane(0, 1);
-        for (int i = 0; i < DETAIL_HEADERS.length; i++) {
+        for (int i = 0; i < headerCount; i++) {
             sheet.setColumnWidth(i, i == 8 || i == 11 || i == 12 ? 9000 : 3600);
         }
     }
@@ -606,15 +610,19 @@ public class ReportExportExcelService {
     }
 
     private int streamDetails(SXSSFSheet sheet, String batchId, String module, String table, int[] row,
-                              boolean rawFieldValues, Styles styles) {
+                              boolean rawFieldValues, boolean dailyDetail, Styles styles) {
         int startRow = row[0];
-        String sql = "select module_name,row_no,source_batch_id,tran_code,tran_name,problem_level,registration_date,"
-                + "field_name,problem_description,transaction_owner,problem_type,preliminary_analysis,final_solution,"
-                + "resolution_date,coordination_required,resolver,tran_seq_no,defect_fix_date,"
-                + "affected_tran_count,issue_id,issue_key,historical_occurrence_count,first_seen_date,previous_seen_date"
-                + (rawFieldValues && "ana_field_diff_tracking_export".equals(table) ? ",orig_field_value,dest_field_value" : "")
-                + " from " + table
-                + " where source_batch_id=? and module_name=? order by row_no";
+        String sql = "select detail.module_name,detail.row_no,detail.source_batch_id,detail.tran_code,detail.tran_name,detail.problem_level,detail.registration_date,"
+                + "detail.field_name,detail.problem_description,detail.transaction_owner,detail.problem_type,detail.preliminary_analysis,detail.final_solution,"
+                + "detail.resolution_date,detail.coordination_required,detail.resolver,detail.tran_seq_no,"
+                + (dailyDetail ? "(select request.global_seq_no from msg_flow_log_request request "
+                + "where request.trans_id = right(detail.tran_seq_no, 26) "
+                + "order by request.txn_time asc nulls last, request.source_ip asc limit 1) as global_seq_no," : "")
+                + "detail.defect_fix_date,"
+                + "detail.affected_tran_count,detail.issue_id,detail.issue_key,detail.historical_occurrence_count,detail.first_seen_date,detail.previous_seen_date"
+                + (rawFieldValues && "ana_field_diff_tracking_export".equals(table) ? ",detail.orig_field_value,detail.dest_field_value" : "")
+                + " from " + table + " detail"
+                + " where detail.source_batch_id=? and detail.module_name=? order by detail.row_no";
         jdbc.getJdbcTemplate().query((PreparedStatementCreator) connection -> {
             PreparedStatement statement = connection.prepareStatement(sql);
             statement.setFetchSize(500);
@@ -626,7 +634,7 @@ public class ReportExportExcelService {
             Row r = sheet.createRow(row[0]++);
             CellStyle rowStyle = styles.rowStyle(dataOrdinal);
             boolean rawFieldRow = rawFieldValues && "ana_field_diff_tracking_export".equals(table);
-            writeDetailRowCells(r, rs, rawFieldRow, rowStyle);
+            writeDetailRowCells(r, rs, rawFieldRow, dailyDetail, rowStyle);
         });
         return row[0] - startRow;
     }
@@ -662,43 +670,45 @@ public class ReportExportExcelService {
         int dataOrdinal = row[0];
         Row r = sheet.createRow(row[0]++);
         CellStyle rowStyle = styles.rowStyle(dataOrdinal);
-        writeDetailRowCells(r, rs, rawFieldRow, rowStyle);
+        writeDetailRowCells(r, rs, rawFieldRow, false, rowStyle);
     }
 
-    private void writeDetailRowCells(Row row, ResultSet rs, boolean rawFieldRow, CellStyle rowStyle)
+    private void writeDetailRowCells(Row row, ResultSet rs, boolean rawFieldRow, boolean dailyDetail, CellStyle rowStyle)
             throws java.sql.SQLException {
         String description = rawFieldRow
                 ? rawFieldDescription(rs.getString("orig_field_value"), rs.getString("dest_field_value"))
                 : text(rs.getObject("problem_description"));
-        String[] values = {
-                text(rs.getObject("module_name")),
-                text(rs.getObject("row_no")),
-                text(rs.getObject("source_batch_id")),
-                text(rs.getObject("tran_code")),
-                text(rs.getObject("tran_name")),
-                text(rs.getObject("problem_level")),
-                text(rs.getObject("registration_date")),
-                text(rs.getObject("field_name")),
-                description,
-                text(rs.getObject("transaction_owner")),
-                text(rs.getObject("problem_type")),
-                text(rs.getObject("preliminary_analysis")),
-                text(rs.getObject("final_solution")),
-                text(rs.getObject("resolution_date")),
-                text(rs.getObject("coordination_required")),
-                text(rs.getObject("resolver")),
-                text(rs.getObject("tran_seq_no")),
-                text(rs.getObject("defect_fix_date")),
-                "",
-                text(rs.getObject("affected_tran_count")),
-                text(rs.getObject("issue_id")),
-                text(rs.getObject("issue_key")),
-                text(rs.getObject("historical_occurrence_count")),
-                text(rs.getObject("first_seen_date")),
-                text(rs.getObject("previous_seen_date"))
-        };
-        for (int i = 0; i < values.length; i++) {
-            cell(row, i, values[i], rowStyle);
+        List<String> values = new ArrayList<>(dailyDetail ? DAILY_DETAIL_HEADERS.length : BASE_DETAIL_HEADERS.length);
+        values.add(text(rs.getObject("module_name")));
+        values.add(text(rs.getObject("row_no")));
+        values.add(text(rs.getObject("source_batch_id")));
+        values.add(text(rs.getObject("tran_code")));
+        values.add(text(rs.getObject("tran_name")));
+        values.add(text(rs.getObject("problem_level")));
+        values.add(text(rs.getObject("registration_date")));
+        values.add(text(rs.getObject("field_name")));
+        values.add(description);
+        values.add(text(rs.getObject("transaction_owner")));
+        values.add(text(rs.getObject("problem_type")));
+        values.add(text(rs.getObject("preliminary_analysis")));
+        values.add(text(rs.getObject("final_solution")));
+        values.add(text(rs.getObject("resolution_date")));
+        values.add(text(rs.getObject("coordination_required")));
+        values.add(text(rs.getObject("resolver")));
+        values.add(text(rs.getObject("tran_seq_no")));
+        if (dailyDetail) {
+            values.add(text(rs.getObject("global_seq_no")));
+        }
+        values.add(text(rs.getObject("defect_fix_date")));
+        values.add("");
+        values.add(text(rs.getObject("affected_tran_count")));
+        values.add(text(rs.getObject("issue_id")));
+        values.add(text(rs.getObject("issue_key")));
+        values.add(text(rs.getObject("historical_occurrence_count")));
+        values.add(text(rs.getObject("first_seen_date")));
+        values.add(text(rs.getObject("previous_seen_date")));
+        for (int i = 0; i < values.size(); i++) {
+            cell(row, i, values.get(i), rowStyle);
         }
     }
 

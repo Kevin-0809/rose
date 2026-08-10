@@ -44,6 +44,7 @@ class ReportExportExcelServiceTest {
         jdbc.execute("create table ana_report_export_summary(batch_id varchar(64), report_date varchar(8), module_name varchar(100), covered_528_interface_count bigint, sent_transaction_count bigint, comp_result_1_count bigint, comp_result_2_count bigint, comp_result_3_count bigint, comp_result_4_count bigint, comp_result_8_count bigint, success_rate decimal(12,8), diff_528_field_count bigint, field_pass_transaction_count bigint not null default 0, comparison_pass_rate decimal(12,8) not null default 0, transaction_issue_count bigint not null default 0, field_issue_count bigint not null default 0, issue_total_count bigint not null default 0, duplicate_issue_count bigint not null default 0)");
         jdbc.execute("create table ana_tran_diff_tracking_export(source_batch_id varchar(64), module_name varchar(100), row_no bigint, issue_id bigint, issue_key varchar(600), affected_tran_count bigint not null default 0, tran_code varchar(32), tran_name varchar(200), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), resolution_date varchar(8), coordination_required varchar(100), resolver varchar(100), defect_fix_date varchar(8), historical_occurrence_count bigint not null default 0, first_seen_date date, previous_seen_date date)");
         jdbc.execute("create table ana_field_diff_tracking_export(source_batch_id varchar(64), module_name varchar(100), row_no bigint, issue_id bigint, issue_key varchar(600), affected_tran_count bigint not null default 0, tran_code varchar(32), tran_name varchar(200), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), resolution_date varchar(8), coordination_required varchar(100), resolver varchar(100), defect_fix_date varchar(8), orig_field_value varchar(2000), dest_field_value varchar(2000), historical_occurrence_count bigint not null default 0, first_seen_date date, previous_seen_date date)");
+        jdbc.execute("create table msg_flow_log_request(source_ip varchar(64), trans_id varchar(64), txn_time bigint, global_seq_no varchar(64))");
     }
 
     @Test
@@ -79,25 +80,27 @@ class ReportExportExcelServiceTest {
             assertHeaderStyle(workbook, workbook.getSheet("ModuleA").getRow(0), 0, "0E566F");
             Sheet detail = workbook.getSheet("ModuleA");
             assertThat(detail.getPaneInformation().isFreezePane()).isTrue();
-            assertThat(detail.getRow(0).getCell(17).getStringCellValue()).isEqualTo("缺陷修复日期");
-            assertThat(detail.getRow(0).getCell(18).getStringCellValue()).isEqualTo("备注");
-            assertThat(detail.getRow(0).getCell(19).getStringCellValue()).isEqualTo("该问题出现在的交易笔数");
-            assertThat(detail.getRow(0).getCell(20).getStringCellValue()).isEqualTo("issue_id");
-            assertThat(detail.getRow(0).getCell(21).getStringCellValue()).isEqualTo("issue_key");
-            assertThat(detail.getRow(0).getCell(22).getStringCellValue()).isEqualTo("历史出现次数");
-            assertThat(detail.getRow(1).getCell(17).getStringCellValue()).isEqualTo("20260725");
-            assertThat(detail.getRow(1).getCell(18).getStringCellValue()).isBlank();
-            assertThat(detail.getRow(1).getCell(19).getStringCellValue()).isEqualTo("7");
-            assertThat(detail.getRow(1).getCell(20).getStringCellValue()).isEqualTo("101");
-            assertThat(detail.getRow(1).getCell(21).getStringCellValue()).isEqualTo("TRAN|svc1|e1|e2");
-            assertThat(detail.getRow(1).getCell(22).getStringCellValue()).isEqualTo("3");
-            assertThat(detail.getRow(1).getCell(23).getStringCellValue()).isEqualTo("2026-07-01");
-            assertThat(detail.getRow(1).getCell(24).getStringCellValue()).isEqualTo("2026-07-20");
+            assertThat(detail.getRow(0).getCell(16).getStringCellValue()).isEqualTo("流水号");
+            assertThat(detail.getRow(0).getCell(17).getStringCellValue()).isEqualTo("全局流水号");
+            assertThat(detail.getRow(0).getCell(18).getStringCellValue()).isEqualTo("缺陷修复日期");
+            assertThat(detail.getRow(0).getCell(19).getStringCellValue()).isEqualTo("备注");
+            assertThat(detail.getRow(0).getCell(20).getStringCellValue()).isEqualTo("该问题出现在的交易笔数");
+            assertThat(detail.getRow(0).getCell(21).getStringCellValue()).isEqualTo("issue_id");
+            assertThat(detail.getRow(0).getCell(22).getStringCellValue()).isEqualTo("issue_key");
+            assertThat(detail.getRow(0).getCell(23).getStringCellValue()).isEqualTo("历史出现次数");
+            assertThat(detail.getRow(1).getCell(18).getStringCellValue()).isEqualTo("20260725");
+            assertThat(detail.getRow(1).getCell(19).getStringCellValue()).isBlank();
+            assertThat(detail.getRow(1).getCell(20).getStringCellValue()).isEqualTo("7");
+            assertThat(detail.getRow(1).getCell(21).getStringCellValue()).isEqualTo("101");
+            assertThat(detail.getRow(1).getCell(22).getStringCellValue()).isEqualTo("TRAN|svc1|e1|e2");
+            assertThat(detail.getRow(1).getCell(23).getStringCellValue()).isEqualTo("3");
+            assertThat(detail.getRow(1).getCell(24).getStringCellValue()).isEqualTo("2026-07-01");
+            assertThat(detail.getRow(1).getCell(25).getStringCellValue()).isEqualTo("2026-07-20");
             assertThat(detail.getRow(2).getCell(8).getStringCellValue()).isEqualTo("field problem");
-            assertThat(detail.getRow(2).getCell(19).getStringCellValue()).isEqualTo("5");
-            assertThat(detail.getRow(2).getCell(20).getStringCellValue()).isEqualTo("202");
-            assertThat(detail.getRow(2).getCell(21).getStringCellValue()).isEqualTo("FIELD|svc1|request.amount");
-            assertThat(detail.getRow(2).getCell(22).getStringCellValue()).isEqualTo("2");
+            assertThat(detail.getRow(2).getCell(20).getStringCellValue()).isEqualTo("5");
+            assertThat(detail.getRow(2).getCell(21).getStringCellValue()).isEqualTo("202");
+            assertThat(detail.getRow(2).getCell(22).getStringCellValue()).isEqualTo("FIELD|svc1|request.amount");
+            assertThat(detail.getRow(2).getCell(23).getStringCellValue()).isEqualTo("2");
         }
         assertThat(output.toString()).doesNotContain("secret");
     }
@@ -128,11 +131,53 @@ class ReportExportExcelServiceTest {
         assertThat(masked.toString()).doesNotContain("raw-secret-528").doesNotContain("raw-secret-CCBS");
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(raw.toByteArray()))) {
             Sheet sheet = workbook.getSheet("ModuleRaw");
-            assertThat(sheet.getRow(0).getLastCellNum()).isEqualTo((short) 25);
+            assertThat(sheet.getRow(0).getLastCellNum()).isEqualTo((short) 26);
             assertThat(sheet.getRow(0).getCell(8).getStringCellValue()).isEqualTo("问题描述");
             assertThat(sheet.getRow(1).getCell(8).getStringCellValue())
                     .isEqualTo("528字段值：raw-secret-528；CCBS字段值：raw-secret-CCBS");
-            assertThat(sheet.getRow(1).getCell(25)).isNull();
+            assertThat(sheet.getRow(1).getCell(17).getStringCellValue()).isBlank();
+            assertThat(sheet.getRow(1).getCell(25).getStringCellValue()).isEqualTo("2026-07-18");
+        }
+    }
+
+    @Test
+    void dailyDetailAddsGlobalSequenceFromTrailing26CharactersAndKeepsFirstRequest() throws Exception {
+        String matchedTransId = "12345678901234567890123456";
+        String nullGlobalTransId = "65432109876543210987654321";
+        jdbc.update("insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,"
+                + "sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,comp_result_4_count,"
+                + "comp_result_8_count,success_rate,diff_528_field_count,field_pass_transaction_count,comparison_pass_rate,"
+                + "transaction_issue_count,field_issue_count,issue_total_count,duplicate_issue_count) values "
+                + "('RPT-GLOBAL','20260727','ModuleGlobal',1,2,1,0,0,0,0,1,0,0,1,1,1,2,0)");
+        jdbc.update("insert into msg_flow_log_request(source_ip,trans_id,txn_time,global_seq_no) values (?,?,?,?)",
+                "10.0.0.2", matchedTransId, 200L, "GLOBAL-LATE");
+        jdbc.update("insert into msg_flow_log_request(source_ip,trans_id,txn_time,global_seq_no) values (?,?,?,?)",
+                "10.0.0.1", matchedTransId, 100L, "GLOBAL-EARLIEST");
+        jdbc.update("insert into msg_flow_log_request(source_ip,trans_id,txn_time,global_seq_no) values (?,?,?,?)",
+                "10.0.0.1", nullGlobalTransId, 300L, null);
+        jdbc.update("insert into ana_tran_diff_tracking_export(source_batch_id,module_name,row_no,issue_id,issue_key,"
+                + "tran_seq_no,tran_code,tran_name,problem_level,registration_date,problem_description) values (?,?,?,?,?,?,?,?,?,?,?)",
+                "RPT-GLOBAL", "ModuleGlobal", 1, 501, "TRAN-GLOBAL-1", "PREFIX-" + matchedTransId,
+                "T1", "Tran One", "Transaction", "20260727", "transaction problem");
+        jdbc.update("insert into ana_tran_diff_tracking_export(source_batch_id,module_name,row_no,issue_id,issue_key,"
+                + "tran_seq_no,tran_code,tran_name,problem_level,registration_date,problem_description) values (?,?,?,?,?,?,?,?,?,?,?)",
+                "RPT-GLOBAL", "ModuleGlobal", 2, 502, "TRAN-GLOBAL-2", "PREFIX-" + nullGlobalTransId,
+                "T2", "Tran Two", "Transaction", "20260727", "transaction problem");
+        jdbc.update("insert into ana_field_diff_tracking_export(source_batch_id,module_name,row_no,issue_id,issue_key,"
+                + "tran_seq_no,tran_code,tran_name,problem_level,registration_date,problem_description) values (?,?,?,?,?,?,?,?,?,?,?)",
+                "RPT-GLOBAL", "ModuleGlobal", 3, 503, "FIELD-GLOBAL-1", "UNMATCHED",
+                "T3", "Tran Three", "Field", "20260727", "field problem");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        service.stream("RPT-GLOBAL", output);
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
+            Sheet sheet = workbook.getSheet("ModuleGlobal");
+            assertThat(sheet.getRow(0).getCell(16).getStringCellValue()).isEqualTo("流水号");
+            assertThat(sheet.getRow(0).getCell(17).getStringCellValue()).isEqualTo("全局流水号");
+            assertThat(sheet.getRow(1).getCell(17).getStringCellValue()).isEqualTo("GLOBAL-EARLIEST");
+            assertThat(sheet.getRow(2).getCell(17).getStringCellValue()).isBlank();
+            assertThat(sheet.getRow(3).getCell(17).getStringCellValue()).isBlank();
         }
     }
 
@@ -160,6 +205,7 @@ class ReportExportExcelServiceTest {
             assertThat(workbook.getNumberOfSheets()).isEqualTo(1);
             Sheet sheet = workbook.getSheetAt(0);
             assertThat(sheet.getPaneInformation().isFreezePane()).isTrue();
+            assertThat(sheet.getRow(0).getLastCellNum()).isEqualTo((short) 25);
             assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("领域");
             assertThat(sheet.getRow(0).getCell(8).getStringCellValue()).isEqualTo("问题描述");
             assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("ModuleField");
@@ -196,14 +242,14 @@ class ReportExportExcelServiceTest {
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             Sheet sheet = workbook.getSheet("ModuleA");
-            assertThat(sheet.getRow(0).getCell(19).getStringCellValue()).isEqualTo("该问题出现在的交易笔数");
-            assertThat(sheet.getRow(0).getCell(20).getStringCellValue()).isEqualTo("issue_id");
-            assertThat(sheet.getRow(0).getCell(21).getStringCellValue()).isEqualTo("issue_key");
-            assertThat(sheet.getRow(0).getCell(22).getStringCellValue()).isEqualTo("历史出现次数");
-            assertThat(sheet.getRow(1).getCell(19).getStringCellValue()).isEqualTo("7");
-            assertThat(sheet.getRow(1).getCell(20).getStringCellValue()).isEqualTo("901");
-            assertThat(sheet.getRow(1).getCell(21).getStringCellValue()).isEqualTo("TRAN|svc1|e1|e2");
-            assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("3");
+            assertThat(sheet.getRow(0).getCell(20).getStringCellValue()).isEqualTo("该问题出现在的交易笔数");
+            assertThat(sheet.getRow(0).getCell(21).getStringCellValue()).isEqualTo("issue_id");
+            assertThat(sheet.getRow(0).getCell(22).getStringCellValue()).isEqualTo("issue_key");
+            assertThat(sheet.getRow(0).getCell(23).getStringCellValue()).isEqualTo("历史出现次数");
+            assertThat(sheet.getRow(1).getCell(20).getStringCellValue()).isEqualTo("7");
+            assertThat(sheet.getRow(1).getCell(21).getStringCellValue()).isEqualTo("901");
+            assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("TRAN|svc1|e1|e2");
+            assertThat(sheet.getRow(1).getCell(23).getStringCellValue()).isEqualTo("3");
         }
     }
 

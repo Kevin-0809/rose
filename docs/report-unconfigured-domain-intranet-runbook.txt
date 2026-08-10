@@ -1,0 +1,463 @@
+Rose 报表“未配置领域”历史批次修复实施手册
+================================================
+
+一、实施目的
+------------
+
+在不创建新报表批次、不改变原批次日期和状态的前提下：
+
+1. 找回被 Excel“交易码”列截断的完整 S 开头服务码。
+2. 补齐服务码对应的交易码、交易名称、领域和负责人。
+3. 将原批次“未配置领域”明细分别归入正确领域。
+4. 重新计算原批次多领域汇总，保证后续日报和周报口径一致。
+5. 重新下载原批次 Excel。
+
+重要说明：Excel 中被截断的通常是 tran_code，不一定是 service_code。
+配置时必须使用数据库 service_code 或原始表 dest_trcd 中的完整服务码，不能使用 Excel 中被截断的内容。
+
+
+二、实施前准备
+------------
+
+1. 确认需要修复的原报表批次号，例如：
+
+   RPT20260807-173024-2304
+
+2. 以下 SQL 中的“待替换批次号”必须全部替换成真实批次号。
+
+3. 实施期间暂停该报表批次相关的数据生成操作，不要同时创建新日报任务。
+
+4. 本手册按 PostgreSQL 语法编写。
+
+
+三、步骤 1：确认批次和原始数据状态
+---------------------------------
+
+执行：
+
+select batch_id, report_date, status, started_time, ended_time
+from ana_report_export_command
+where batch_id = '待替换批次号';
+
+预期：
+
+- 能查询到一条记录。
+- status 为 SUCCEEDED。
+- 记下 report_date。
+
+检查原始交易数量是否仍与原汇总一致：
+
+select
+    (select count(*) from tss_tran_comp) as raw_transaction_count,
+    (select coalesce(sum(sent_transaction_count), 0)
+       from ana_report_export_summary
+      where batch_id = '待替换批次号') as report_transaction_count,
+    (select min(orig_cdate) from tss_tran_comp) as raw_min_date,
+    (select max(orig_cdate) from tss_tran_comp) as raw_max_date;
+
+判断：
+
+- raw_transaction_count 必须等于 report_transaction_count。
+- 如果数量不相等，停止实施，不执行“步骤 7：重算汇总”。这说明原始表已发生变化，无法保证历史汇总精确复原。
+- 数量相等是继续实施的必要条件。还应确认 tss_tran_comp、tss_field_comp 在批次生成后没有重新装载或修改。
+
+
+四、步骤 2：备份原批次数据
+-------------------------
+
+备份表名中的日期可按实际实施日期修改。执行前确认同名备份表不存在。
+
+create table bak_tran_tracking_20260808 as
+select *
+from ana_tran_diff_tracking_export
+where source_batch_id = '待替换批次号';
+
+create table bak_field_tracking_20260808 as
+select *
+from ana_field_diff_tracking_export
+where source_batch_id = '待替换批次号';
+
+create table bak_report_summary_20260808 as
+select *
+from ana_report_export_summary
+where batch_id = '待替换批次号';
+
+create table bak_diff_issue_20260808 as
+select *
+from ana_diff_issue
+where issue_id in (
+    select issue_id
+    from ana_tran_diff_tracking_export
+    where source_batch_id = '待替换批次号' and issue_id is not null
+    union
+    select issue_id
+    from ana_field_diff_tracking_export
+    where source_batch_id = '待替换批次号' and issue_id is not null
+);
+
+检查备份数量：
+
+select 'tran' as data_type, count(*) from bak_tran_tracking_20260808
+union all
+select 'field', count(*) from bak_field_tracking_20260808
+union all
+select 'summary', count(*) from bak_report_summary_20260808
+union all
+select 'issue', count(*) from bak_diff_issue_20260808;
+
+
+五、步骤 3：确认真实完整服务码
+-----------------------------
+
+先查看 tracking 表中保存的 service_code：
+
+select export_id,
+       tran_seq_no,
+       tran_code as excel_displayed_tran_code,
+       length(tran_code) as tran_code_length,
+       service_code as stored_service_code,
+       length(service_code) as service_code_length
+from ana_tran_diff_tracking_export
+where source_batch_id = '待替换批次号'
+  and module_name = '未配置领域'
+order by export_id;
+
+从原始表核对完整服务码：
+
+select d.export_id,
+       d.tran_seq_no,
+       d.service_code as stored_service_code,
+       split_part(t.dest_trcd, '&', 1) as real_service_code,
+       t.dest_trcd
+from ana_tran_diff_tracking_export d
+join tss_tran_comp t
+  on t.mesg_seq = d.tran_seq_no
+ and t.orig_cdate = d.business_date
+where d.source_batch_id = '待替换批次号'
+  and d.module_name = '未配置领域'
+order by d.export_id;
+
+判断：
+
+- 如果 stored_service_code 与 real_service_code 相同，service_code 没有被截断，不需要执行步骤 4。
+- 如果 stored_service_code 也被截断，执行步骤 4。
+- 如果同一个 export_id 对应多个不同 real_service_code，停止实施并人工确认，不能自动更新。
+
+
+六、步骤 4：必要时恢复 tracking 表完整服务码
+-----------------------------------------
+
+只有步骤 3 确认 service_code 确实被截断时才执行。
+
+begin;
+
+with resolved as (
+    select d.export_id,
+           min(split_part(t.dest_trcd, '&', 1)) as real_service_code
+    from ana_tran_diff_tracking_export d
+    join tss_tran_comp t
+      on t.mesg_seq = d.tran_seq_no
+     and t.orig_cdate = d.business_date
+    where d.source_batch_id = '待替换批次号'
+      and d.module_name = '未配置领域'
+    group by d.export_id
+    having count(distinct split_part(t.dest_trcd, '&', 1)) = 1
+)
+update ana_tran_diff_tracking_export d
+set service_code = r.real_service_code,
+    updated_at = current_timestamp
+from resolved r
+where d.export_id = r.export_id;
+
+with resolved as (
+    select d.export_id,
+           min(split_part(t.dest_trcd, '&', 1)) as real_service_code
+    from ana_field_diff_tracking_export d
+    join tss_tran_comp t
+      on t.mesg_seq = d.tran_seq_no
+     and t.orig_cdate = d.business_date
+    where d.source_batch_id = '待替换批次号'
+      and d.module_name = '未配置领域'
+    group by d.export_id
+    having count(distinct split_part(t.dest_trcd, '&', 1)) = 1
+)
+update ana_field_diff_tracking_export d
+set service_code = r.real_service_code,
+    updated_at = current_timestamp
+from resolved r
+where d.export_id = r.export_id;
+
+commit;
+
+
+七、步骤 5：补齐交易基础配置
+-------------------------
+
+查询本批次所有未配置服务及其当前配置：
+
+with service_list as (
+    select service_code
+    from ana_tran_diff_tracking_export
+    where source_batch_id = '待替换批次号' and module_name = '未配置领域'
+    union
+    select service_code
+    from ana_field_diff_tracking_export
+    where source_batch_id = '待替换批次号' and module_name = '未配置领域'
+)
+select s.service_code,
+       c.catalog_id,
+       c.tran_code,
+       c.tran_name,
+       c.module_name,
+       c.owner
+from service_list s
+left join ana_tran_catalog c
+  on lower(c.service_code) = lower(s.service_code)
+order by s.service_code, c.catalog_id;
+
+对每个完整服务码补充 ana_tran_catalog。可以通过系统“交易配置”页面新增，也可以执行 SQL。
+
+示例，仅作为格式模板，必须替换成真实值：
+
+insert into ana_tran_catalog (
+    tran_code, service_code, tran_name, module_name,
+    owner, is_key_tran, remark
+) values (
+    '真实四位交易码',
+    '完整S开头服务码',
+    '真实交易名称',
+    'loan',
+    '真实负责人',
+    'false',
+    '历史报表未配置领域修复'
+);
+
+领域值按内网实际配置填写，例如 loan、sett、dept、comm。不同服务码可以配置到不同领域。
+
+配置完成后必须执行以下检查：
+
+with service_list as (
+    select service_code
+    from ana_tran_diff_tracking_export
+    where source_batch_id = '待替换批次号' and module_name = '未配置领域'
+    union
+    select service_code
+    from ana_field_diff_tracking_export
+    where source_batch_id = '待替换批次号' and module_name = '未配置领域'
+)
+select s.service_code
+from service_list s
+left join ana_tran_catalog c
+  on lower(c.service_code) = lower(s.service_code)
+where c.catalog_id is null
+   or nullif(trim(c.module_name), '') is null;
+
+预期结果：0 行。只要还有结果，就不能继续。
+
+
+八、步骤 6：按服务码修正多领域明细和问题台账
+-------------------------------------------
+
+begin;
+
+with catalog as (
+    select distinct on (lower(service_code))
+           service_code, tran_code, tran_name, module_name, owner
+    from ana_tran_catalog
+    order by lower(service_code), catalog_id
+)
+update ana_tran_diff_tracking_export d
+set tran_code = c.tran_code,
+    tran_name = c.tran_name,
+    module_name = c.module_name,
+    transaction_owner = c.owner,
+    updated_at = current_timestamp
+from catalog c
+where d.source_batch_id = '待替换批次号'
+  and d.module_name = '未配置领域'
+  and lower(d.service_code) = lower(c.service_code);
+
+with catalog as (
+    select distinct on (lower(service_code))
+           service_code, tran_code, tran_name, module_name, owner
+    from ana_tran_catalog
+    order by lower(service_code), catalog_id
+)
+update ana_field_diff_tracking_export d
+set tran_code = c.tran_code,
+    tran_name = c.tran_name,
+    module_name = c.module_name,
+    transaction_owner = c.owner,
+    updated_at = current_timestamp
+from catalog c
+where d.source_batch_id = '待替换批次号'
+  and d.module_name = '未配置领域'
+  and lower(d.service_code) = lower(c.service_code);
+
+with affected_issue as (
+    select issue_id
+    from ana_tran_diff_tracking_export
+    where source_batch_id = '待替换批次号' and issue_id is not null
+    union
+    select issue_id
+    from ana_field_diff_tracking_export
+    where source_batch_id = '待替换批次号' and issue_id is not null
+), catalog as (
+    select distinct on (lower(service_code))
+           service_code, tran_code, tran_name, module_name, owner
+    from ana_tran_catalog
+    order by lower(service_code), catalog_id
+)
+update ana_diff_issue i
+set tran_code = c.tran_code,
+    tran_name = c.tran_name,
+    module_name = c.module_name,
+    transaction_owner = c.owner,
+    updated_at = current_timestamp
+from affected_issue a, catalog c
+where i.issue_id = a.issue_id
+  and lower(i.service_code) = lower(c.service_code);
+
+commit;
+
+检查：
+
+select module_name, count(*)
+from ana_tran_diff_tracking_export
+where source_batch_id = '待替换批次号'
+group by module_name
+order by module_name;
+
+select module_name, count(*)
+from ana_field_diff_tracking_export
+where source_batch_id = '待替换批次号'
+group by module_name
+order by module_name;
+
+两张表都不应再出现“未配置领域”。如果仍然出现，停止实施并检查缺失配置。
+
+
+九、步骤 7：重新计算多领域汇总
+-----------------------------
+
+执行本步骤的前提：
+
+1. 步骤 1 的 raw_transaction_count 等于 report_transaction_count。
+2. 已确认 tss_tran_comp、tss_field_comp、tss_retcode_comp 仍是原批次生成时的数据。
+3. 步骤 6 完成后 tracking 表已不存在“未配置领域”。
+
+如任一条件不满足，停止本步骤。因为现有汇总表只有领域级总数，没有保存成功交易的服务码明细，无法无损拆分多个领域。
+
+满足条件时，建议由开发人员使用当前程序的 ReportExportBatchRunner 汇总逻辑，对原批次仅重算 ana_report_export_summary；不要创建新批次，也不要重新物化问题台账。
+
+如果内网只能执行 SQL，不允许调用程序内部汇总逻辑，则需要根据当前版本代码生成专用的“多领域汇总重算 SQL”。不要使用“把未配置领域整行合并到某一个领域”的 SQL。
+
+本步骤实施确认项：
+
+- 原批次号保持不变。
+- ana_report_export_command.status 保持 SUCCEEDED。
+- ana_report_export_command.report_date 保持不变。
+- 只替换该批次 ana_report_export_summary 数据。
+- 不增加 ana_diff_issue.occurrence_batch_count。
+
+
+十、步骤 8：最终检查
+-------------------
+
+1. 检查未配置领域明细：
+
+select 'TRAN' as data_type, count(*)
+from ana_tran_diff_tracking_export
+where source_batch_id = '待替换批次号' and module_name = '未配置领域'
+union all
+select 'FIELD', count(*)
+from ana_field_diff_tracking_export
+where source_batch_id = '待替换批次号' and module_name = '未配置领域';
+
+预期：两项都为 0。
+
+2. 检查汇总领域：
+
+select module_name,
+       covered_528_interface_count,
+       sent_transaction_count,
+       issue_total_count,
+       success_rate,
+       comparison_pass_rate
+from ana_report_export_summary
+where batch_id = '待替换批次号'
+order by module_name;
+
+预期：不再出现“未配置领域”，各领域数量符合原始数据。
+
+3. 检查批次状态未变化：
+
+select batch_id, report_date, status
+from ana_report_export_command
+where batch_id = '待替换批次号';
+
+预期：批次号和日期不变，status 仍为 SUCCEEDED。
+
+4. 在系统中找到原批次，重新点击“日报下载”。Excel 是下载时实时读取数据库生成，不需要创建新批次。
+
+5. 检查新下载 Excel：
+
+- 不再有“未配置领域”Sheet。
+- 原明细分别进入正确领域 Sheet。
+- “交易码”显示真实四位交易码。
+- 交易名称和负责人正确。
+- 日报汇总不再出现“未配置领域”。
+
+6. 下载同一批次的周报，检查领域汇总和问题延迟分布。
+
+
+十一、异常回滚
+-------------
+
+如果实施结果不正确，先停止继续下载和修改，然后回滚原批次数据：
+
+begin;
+
+delete from ana_tran_diff_tracking_export
+where source_batch_id = '待替换批次号';
+
+insert into ana_tran_diff_tracking_export
+select * from bak_tran_tracking_20260808;
+
+delete from ana_field_diff_tracking_export
+where source_batch_id = '待替换批次号';
+
+insert into ana_field_diff_tracking_export
+select * from bak_field_tracking_20260808;
+
+delete from ana_report_export_summary
+where batch_id = '待替换批次号';
+
+insert into ana_report_export_summary
+select * from bak_report_summary_20260808;
+
+update ana_diff_issue i
+set service_code = b.service_code,
+    tran_code = b.tran_code,
+    tran_name = b.tran_name,
+    module_name = b.module_name,
+    transaction_owner = b.transaction_owner,
+    updated_at = b.updated_at
+from bak_diff_issue_20260808 b
+where i.issue_id = b.issue_id;
+
+commit;
+
+回滚后重新执行“步骤 8：最终检查”，确认数据恢复。
+
+
+十二、禁止事项
+-------------
+
+1. 不要使用 Excel 中被截断的 S 开头内容配置 service_code。
+2. service_code 不要带 &bizjson、&soap、&sop 等报文类型后缀。
+3. 多领域情况下，不要把整个“未配置领域”汇总行直接移动到单个领域。
+4. 不要修改原批次号、report_date 或 SUCCEEDED 状态。
+5. 原始 tss_* 表与批次生成时不一致时，不要重算历史汇总。
+6. 未备份前不要执行 update 或 delete。
+7. SQL 执行过程中出现影响行数异常、唯一键冲突或一条明细匹配多个真实服务码时，立即 rollback 并停止实施。
