@@ -30,12 +30,16 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.sql.DataSource;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.IntStream;
 
 /** Materializes one report-export batch from the current replay comparison tables. */
 @Component
@@ -44,6 +48,7 @@ public class ReportExportBatchRunner {
     private static final String UNCONFIGURED_MODULE = "未配置领域";
 
     private static final int TRANSACTION_FETCH_SIZE = 500;
+    private static final int TRANSACTION_DETAIL_WORKER_COUNT = 64;
 
     private final NamedParameterJdbcTemplate jdbc;
     private final DataSource dataSource;
@@ -73,6 +78,9 @@ public class ReportExportBatchRunner {
         long started = System.nanoTime();
         log.info("报表明细生成开始，batchId={}, reportDate={}, exportTime={}", batchId, reportDate, exportTime);
         try {
+            log.info("报表明细问题台账备份开始，batchId={}", batchId);
+            backupDiffIssues(batchId);
+            log.info("报表明细问题台账备份完成，batchId={}", batchId);
             log.info("报表明细旧数据清理开始，batchId={}", batchId);
             cleanupBatchArtifacts(batchId);
             log.info("报表明细旧数据清理完成，batchId={}", batchId);
@@ -106,6 +114,28 @@ public class ReportExportBatchRunner {
             cleanupBatchArtifacts(batchId);
             throw exception;
         }
+    }
+
+    private void backupDiffIssues(String batchId) {
+        transactionTemplate.executeWithoutResult(status -> {
+            MapSqlParameterSource params = new MapSqlParameterSource("batchId", batchId);
+            jdbc.update("delete from ana_diff_issue_backup where backup_batch_id = :batchId", params);
+            jdbc.update("""
+                    insert into ana_diff_issue_backup(backup_batch_id, issue_id, issue_key, issue_level, service_code,
+                        tran_code, tran_name, module_name, transaction_owner, orig_error_code, dest_error_code,
+                        normalized_source_field_name, problem_type, problem_description, preliminary_analysis,
+                        final_solution, issue_status, coordination_required, resolver, resolution_date,
+                        defect_fix_date, first_seen_date, last_seen_date, first_seen_batch_id, last_seen_batch_id,
+                        occurrence_batch_count, issue_created_at, issue_updated_at)
+                    select :batchId, issue_id, issue_key, issue_level, service_code,
+                        tran_code, tran_name, module_name, transaction_owner, orig_error_code, dest_error_code,
+                        normalized_source_field_name, problem_type, problem_description, preliminary_analysis,
+                        final_solution, issue_status, coordination_required, resolver, resolution_date,
+                        defect_fix_date, first_seen_date, last_seen_date, first_seen_batch_id, last_seen_batch_id,
+                        occurrence_batch_count, created_at, updated_at
+                      from ana_diff_issue
+                    """, params);
+        });
     }
 
     private SourceData sourceData() {
@@ -280,15 +310,50 @@ public class ReportExportBatchRunner {
     private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs) {
         try {
             AtomicLong rowNo = new AtomicLong();
-            List<CompletableFuture<Void>> tasks = transactionServiceCodes().stream()
-                    .map(service -> CompletableFuture.runAsync(() -> streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo), transactionDetailExecutor))
+            Set<String> services = transactionServiceCodes();
+            if (services.isEmpty()) return;
+            ConcurrentLinkedQueue<String> serviceQueue = new ConcurrentLinkedQueue<>(services);
+            AtomicReference<RuntimeException> failure = new AtomicReference<>();
+            int workerCount = Math.min(TRANSACTION_DETAIL_WORKER_COUNT, services.size());
+            List<CompletableFuture<Void>> workers = IntStream.range(0, workerCount)
+                    .mapToObj(ignored -> CompletableFuture.runAsync(
+                            () -> consumeTransactionServices(batchId, reportDate, exportTime, catalogs, rowNo, serviceQueue, failure),
+                            transactionDetailExecutor))
                     .toList();
-            CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new)).join();
+            try {
+                CompletableFuture.allOf(workers.toArray(CompletableFuture[]::new)).join();
+            } catch (CompletionException exception) {
+                throw transactionDetailFailure(exception, failure);
+            }
+            RuntimeException exception = failure.get();
+            if (exception != null) throw exception;
         } catch (RuntimeException exception) {
             jdbc.update("delete from ana_tran_diff_tracking_export where source_batch_id = :batchId",
                     new MapSqlParameterSource("batchId", batchId));
             throw exception;
         }
+    }
+
+    private void consumeTransactionServices(String batchId, String reportDate, LocalDateTime exportTime,
+                                            Map<String, Catalog> catalogs, AtomicLong rowNo,
+                                            ConcurrentLinkedQueue<String> serviceQueue,
+                                            AtomicReference<RuntimeException> failure) {
+        while (failure.get() == null) {
+            String service = serviceQueue.poll();
+            if (service == null) return;
+            try {
+                streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo);
+            } catch (RuntimeException exception) {
+                failure.compareAndSet(null, exception);
+                throw exception;
+            }
+        }
+    }
+
+    private RuntimeException transactionDetailFailure(CompletionException exception, AtomicReference<RuntimeException> failure) {
+        RuntimeException failedTask = failure.get();
+        if (failedTask != null) return failedTask;
+        return exception.getCause() instanceof RuntimeException cause ? cause : exception;
     }
 
     private void cleanupBatchArtifacts(String batchId) {
