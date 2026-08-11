@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -213,10 +214,13 @@ public class ReportExportBatchRunner {
 
     private void updateSummaryIssueMetrics(String batchId, String reportDate) {
         String previousBatchId = previousSucceededBatchId(batchId);
+        String weeklyBaselineBatchId = weeklyBaselineSucceededBatchId(batchId, reportDate);
         LocalDate weeklyThreshold = LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE).minusDays(7);
         MapSqlParameterSource batch = new MapSqlParameterSource("batchId", batchId)
                 .addValue("previousBatchId", previousBatchId)
+                .addValue("weeklyBaselineBatchId", weeklyBaselineBatchId)
                 .addValue("weeklyThreshold", java.sql.Date.valueOf(weeklyThreshold));
+        Map<String, Long> weeklyDuplicateIssues = weeklyDuplicateIssueCounts(batch, weeklyBaselineBatchId, weeklyThreshold);
         jdbc.update("""
                 update ana_report_export_summary
                    set transaction_issue_count = 0,
@@ -230,12 +234,10 @@ public class ReportExportBatchRunner {
         jdbc.query("""
                 select module_name, sum(transaction_issue_count) transaction_issue_count,
                        sum(field_issue_count) field_issue_count,
-                       sum(daily_duplicate_issue_count) daily_duplicate_issue_count,
-                       sum(weekly_duplicate_issue_count) weekly_duplicate_issue_count
+                       sum(daily_duplicate_issue_count) daily_duplicate_issue_count
                   from (
                         select module_name, count(*) transaction_issue_count, 0 field_issue_count,
-                               sum(case when previous_issue.issue_key is not null then 1 else 0 end) daily_duplicate_issue_count,
-                               sum(case when first_seen_date is not null and first_seen_date <= :weeklyThreshold then 1 else 0 end) weekly_duplicate_issue_count
+                               sum(case when previous_issue.issue_key is not null then 1 else 0 end) daily_duplicate_issue_count
                           from ana_tran_diff_tracking_export current_issue
                           left join (
                                 select issue_key from ana_tran_diff_tracking_export where source_batch_id = :previousBatchId and issue_key is not null
@@ -247,8 +249,7 @@ public class ReportExportBatchRunner {
                          group by module_name
                          union all
                         select module_name, 0 transaction_issue_count, count(*) field_issue_count,
-                               sum(case when previous_issue.issue_key is not null then 1 else 0 end) daily_duplicate_issue_count,
-                               sum(case when first_seen_date is not null and first_seen_date <= :weeklyThreshold then 1 else 0 end) weekly_duplicate_issue_count
+                               sum(case when previous_issue.issue_key is not null then 1 else 0 end) daily_duplicate_issue_count
                           from ana_field_diff_tracking_export current_issue
                           left join (
                                 select issue_key from ana_tran_diff_tracking_export where source_batch_id = :previousBatchId and issue_key is not null
@@ -279,8 +280,97 @@ public class ReportExportBatchRunner {
                     .addValue("fieldIssues", fieldIssues)
                     .addValue("issueTotal", transactionIssues + fieldIssues)
                     .addValue("dailyDuplicateIssues", dailyDuplicateIssues)
-                    .addValue("weeklyDuplicateIssues", rs.getLong("weekly_duplicate_issue_count")));
+                    .addValue("weeklyDuplicateIssues", weeklyDuplicateIssues.getOrDefault(rs.getString("module_name"), 0L)));
         });
+    }
+
+    private Map<String, Long> weeklyDuplicateIssueCounts(MapSqlParameterSource batch, String weeklyBaselineBatchId, LocalDate weeklyThreshold) {
+        Map<String, Long> result = new HashMap<>();
+        Map<String, IssueFirstSeen> currentIssues = new HashMap<>();
+        jdbc.query("""
+                select module_name, issue_key, first_seen_date
+                  from ana_tran_diff_tracking_export
+                 where source_batch_id = :batchId
+                   and issue_key is not null
+                union all
+                select module_name, issue_key, first_seen_date
+                  from ana_field_diff_tracking_export
+                 where source_batch_id = :batchId
+                   and issue_key is not null
+                """, batch, (RowCallbackHandler) rs -> {
+            String moduleName = rs.getString("module_name");
+            String issueKey = rs.getString("issue_key");
+            LocalDate firstSeenDate = rs.getObject("first_seen_date", LocalDate.class);
+            String key = moduleName + "\u0000" + issueKey;
+            currentIssues.merge(key, new IssueFirstSeen(moduleName, issueKey, firstSeenDate), IssueFirstSeen::earlierOf);
+        });
+
+        Set<String> previousIssueKeys = new HashSet<>();
+        jdbc.query("""
+                select module_name, issue_key
+                  from ana_tran_diff_tracking_export
+                 where source_batch_id = :weeklyBaselineBatchId
+                   and issue_key is not null
+                union
+                select module_name, issue_key
+                  from ana_field_diff_tracking_export
+                 where source_batch_id = :weeklyBaselineBatchId
+                   and issue_key is not null
+                """, batch, (RowCallbackHandler) rs -> previousIssueKeys.add(issueModuleKey(rs.getString("module_name"), rs.getString("issue_key"))));
+
+        for (IssueFirstSeen issue : currentIssues.values()) {
+            if (issue.firstSeenDate() != null
+                    && !issue.firstSeenDate().isAfter(weeklyThreshold)
+                    && previousIssueKeys.contains(issueModuleKey(issue.moduleName(), issue.issueKey()))) {
+                result.merge(issue.moduleName(), 1L, Long::sum);
+            }
+        }
+        return result;
+    }
+
+    private String weeklyBaselineSucceededBatchId(String batchId, String reportDate) {
+        if (reportDate == null || reportDate.isBlank()) {
+            return previousSucceededBatchId(batchId);
+        }
+        String targetDate = LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE)
+                .minusDays(7)
+                .format(DateTimeFormatter.BASIC_ISO_DATE);
+        List<String> baseline = jdbc.query("""
+                select batch_id
+                  from ana_report_export_command
+                 where status = 'SUCCEEDED'
+                   and batch_id <> :batchId
+                   and report_date <= :targetDate
+                 order by report_date desc, command_id desc
+                 limit 1
+                """, new MapSqlParameterSource("batchId", batchId)
+                .addValue("targetDate", targetDate), (rs, rowNum) -> rs.getString("batch_id"));
+        if (!baseline.isEmpty()) {
+            return baseline.get(0);
+        }
+        List<String> fallback = jdbc.query("""
+                select batch_id
+                  from ana_report_export_command
+                 where status = 'SUCCEEDED'
+                   and batch_id <> :batchId
+                   and report_date > :targetDate
+                 order by report_date asc, command_id desc
+                 limit 1
+                """, new MapSqlParameterSource("batchId", batchId)
+                .addValue("targetDate", targetDate), (rs, rowNum) -> rs.getString("batch_id"));
+        return fallback.isEmpty() ? null : fallback.get(0);
+    }
+
+    private static String issueModuleKey(String moduleName, String issueKey) {
+        return moduleName + "\u0000" + issueKey;
+    }
+
+    private record IssueFirstSeen(String moduleName, String issueKey, LocalDate firstSeenDate) {
+        private IssueFirstSeen earlierOf(IssueFirstSeen other) {
+            if (firstSeenDate == null) return other;
+            if (other.firstSeenDate == null) return this;
+            return other.firstSeenDate.isBefore(firstSeenDate) ? other : this;
+        }
     }
 
     private String previousSucceededBatchId(String batchId) {

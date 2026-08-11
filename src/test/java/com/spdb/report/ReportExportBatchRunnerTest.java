@@ -251,6 +251,102 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void updatesWeeklyDuplicateCountOnlyForIntersectionBetweenCurrentAndPreviousBatchIssueKeys() throws Exception {
+        jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-WEEK-OLD', '20260720', 'SUCCEEDED', '2026-07-20 10:00:00')");
+        jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-WEEK-CURRENT', '20260728', 'SUCCEEDED', '2026-07-28 10:00:00')");
+        jdbc.update("insert into ana_report_export_summary(batch_id, module_name) values ('BATCH-WEEK-CURRENT', 'Payment')");
+
+        jdbc.update("""
+                insert into ana_tran_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-OLD', 'Payment', 1, 'TRAN|svc1|shared-cross', date '2026-07-10')
+                """);
+        jdbc.update("""
+                insert into ana_tran_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-OLD', 'Loan', 2, 'TRAN|svc1|other-module', date '2026-07-10')
+                """);
+        jdbc.update("""
+                insert into ana_field_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-OLD', 'Payment', 1, 'FIELD|svc1|recent-shared', date '2026-07-25')
+                """);
+        jdbc.update("""
+                insert into ana_field_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-CURRENT', 'Payment', 1, 'TRAN|svc1|shared-cross', date '2026-07-10')
+                """);
+        jdbc.update("""
+                insert into ana_tran_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-CURRENT', 'Payment', 2, 'TRAN|svc1|old-unshared', date '2026-07-10')
+                """);
+        jdbc.update("""
+                insert into ana_tran_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-CURRENT', 'Payment', 3, 'TRAN|svc1|other-module', date '2026-07-10')
+                """);
+        jdbc.update("""
+                insert into ana_field_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-CURRENT', 'Payment', 2, 'FIELD|svc1|recent-shared', date '2026-07-25')
+                """);
+
+        assertThat(jdbc.queryForObject("""
+                select first_seen_date
+                  from ana_field_diff_tracking_export
+                 where source_batch_id = 'BATCH-WEEK-CURRENT'
+                   and issue_key = 'TRAN|svc1|shared-cross'
+                """, java.sql.Date.class)).isEqualTo(java.sql.Date.valueOf("2026-07-10"));
+        var previousMethod = ReportExportBatchRunner.class.getDeclaredMethod("previousSucceededBatchId", String.class);
+        previousMethod.setAccessible(true);
+        assertThat(previousMethod.invoke(runner, "BATCH-WEEK-CURRENT")).isEqualTo("BATCH-WEEK-OLD");
+
+        var method = ReportExportBatchRunner.class.getDeclaredMethod("updateSummaryIssueMetrics", String.class, String.class);
+        method.setAccessible(true);
+        method.invoke(runner, "BATCH-WEEK-CURRENT", "20260728");
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select transaction_issue_count, field_issue_count, issue_total_count, duplicate_issue_count,
+                       daily_duplicate_issue_count, weekly_duplicate_issue_count
+                  from ana_report_export_summary
+                 where batch_id = 'BATCH-WEEK-CURRENT' and module_name = 'Payment'
+                """);
+        assertThat(summary).containsEntry("transaction_issue_count", 2L)
+                .containsEntry("field_issue_count", 2L)
+                .containsEntry("issue_total_count", 4L)
+                .containsEntry("duplicate_issue_count", 3L)
+                .containsEntry("daily_duplicate_issue_count", 3L)
+                .containsEntry("weekly_duplicate_issue_count", 1L);
+    }
+
+    @Test
+    void weeklyDuplicateCountUsesSameOneWeekBaselineAsWeeklyExcelExport() throws Exception {
+        jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-WEEK-BASELINE', '20260721', 'SUCCEEDED', '2026-07-21 10:00:00')");
+        jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-DAILY-PREVIOUS', '20260727', 'SUCCEEDED', '2026-07-27 10:00:00')");
+        jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-WEEK-CURRENT-2', '20260728', 'SUCCEEDED', '2026-07-28 10:00:00')");
+        jdbc.update("insert into ana_report_export_summary(batch_id, module_name) values ('BATCH-WEEK-CURRENT-2', 'Payment')");
+
+        jdbc.update("""
+                insert into ana_tran_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-BASELINE', 'Payment', 1, 'TRAN|svc1|weekly-baseline-only', date '2026-07-10')
+                """);
+        jdbc.update("""
+                insert into ana_tran_diff_tracking_export(source_batch_id, module_name, row_no, issue_key, first_seen_date)
+                values ('BATCH-WEEK-CURRENT-2', 'Payment', 1, 'TRAN|svc1|weekly-baseline-only', date '2026-07-10')
+                """);
+
+        var previousMethod = ReportExportBatchRunner.class.getDeclaredMethod("previousSucceededBatchId", String.class);
+        previousMethod.setAccessible(true);
+        assertThat(previousMethod.invoke(runner, "BATCH-WEEK-CURRENT-2")).isEqualTo("BATCH-DAILY-PREVIOUS");
+
+        var method = ReportExportBatchRunner.class.getDeclaredMethod("updateSummaryIssueMetrics", String.class, String.class);
+        method.setAccessible(true);
+        method.invoke(runner, "BATCH-WEEK-CURRENT-2", "20260728");
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select daily_duplicate_issue_count, weekly_duplicate_issue_count
+                  from ana_report_export_summary
+                 where batch_id = 'BATCH-WEEK-CURRENT-2' and module_name = 'Payment'
+                """);
+        assertThat(summary).containsEntry("daily_duplicate_issue_count", 0L)
+                .containsEntry("weekly_duplicate_issue_count", 1L);
+    }
+
+    @Test
     void classifiesTransactionStatesAndResponseCodes() {
         jdbc.update("""
                 insert into tss_tran_comp values
