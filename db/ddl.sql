@@ -805,6 +805,8 @@ create table if not exists ana_report_export_summary (
     field_issue_count bigint not null default 0,
     issue_total_count bigint not null default 0,
     duplicate_issue_count bigint not null default 0,
+    daily_duplicate_issue_count bigint not null default 0,
+    weekly_duplicate_issue_count bigint not null default 0,
     created_time timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
     constraint uk_ana_report_export_summary unique (batch_id, module_name)
@@ -822,6 +824,10 @@ alter table ana_report_export_summary
 add column if not exists issue_total_count bigint not null default 0;
 alter table ana_report_export_summary
 add column if not exists duplicate_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists daily_duplicate_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists weekly_duplicate_issue_count bigint not null default 0;
 
 comment on table ana_report_export_summary is '报表明细导出汇总表';
 comment on column ana_report_export_summary.summary_id is '导出汇总主键';
@@ -843,6 +849,8 @@ comment on column ana_report_export_summary.transaction_issue_count is '交易�
 comment on column ana_report_export_summary.field_issue_count is '字段级差异总数';
 comment on column ana_report_export_summary.issue_total_count is '问题总数';
 comment on column ana_report_export_summary.duplicate_issue_count is '重复问题数';
+comment on column ana_report_export_summary.daily_duplicate_issue_count is '日报重复问题数';
+comment on column ana_report_export_summary.weekly_duplicate_issue_count is '周报重复问题数';
 comment on column ana_report_export_summary.created_time is '创建时间';
 comment on column ana_report_export_summary.updated_at is '更新时间';
 

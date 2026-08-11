@@ -154,7 +154,7 @@ public class ReportExportExcelService {
 
     private void writeSummary(SXSSFWorkbook book, String batchId, String previousBatchId, boolean weekly, Styles styles) {
         SXSSFSheet sheet = book.createSheet("汇总信息");
-        List<SummaryRow> currentRows = weekly ? summaryRowsWithWeeklyDuplicates(batchId, previousBatchId) : summaryRows(batchId);
+        List<SummaryRow> currentRows = summaryRows(batchId, weekly);
         List<SummaryRow> previousRows = previousBatchId == null ? List.of() : summaryRows(previousBatchId);
         log.info("{}汇总Sheet数据已加载，batchId={}, previousBatchId={}, currentRowCount={}, previousRowCount={}",
                 weekly ? "周报" : "日报", batchId, previousBatchId, currentRows.size(), previousRows.size());
@@ -217,10 +217,10 @@ public class ReportExportExcelService {
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "问题总数", issueStyle);
 
         if (current) {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "重复问题", issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "上一批次未解决问题数量", issueStyle);
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "上轮问题解决率", issueStyle);
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 14, 18,
-                    "已解决问题分类统计（待验证）", manualFillStyle);
+                    "上一批次已解决问题分类统计（待验证）", manualFillStyle);
             writeSolvedIssueSubHeaders(subHeader, 14, manualFillStyle);
             mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 19, 19, "问题解决进度", manualFillStyle);
         } else {
@@ -245,8 +245,8 @@ public class ReportExportExcelService {
         cell(excelRow, 1, row.moduleName(), rowStyle);
         cell(excelRow, 2, text(row.covered528InterfaceCount()), rowStyle);
         cell(excelRow, 3, text(row.sentTransactionCount()), rowStyle);
-        cell(excelRow, 4, text(row.compResult1Count()), rowStyle);
-        cell(excelRow, 5, text(row.compResult2Count()), rowStyle);
+        cell(excelRow, 4, text(row.compResult2Count()), rowStyle);
+        cell(excelRow, 5, text(row.compResult1Count()), rowStyle);
         cell(excelRow, 6, text(row.compResult3Count()), rowStyle);
         cell(excelRow, 7, text(row.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(row.compResult4Count()), rowStyle);
@@ -270,8 +270,8 @@ public class ReportExportExcelService {
         cell(excelRow, 1, "合计", rowStyle);
         cell(excelRow, 2, text(totals.covered528InterfaceCount()), rowStyle);
         cell(excelRow, 3, text(totals.sentTransactionCount()), rowStyle);
-        cell(excelRow, 4, text(totals.compResult1Count()), rowStyle);
-        cell(excelRow, 5, text(totals.compResult2Count()), rowStyle);
+        cell(excelRow, 4, text(totals.compResult2Count()), rowStyle);
+        cell(excelRow, 5, text(totals.compResult1Count()), rowStyle);
         cell(excelRow, 6, text(totals.compResult3Count()), rowStyle);
         cell(excelRow, 7, text(totals.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(totals.compResult4Count()), rowStyle);
@@ -379,15 +379,20 @@ public class ReportExportExcelService {
     }
 
     private List<SummaryRow> summaryRows(String batchId) {
+        return summaryRows(batchId, false);
+    }
+
+    private List<SummaryRow> summaryRows(String batchId, boolean weekly) {
         return jdbc.query("""
                 select batch_id, module_name, covered_528_interface_count, sent_transaction_count,
                        comp_result_1_count, comp_result_2_count, comp_result_3_count, comp_result_4_count,
                        comp_result_8_count, success_rate, field_pass_transaction_count, comparison_pass_rate,
-                       issue_total_count, duplicate_issue_count
+                       issue_total_count,
+                       case when :weekly then weekly_duplicate_issue_count else daily_duplicate_issue_count end duplicate_issue_count
                   from ana_report_export_summary
                  where batch_id=:batchId
                  order by module_name
-                """, params(batchId), (rs, rowNum) -> new SummaryRow(
+                """, params(batchId).addValue("weekly", weekly), (rs, rowNum) -> new SummaryRow(
                 rs.getString("batch_id"), rs.getString("module_name"),
                 rs.getLong("covered_528_interface_count"), rs.getLong("sent_transaction_count"),
                 rs.getLong("comp_result_1_count"), rs.getLong("comp_result_2_count"),
@@ -395,45 +400,6 @@ public class ReportExportExcelService {
                 rs.getLong("comp_result_8_count"), rs.getBigDecimal("success_rate"),
                 rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("comparison_pass_rate"),
                 rs.getLong("issue_total_count"), rs.getLong("duplicate_issue_count")));
-    }
-
-    private List<SummaryRow> summaryRowsWithWeeklyDuplicates(String currentBatchId, String baselineBatchId) {
-        List<SummaryRow> rows = summaryRows(currentBatchId);
-        Map<String, Long> duplicateIssues = baselineBatchId == null
-                ? Map.of()
-                : repeatedIssueCountsByCurrentModule(currentBatchId, baselineBatchId);
-        List<SummaryRow> result = new ArrayList<>();
-        for (SummaryRow row : rows) {
-            result.add(row.withDuplicateIssueCount(duplicateIssues.getOrDefault(row.moduleName(), 0L)));
-        }
-        return result;
-    }
-
-    private Map<String, Long> repeatedIssueCountsByCurrentModule(String currentBatchId, String baselineBatchId) {
-        Set<String> baselineKeys = issueKeys(baselineBatchId);
-        if (baselineKeys.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Set<String>> repeatedKeysByModule = new HashMap<>();
-        for (IssueSnapshot issue : issueSnapshots(currentBatchId, "module")) {
-            if (issue.issueKey() != null && baselineKeys.contains(issue.issueKey())) {
-                repeatedKeysByModule.computeIfAbsent(issue.dimension(), ignored -> new HashSet<>()).add(issue.issueKey());
-            }
-        }
-        Map<String, Long> result = new HashMap<>();
-        repeatedKeysByModule.forEach((module, keys) -> result.put(module, (long) keys.size()));
-        return result;
-    }
-
-    private Set<String> issueKeys(String batchId) {
-        Set<String> result = new HashSet<>();
-        jdbc.query(issueSnapshotSql("module"), params(batchId), (RowCallbackHandler) rs -> {
-            String issueKey = rs.getString("issue_key");
-            if (issueKey != null && !issueKey.isBlank()) {
-                result.add(issueKey);
-            }
-        });
-        return result;
     }
 
     private static Map<String, Long> issueTotalsByModule(List<SummaryRow> rows) {
@@ -810,11 +776,6 @@ public class ReportExportExcelService {
             long issueTotalCount,
             long duplicateIssueCount
     ) {
-        private SummaryRow withDuplicateIssueCount(long duplicateIssueCount) {
-            return new SummaryRow(batchId, moduleName, covered528InterfaceCount, sentTransactionCount,
-                    compResult1Count, compResult2Count, compResult3Count, compResult4Count, compResult8Count,
-                    successRate, fieldPassTransactionCount, comparisonPassRate, issueTotalCount, duplicateIssueCount);
-        }
     }
 
     private record IssueSnapshot(

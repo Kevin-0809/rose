@@ -133,7 +133,9 @@ class DatabaseScriptLayoutTest {
                 "transaction_issue_count bigint not null default 0",
                 "field_issue_count bigint not null default 0",
                 "issue_total_count bigint not null default 0",
-                "duplicate_issue_count bigint not null default 0");
+                "duplicate_issue_count bigint not null default 0",
+                "daily_duplicate_issue_count bigint not null default 0",
+                "weekly_duplicate_issue_count bigint not null default 0");
         summaryColumns.forEach(column -> assertThat(sql).contains(column));
         List<String> summaryMigrationColumns = List.of(
                 "alter table ana_report_export_summary\nadd column if not exists field_pass_transaction_count bigint not null default 0;",
@@ -141,7 +143,9 @@ class DatabaseScriptLayoutTest {
                 "alter table ana_report_export_summary\nadd column if not exists transaction_issue_count bigint not null default 0;",
                 "alter table ana_report_export_summary\nadd column if not exists field_issue_count bigint not null default 0;",
                 "alter table ana_report_export_summary\nadd column if not exists issue_total_count bigint not null default 0;",
-                "alter table ana_report_export_summary\nadd column if not exists duplicate_issue_count bigint not null default 0;");
+                "alter table ana_report_export_summary\nadd column if not exists duplicate_issue_count bigint not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists daily_duplicate_issue_count bigint not null default 0;",
+                "alter table ana_report_export_summary\nadd column if not exists weekly_duplicate_issue_count bigint not null default 0;");
         summaryMigrationColumns.forEach(column -> assertThat(sql).contains(column));
         assertThat(rawSql).contains("comment on column ana_report_export_summary.success_rate is '成功率';");
         assertThat(rawSql).contains("comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';");
@@ -454,6 +458,8 @@ class DatabaseScriptLayoutTest {
                 "field_issue_count bigint not null default 0",
                 "issue_total_count bigint not null default 0",
                 "duplicate_issue_count bigint not null default 0",
+                "daily_duplicate_issue_count bigint not null default 0",
+                "weekly_duplicate_issue_count bigint not null default 0",
                 "constraint uk_ana_report_export_summary unique (batch_id, module_name)");
         summaryColumns.forEach(column -> assertThat(ddlLower).contains(column));
         List<String> summaryMigrationColumns = List.of(
@@ -462,7 +468,9 @@ class DatabaseScriptLayoutTest {
                 "add column if not exists transaction_issue_count bigint not null default 0",
                 "add column if not exists field_issue_count bigint not null default 0",
                 "add column if not exists issue_total_count bigint not null default 0",
-                "add column if not exists duplicate_issue_count bigint not null default 0");
+                "add column if not exists duplicate_issue_count bigint not null default 0",
+                "add column if not exists daily_duplicate_issue_count bigint not null default 0",
+                "add column if not exists weekly_duplicate_issue_count bigint not null default 0");
         summaryMigrationColumns.forEach(column -> assertThat(ddlLower).contains(column));
 
         List<String> commandColumns = List.of(
@@ -474,6 +482,7 @@ class DatabaseScriptLayoutTest {
                 "comp_result_4_count", "comp_result_8_count", "diff_528_field_count", "success_rate",
                 "field_pass_transaction_count", "comparison_pass_rate", "transaction_issue_count",
                 "field_issue_count", "issue_total_count", "duplicate_issue_count",
+                "daily_duplicate_issue_count", "weekly_duplicate_issue_count",
                 "created_time", "updated_at");
         assertThat(ddl).containsPattern("comment on table ana_report_export_command is '[\\p{IsHan}][^']*';");
         assertThat(ddl).containsPattern("comment on table ana_report_export_summary is '[\\p{IsHan}][^']*';");

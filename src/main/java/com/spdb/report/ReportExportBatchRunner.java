@@ -97,7 +97,7 @@ public class ReportExportBatchRunner {
             transactionTemplate.executeWithoutResult(status -> {
                 log.info("报表明细问题台账物化开始，batchId={}", batchId);
                 issueLedgerService.materializeBatch(batchId, LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE));
-                updateSummaryIssueMetrics(batchId);
+                updateSummaryIssueMetrics(batchId, reportDate);
                 log.info("报表明细问题台账物化完成，batchId={}", batchId);
             });
             log.info("报表明细生成完成，batchId={}, elapsedMs={}", batchId, elapsedMs(started));
@@ -181,53 +181,100 @@ public class ReportExportBatchRunner {
         }
     }
 
-    private void updateSummaryIssueMetrics(String batchId) {
-        MapSqlParameterSource batch = new MapSqlParameterSource("batchId", batchId);
+    private void updateSummaryIssueMetrics(String batchId, String reportDate) {
+        String previousBatchId = previousSucceededBatchId(batchId);
+        LocalDate weeklyThreshold = LocalDate.parse(reportDate, DateTimeFormatter.BASIC_ISO_DATE).minusDays(7);
+        MapSqlParameterSource batch = new MapSqlParameterSource("batchId", batchId)
+                .addValue("previousBatchId", previousBatchId)
+                .addValue("weeklyThreshold", java.sql.Date.valueOf(weeklyThreshold));
         jdbc.update("""
                 update ana_report_export_summary
                    set transaction_issue_count = 0,
                        field_issue_count = 0,
                        issue_total_count = 0,
-                       duplicate_issue_count = 0
+                       duplicate_issue_count = 0,
+                       daily_duplicate_issue_count = 0,
+                       weekly_duplicate_issue_count = 0
                  where batch_id = :batchId
                 """, batch);
         jdbc.query("""
                 select module_name, sum(transaction_issue_count) transaction_issue_count,
                        sum(field_issue_count) field_issue_count,
-                       sum(duplicate_issue_count) duplicate_issue_count
+                       sum(daily_duplicate_issue_count) daily_duplicate_issue_count,
+                       sum(weekly_duplicate_issue_count) weekly_duplicate_issue_count
                   from (
                         select module_name, count(*) transaction_issue_count, 0 field_issue_count,
-                               sum(case when historical_occurrence_count > 0 then 1 else 0 end) duplicate_issue_count
-                          from ana_tran_diff_tracking_export
-                         where source_batch_id = :batchId
-                           and issue_key is not null
+                               sum(case when previous_issue.issue_key is not null then 1 else 0 end) daily_duplicate_issue_count,
+                               sum(case when first_seen_date is not null and first_seen_date <= :weeklyThreshold then 1 else 0 end) weekly_duplicate_issue_count
+                          from ana_tran_diff_tracking_export current_issue
+                          left join (
+                                select issue_key from ana_tran_diff_tracking_export where source_batch_id = :previousBatchId and issue_key is not null
+                                union
+                                select issue_key from ana_field_diff_tracking_export where source_batch_id = :previousBatchId and issue_key is not null
+                               ) previous_issue on previous_issue.issue_key = current_issue.issue_key
+                         where current_issue.source_batch_id = :batchId
+                           and current_issue.issue_key is not null
                          group by module_name
                          union all
                         select module_name, 0 transaction_issue_count, count(*) field_issue_count,
-                               sum(case when historical_occurrence_count > 0 then 1 else 0 end) duplicate_issue_count
-                          from ana_field_diff_tracking_export
-                         where source_batch_id = :batchId
-                           and issue_key is not null
+                               sum(case when previous_issue.issue_key is not null then 1 else 0 end) daily_duplicate_issue_count,
+                               sum(case when first_seen_date is not null and first_seen_date <= :weeklyThreshold then 1 else 0 end) weekly_duplicate_issue_count
+                          from ana_field_diff_tracking_export current_issue
+                          left join (
+                                select issue_key from ana_tran_diff_tracking_export where source_batch_id = :previousBatchId and issue_key is not null
+                                union
+                                select issue_key from ana_field_diff_tracking_export where source_batch_id = :previousBatchId and issue_key is not null
+                               ) previous_issue on previous_issue.issue_key = current_issue.issue_key
+                         where current_issue.source_batch_id = :batchId
+                           and current_issue.issue_key is not null
                          group by module_name
                        ) issue_metrics
                  group by module_name
                 """, batch, rs -> {
             long transactionIssues = rs.getLong("transaction_issue_count");
             long fieldIssues = rs.getLong("field_issue_count");
+            long dailyDuplicateIssues = rs.getLong("daily_duplicate_issue_count");
             jdbc.update("""
                     update ana_report_export_summary
                        set transaction_issue_count = :transactionIssues,
                            field_issue_count = :fieldIssues,
                            issue_total_count = :issueTotal,
-                           duplicate_issue_count = :duplicateIssues
+                           duplicate_issue_count = :dailyDuplicateIssues,
+                           daily_duplicate_issue_count = :dailyDuplicateIssues,
+                           weekly_duplicate_issue_count = :weeklyDuplicateIssues
                      where batch_id = :batchId and module_name = :module
                     """, new MapSqlParameterSource("batchId", batchId)
                     .addValue("module", rs.getString("module_name"))
                     .addValue("transactionIssues", transactionIssues)
                     .addValue("fieldIssues", fieldIssues)
                     .addValue("issueTotal", transactionIssues + fieldIssues)
-                    .addValue("duplicateIssues", rs.getLong("duplicate_issue_count")));
+                    .addValue("dailyDuplicateIssues", dailyDuplicateIssues)
+                    .addValue("weeklyDuplicateIssues", rs.getLong("weekly_duplicate_issue_count")));
         });
+    }
+
+    private String previousSucceededBatchId(String batchId) {
+        List<CommandPosition> current = jdbc.query("""
+                select command_id, created_time
+                  from ana_report_export_command
+                 where batch_id = :batchId
+                """, new MapSqlParameterSource("batchId", batchId), (rs, rowNum) -> new CommandPosition(
+                rs.getLong("command_id"), rs.getTimestamp("created_time").toInstant()));
+        if (current.isEmpty()) {
+            return null;
+        }
+        MapSqlParameterSource queryParams = new MapSqlParameterSource("batchId", batchId)
+                .addValue("commandId", current.get(0).commandId())
+                .addValue("createdTime", java.sql.Timestamp.from(current.get(0).createdTime()));
+        List<String> previous = jdbc.query("""
+                select batch_id
+                  from ana_report_export_command
+                 where status = 'SUCCEEDED'
+                   and (created_time < :createdTime or (created_time = :createdTime and command_id < :commandId))
+                 order by created_time desc, command_id desc
+                 limit 1
+                """, queryParams, (rs, rowNum) -> rs.getString("batch_id"));
+        return previous.isEmpty() ? null : previous.get(0);
     }
 
     private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs) {
@@ -507,4 +554,5 @@ public class ReportExportBatchRunner {
                                      String tranName, String module, String origDesc, String destDesc, String owner,
                                      String seq, String field, String description) {}
     private record SourceData(Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings, List<Tran> transactions, List<Field> fields, Map<String, Retcode> retcodes) {}
+    private record CommandPosition(long commandId, java.time.Instant createdTime) {}
 }

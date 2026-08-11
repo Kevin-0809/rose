@@ -39,6 +39,8 @@ create table if not exists ana_report_export_summary (
     field_issue_count bigint not null default 0,
     issue_total_count bigint not null default 0,
     duplicate_issue_count bigint not null default 0,
+    daily_duplicate_issue_count bigint not null default 0,
+    weekly_duplicate_issue_count bigint not null default 0,
     created_time timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
     constraint uk_ana_report_export_summary unique (batch_id, module_name)
@@ -56,6 +58,10 @@ alter table ana_report_export_summary
 add column if not exists issue_total_count bigint not null default 0;
 alter table ana_report_export_summary
 add column if not exists duplicate_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists daily_duplicate_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists weekly_duplicate_issue_count bigint not null default 0;
 
 comment on column ana_report_export_summary.success_rate is '成功率';
 comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';
@@ -64,6 +70,8 @@ comment on column ana_report_export_summary.transaction_issue_count is '交易�
 comment on column ana_report_export_summary.field_issue_count is '字段级差异总数';
 comment on column ana_report_export_summary.issue_total_count is '问题总数';
 comment on column ana_report_export_summary.duplicate_issue_count is '重复问题数';
+comment on column ana_report_export_summary.daily_duplicate_issue_count is '日报重复问题数';
+comment on column ana_report_export_summary.weekly_duplicate_issue_count is '周报重复问题数';
 
 create index if not exists idx_ana_report_export_command_status
 on ana_report_export_command(status, created_time desc);
