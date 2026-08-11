@@ -20,7 +20,9 @@ class MigrationTranCodeCommandsTemplateTest {
         assertThat(html).contains("name=\"sampleSize\"");
         assertThat(html).contains("name=\"parallelism\"");
         assertThat(html).contains("name=\"lookbackDays\"");
-        assertThat(html).contains("value=\"10000\"");
+        assertThat(html).contains("name=\"lookbackDays\" type=\"number\"");
+        assertThat(html).doesNotContain("<select name=\"lookbackDays\"");
+        assertThat(html).doesNotContain("value=\"10000\"");
         assertThat(html).contains("max=\"16\"");
         assertThat(html).contains("min=\"1\"");
         assertThat(html).contains("name=\"remark\"");
