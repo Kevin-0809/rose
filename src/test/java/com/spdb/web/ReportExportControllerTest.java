@@ -108,7 +108,7 @@ class ReportExportControllerTest {
     void detailShowsSucceededExportSummaryAndBothDetailTypes() {
         FakeReportExportCommandService service = new FakeReportExportCommandService();
         service.command = command("SUCCEEDED");
-        service.summaries = List.of(new ReportExportSummaryRow(1L, "RPT1", "20260726", "支付", 2, 10, 1, 2, 3, 4, 5, 6, new BigDecimal("0.70000000")));
+        service.summaries = List.of(new ReportExportSummaryRow(1L, "RPT1", "20260726", "支付", 2, 10, 1, 2, 3, 4, 5, 0, 6, new BigDecimal("0.70000000")));
         service.transactionDetails = PagedResult.of(List.of(new ReportExportTransactionDetailRow(1L, 1L, "svc-a", "O1", "D1", "T001", "交易A", "支付", "原错误", "新错误", 101L, 3L, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-20"))), 51, PageRequestParams.of(2, 50));
         service.fieldDetails = PagedResult.of(List.of(new ReportExportFieldDetailRow(1L, 1L, "svc-a", "T001", "交易A", "支付", "items.0", "amount", "UNMAPPED", "原值", "新值", 102L, 2L, LocalDate.parse("2026-07-02"), LocalDate.parse("2026-07-18"))), 101, PageRequestParams.of(3, 50));
         ReportExportController controller = new ReportExportController(service, null);

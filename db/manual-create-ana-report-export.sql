@@ -31,6 +31,7 @@ create table if not exists ana_report_export_summary (
     comp_result_3_count bigint not null default 0,
     comp_result_4_count bigint not null default 0,
     comp_result_8_count bigint not null default 0,
+    comp_result_5_count bigint not null default 0,
     diff_528_field_count bigint not null default 0,
     success_rate numeric(12,8) not null default 0,
     field_pass_transaction_count bigint not null default 0,
@@ -46,6 +47,8 @@ create table if not exists ana_report_export_summary (
     constraint uk_ana_report_export_summary unique (batch_id, module_name)
 );
 
+alter table ana_report_export_summary
+add column if not exists comp_result_5_count bigint not null default 0;
 alter table ana_report_export_summary
 add column if not exists field_pass_transaction_count bigint not null default 0;
 alter table ana_report_export_summary
@@ -64,6 +67,7 @@ alter table ana_report_export_summary
 add column if not exists weekly_duplicate_issue_count bigint not null default 0;
 
 comment on column ana_report_export_summary.success_rate is '成功率';
+comment on column ana_report_export_summary.comp_result_5_count is '比对结果5数量';
 comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';
 comment on column ana_report_export_summary.comparison_pass_rate is '比对通过率';
 comment on column ana_report_export_summary.transaction_issue_count is '交易级差异总数';

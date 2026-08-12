@@ -14,6 +14,7 @@ public record ReportExportSummaryRow(
         long compResult3Count,
         long compResult4Count,
         long compResult8Count,
+        long compResult5Count,
         long diff528FieldCount,
         BigDecimal successRate,
         long fieldPassTransactionCount,
@@ -34,10 +35,11 @@ public record ReportExportSummaryRow(
                                   long compResult3Count,
                                   long compResult4Count,
                                   long compResult8Count,
+                                  long compResult5Count,
                                   long diff528FieldCount,
                                   BigDecimal successRate) {
         this(summaryId, batchId, reportDate, moduleName, covered528InterfaceCount, sentTransactionCount,
-                compResult1Count, compResult2Count, compResult3Count, compResult4Count, compResult8Count,
+                compResult1Count, compResult2Count, compResult3Count, compResult4Count, compResult8Count, compResult5Count,
                 diff528FieldCount, successRate, 0L, BigDecimal.ZERO, 0L, 0L, 0L, 0L);
     }
 }

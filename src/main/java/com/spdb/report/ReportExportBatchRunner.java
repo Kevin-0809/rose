@@ -188,25 +188,27 @@ public class ReportExportBatchRunner {
         for (Field field : fields) fieldTransactions.add(transactionIdentity(field.mesgSeq(), field.origCdate(), field.convIndex(), field.convCindex()));
         for (String module : union(byModule.keySet(), fieldNames.keySet())) {
             List<Tran> rows = byModule.getOrDefault(module, List.of());
-            long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"), four = count(rows, retcodes, "4"), eight = count(rows, retcodes, "8");
+            long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"), four = count(rows, retcodes, "4"), eight = count(rows, retcodes, "8"), five = count(rows, retcodes, "5");
             long total = rows.size();
+            long effectiveTotal = Math.max(0, total - five);
             long fieldPass = rows.stream()
                     .filter(row -> "4".equals(row.compResult()))
                     .filter(row -> !fieldTransactions.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex())))
                     .count();
             MapSqlParameterSource p = params(batchId, reportDate).addValue("module", module)
                     .addValue("covered", rows.stream().map(row -> service(row.destTrcd())).filter(value -> !value.isBlank()).distinct().count())
-                    .addValue("total", total).addValue("one", one).addValue("two", two).addValue("three", three).addValue("four", four).addValue("eight", eight)
-                    .addValue("rate", rate(three + four, total))
+                    .addValue("total", total).addValue("one", one).addValue("two", two).addValue("three", three).addValue("four", four).addValue("eight", eight).addValue("five", five)
+                    .addValue("effectiveTotal", effectiveTotal)
+                    .addValue("rate", rate(three + four, effectiveTotal))
                     .addValue("fieldCount", fieldNames.getOrDefault(module, Set.of()).size())
                     .addValue("fieldPass", fieldPass)
-                    .addValue("comparisonPassRate", rate(fieldPass + three, total));
+                    .addValue("comparisonPassRate", rate(fieldPass + three, effectiveTotal));
             jdbc.update("""
                     insert into ana_report_export_summary(batch_id, report_date, module_name, covered_528_interface_count,
                       sent_transaction_count, comp_result_1_count, comp_result_2_count, comp_result_3_count,
-                      comp_result_4_count, comp_result_8_count, success_rate, diff_528_field_count,
+                      comp_result_4_count, comp_result_8_count, comp_result_5_count, success_rate, diff_528_field_count,
                       field_pass_transaction_count, comparison_pass_rate)
-                    values (:batchId, :reportDate, :module, :covered, :total, :one, :two, :three, :four, :eight, :rate, :fieldCount,
+                    values (:batchId, :reportDate, :module, :covered, :total, :one, :two, :three, :four, :eight, :five, :rate, :fieldCount,
                       :fieldPass, :comparisonPassRate)
                     """, p);
         }

@@ -212,22 +212,23 @@ public class ReportExportExcelService {
             cell(subHeader, 4 + i, statusHeaders[i], subStyle);
         }
 
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 9, 9, "成功率", mainStyle);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "比对通过率", mainStyle);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "问题总数", issueStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 9, 9, "比对结果5", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "成功率", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "比对通过率", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "问题总数", issueStyle);
 
         if (current) {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "上一批次未解决问题数量", issueStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "上轮问题解决率", issueStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 14, 18,
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "上一批次未解决问题数量", issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 14, 14, "上轮问题解决率", issueStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 15, 19,
                     "上一批次已解决问题分类统计（待验证）", manualFillStyle);
-            writeSolvedIssueSubHeaders(subHeader, 14, manualFillStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 19, 19, "问题解决进度", manualFillStyle);
+            writeSolvedIssueSubHeaders(subHeader, 15, manualFillStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 20, 20, "问题解决进度", manualFillStyle);
         } else {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 12, 16,
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 13, 17,
                     "已解决问题分类统计（待验证）", manualFillStyle);
-            writeSolvedIssueSubHeaders(subHeader, 12, manualFillStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 17, 17, "问题解决进度", manualFillStyle);
+            writeSolvedIssueSubHeaders(subHeader, 13, manualFillStyle);
+            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 18, 18, "问题解决进度", manualFillStyle);
         }
     }
 
@@ -250,15 +251,16 @@ public class ReportExportExcelService {
         cell(excelRow, 6, text(row.compResult3Count()), rowStyle);
         cell(excelRow, 7, text(row.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(row.compResult4Count()), rowStyle);
-        percentCell(excelRow, 9, row.successRate(), styles.summaryPercentStyle());
-        percentCell(excelRow, 10, row.comparisonPassRate(), styles.summaryPercentStyle());
-        cell(excelRow, 11, text(row.issueTotalCount()), rowStyle);
+        cell(excelRow, 9, text(row.compResult5Count()), rowStyle);
+        percentCell(excelRow, 10, row.successRate(), styles.summaryPercentStyle());
+        percentCell(excelRow, 11, row.comparisonPassRate(), styles.summaryPercentStyle());
+        cell(excelRow, 12, text(row.issueTotalCount()), rowStyle);
         if (current) {
-            cell(excelRow, 12, text(row.duplicateIssueCount()), rowStyle);
-            percentCell(excelRow, 13, previousResolutionRate(previousIssueTotal, row.duplicateIssueCount()), styles.summaryPercentStyle());
-            blankCells(excelRow, 14, 19, styles.summaryManualFillStyle());
+            cell(excelRow, 13, text(row.duplicateIssueCount()), rowStyle);
+            percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, row.duplicateIssueCount()), styles.summaryPercentStyle());
+            blankCells(excelRow, 15, 20, styles.summaryManualFillStyle());
         } else {
-            blankCells(excelRow, 12, 17, styles.summaryManualFillStyle());
+            blankCells(excelRow, 13, 18, styles.summaryManualFillStyle());
         }
     }
 
@@ -275,19 +277,21 @@ public class ReportExportExcelService {
         cell(excelRow, 6, text(totals.compResult3Count()), rowStyle);
         cell(excelRow, 7, text(totals.compResult8Count()), rowStyle);
         cell(excelRow, 8, text(totals.compResult4Count()), rowStyle);
-        percentCell(excelRow, 9, rate(totals.compResult3Count() + totals.compResult4Count(),
-                totals.sentTransactionCount()), styles.summaryTotalPercentStyle(current));
-        percentCell(excelRow, 10, rate(totals.fieldPassTransactionCount() + totals.compResult3Count(),
-                totals.sentTransactionCount()), styles.summaryTotalPercentStyle(current));
-        cell(excelRow, 11, text(totals.issueTotalCount()), rowStyle);
+        cell(excelRow, 9, text(totals.compResult5Count()), rowStyle);
+        long effectiveTotal = Math.max(0, totals.sentTransactionCount() - totals.compResult5Count());
+        percentCell(excelRow, 10, rate(totals.compResult3Count() + totals.compResult4Count(),
+                effectiveTotal), styles.summaryTotalPercentStyle(current));
+        percentCell(excelRow, 11, rate(totals.fieldPassTransactionCount() + totals.compResult3Count(),
+                effectiveTotal), styles.summaryTotalPercentStyle(current));
+        cell(excelRow, 12, text(totals.issueTotalCount()), rowStyle);
         if (current) {
             long previousIssueTotal = previousIssueTotals.values().stream().mapToLong(Long::longValue).sum();
-            cell(excelRow, 12, text(totals.duplicateIssueCount()), rowStyle);
-            percentCell(excelRow, 13, previousResolutionRate(previousIssueTotal, totals.duplicateIssueCount()),
+            cell(excelRow, 13, text(totals.duplicateIssueCount()), rowStyle);
+            percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, totals.duplicateIssueCount()),
                     styles.summaryTotalPercentStyle(current));
-            blankCells(excelRow, 14, 19, rowStyle);
+            blankCells(excelRow, 15, 20, rowStyle);
         } else {
-            blankCells(excelRow, 12, 17, rowStyle);
+            blankCells(excelRow, 13, 18, rowStyle);
         }
     }
 
@@ -386,7 +390,7 @@ public class ReportExportExcelService {
         return jdbc.query("""
                 select batch_id, module_name, covered_528_interface_count, sent_transaction_count,
                        comp_result_1_count, comp_result_2_count, comp_result_3_count, comp_result_4_count,
-                       comp_result_8_count, success_rate, field_pass_transaction_count, comparison_pass_rate,
+                       comp_result_8_count, comp_result_5_count, success_rate, field_pass_transaction_count, comparison_pass_rate,
                        issue_total_count,
                        case when :weekly then weekly_duplicate_issue_count else daily_duplicate_issue_count end duplicate_issue_count
                   from ana_report_export_summary
@@ -397,7 +401,7 @@ public class ReportExportExcelService {
                 rs.getLong("covered_528_interface_count"), rs.getLong("sent_transaction_count"),
                 rs.getLong("comp_result_1_count"), rs.getLong("comp_result_2_count"),
                 rs.getLong("comp_result_3_count"), rs.getLong("comp_result_4_count"),
-                rs.getLong("comp_result_8_count"), rs.getBigDecimal("success_rate"),
+                rs.getLong("comp_result_8_count"), rs.getLong("comp_result_5_count"), rs.getBigDecimal("success_rate"),
                 rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("comparison_pass_rate"),
                 rs.getLong("issue_total_count"), rs.getLong("duplicate_issue_count")));
     }
@@ -770,6 +774,7 @@ public class ReportExportExcelService {
             long compResult3Count,
             long compResult4Count,
             long compResult8Count,
+            long compResult5Count,
             BigDecimal successRate,
             long fieldPassTransactionCount,
             BigDecimal comparisonPassRate,
@@ -865,6 +870,7 @@ public class ReportExportExcelService {
             long compResult3Count,
             long compResult4Count,
             long compResult8Count,
+            long compResult5Count,
             long fieldPassTransactionCount,
             long issueTotalCount,
             long duplicateIssueCount
@@ -878,6 +884,7 @@ public class ReportExportExcelService {
                     rows.stream().mapToLong(SummaryRow::compResult3Count).sum(),
                     rows.stream().mapToLong(SummaryRow::compResult4Count).sum(),
                     rows.stream().mapToLong(SummaryRow::compResult8Count).sum(),
+                    rows.stream().mapToLong(SummaryRow::compResult5Count).sum(),
                     rows.stream().mapToLong(SummaryRow::fieldPassTransactionCount).sum(),
                     rows.stream().mapToLong(SummaryRow::issueTotalCount).sum(),
                     rows.stream().mapToLong(SummaryRow::duplicateIssueCount).sum());

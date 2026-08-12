@@ -834,6 +834,7 @@ create table if not exists ana_report_export_summary (
     comp_result_3_count bigint not null default 0,
     comp_result_4_count bigint not null default 0,
     comp_result_8_count bigint not null default 0,
+    comp_result_5_count bigint not null default 0,
     diff_528_field_count bigint not null default 0,
     success_rate numeric(12,8) not null default 0,
     field_pass_transaction_count bigint not null default 0,
@@ -865,6 +866,8 @@ alter table ana_report_export_summary
 add column if not exists daily_duplicate_issue_count bigint not null default 0;
 alter table ana_report_export_summary
 add column if not exists weekly_duplicate_issue_count bigint not null default 0;
+alter table ana_report_export_summary
+add column if not exists comp_result_5_count bigint not null default 0;
 
 comment on table ana_report_export_summary is '报表明细导出汇总表';
 comment on column ana_report_export_summary.summary_id is '导出汇总主键';
@@ -878,6 +881,7 @@ comment on column ana_report_export_summary.comp_result_2_count is '比对结果
 comment on column ana_report_export_summary.comp_result_3_count is '二者均失败且响应码一致数量';
 comment on column ana_report_export_summary.comp_result_4_count is '二者均成功数量';
 comment on column ana_report_export_summary.comp_result_8_count is '二者均失败且响应码不一致数量';
+comment on column ana_report_export_summary.comp_result_5_count is '比对结果5数量';
 comment on column ana_report_export_summary.diff_528_field_count is '差异528字段数量';
 comment on column ana_report_export_summary.success_rate is '成功率';
 comment on column ana_report_export_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';
