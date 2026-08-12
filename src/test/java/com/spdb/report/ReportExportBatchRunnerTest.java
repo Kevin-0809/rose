@@ -381,7 +381,7 @@ class ReportExportBatchRunnerTest {
                 select tran_seq_no, orig_error_code, dest_error_code, orig_error_desc, dest_error_desc, field_name
                 from ana_tran_diff_tracking_export order by row_no
                 """);
-        assertThat(transactions).hasSize(10);
+        assertThat(transactions).hasSize(9);
         assertThat(transactions).extracting(row -> row.get("tran_seq_no")).doesNotContain("FF-S");
         List<Map<String, Object>> comparableTransactions = transactions.stream()
                 .filter(row -> !"FF-S".equals(row.get("tran_seq_no")))
@@ -390,7 +390,6 @@ class ReportExportBatchRunnerTest {
                         row -> row.get("orig_error_desc"), row -> row.get("dest_error_desc"), row -> row.get("field_name"))
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("S0", "未比对", "未比对", "未比对", "未比对", "未比对"),
-                        org.assertj.core.groups.Tuple.tuple("S5", "忽略比对", "忽略比对", "忽略比对", "忽略比对", "忽略比对"),
                         org.assertj.core.groups.Tuple.tuple("S6", "比对中", "比对中", "比对中", "比对中", "比对中"),
                         org.assertj.core.groups.Tuple.tuple("S7", "对比异常", "对比异常", "对比异常", "对比异常", "对比异常"),
                         org.assertj.core.groups.Tuple.tuple("OF", "AAAAAAA", "E1", "528 ok", "ccbs failed", "528成功ccbs失败"),
@@ -522,6 +521,33 @@ class ReportExportBatchRunnerTest {
                 .doesNotContain("where not exists");
     }
 
+    @Test
+    void skipsTransactionAndFieldDetailsForComparisonResultFive() {
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC5', '交易五', '支付', '负责人')");
+        jdbc.update("insert into tss_tran_comp values ('T5', '20260728', 1, 1, 'SVC5&soap', '5')");
+        jdbc.update("insert into tss_field_comp values ('T5', '20260728', 1, 1, 1, 'SVC5&soap', 'Request.amount', '100', 'ignored', '200')");
+        jdbc.update("insert into tss_retcode_comp values ('T5', '20260728', 'SVC5&soap', 'O5', 'orig', 'D5', 'dest')");
+
+        runner.run("BATCH-COMP5", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        assertThat(jdbc.queryForObject("""
+                select comp_result_5_count
+                  from ana_report_export_summary
+                 where batch_id = 'BATCH-COMP5' and module_name = '支付'
+                """, Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from ana_tran_diff_tracking_export
+                 where source_batch_id = 'BATCH-COMP5'
+                """, Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                select count(*) from ana_field_diff_tracking_export
+                 where source_batch_id = 'BATCH-COMP5'
+                """, Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                select count(*) from ana_diff_issue
+                 where first_seen_batch_id = 'BATCH-COMP5' or last_seen_batch_id = 'BATCH-COMP5'
+                """, Long.class)).isZero();
+    }
     @Test
     void streamsTransactionDetailsOncePerNormalizedServiceCode() {
         jdbc.update("""

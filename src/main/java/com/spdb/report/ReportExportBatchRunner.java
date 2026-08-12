@@ -91,12 +91,13 @@ public class ReportExportBatchRunner {
                     source.fields().size(), source.retcodes().size());
             stageConsumer.accept(ReportExportStage.TRANSACTION_DETAILS);
             log.info("报表明细交易明细生成开始，batchId={}", batchId);
-            streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs());
+            streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs(), source.transactions());
             log.info("报表明细交易明细生成完成，batchId={}", batchId);
             transactionTemplate.executeWithoutResult(status -> {
                 stageConsumer.accept(ReportExportStage.FIELD_DETAILS);
                 log.info("报表明细字段明细生成开始，batchId={}", batchId);
-                insertFieldDetails(batchId, reportDate, exportTime, source.fields(), source.catalogs(), source.fieldMappings());
+                insertFieldDetails(batchId, reportDate, exportTime, source.fields(), source.catalogs(), source.fieldMappings(),
+                        ignoredTransactionIds(source.transactions()));
                 log.info("报表明细字段明细生成完成，batchId={}", batchId);
                 stageConsumer.accept(ReportExportStage.SUMMARY);
                 log.info("报表明细汇总生成开始，batchId={}", batchId);
@@ -168,6 +169,16 @@ public class ReportExportBatchRunner {
         List<Field> result = new ArrayList<>();
         jdbc.getJdbcTemplate().query("select mesg_seq, orig_cdate, conv_index, conv_cindex, field_index, dest_trcd, orig_field_name, orig_field_value, dest_field_name, dest_field_value from tss_field_comp", (RowCallbackHandler)
                 rs -> result.add(new Field(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getInt("field_index"), rs.getString("dest_trcd"), rs.getString("orig_field_name"), rs.getString("orig_field_value"), rs.getString("dest_field_name"), rs.getString("dest_field_value"))));
+        return result;
+    }
+
+    private Set<String> ignoredTransactionIds(List<Tran> transactions) {
+        Set<String> result = new HashSet<>();
+        for (Tran tran : transactions) {
+            if ("5".equals(tran.compResult())) {
+                result.add(transactionIdentity(tran.mesgSeq(), tran.origCdate(), tran.convIndex(), tran.convCindex()));
+            }
+        }
         return result;
     }
 
@@ -399,17 +410,20 @@ public class ReportExportBatchRunner {
         return previous.isEmpty() ? null : previous.get(0);
     }
 
-    private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs) {
+    private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs,
+                                          List<Tran> transactions) {
         try {
             AtomicLong rowNo = new AtomicLong();
             Set<String> services = transactionServiceCodes();
             if (services.isEmpty()) return;
+            Set<String> ignoredTransactionIds = ignoredTransactionIds(transactions);
             ConcurrentLinkedQueue<String> serviceQueue = new ConcurrentLinkedQueue<>(services);
             AtomicReference<RuntimeException> failure = new AtomicReference<>();
             int workerCount = Math.min(TRANSACTION_DETAIL_WORKER_COUNT, services.size());
             List<CompletableFuture<Void>> workers = IntStream.range(0, workerCount)
                     .mapToObj(ignored -> CompletableFuture.runAsync(
-                            () -> consumeTransactionServices(batchId, reportDate, exportTime, catalogs, rowNo, serviceQueue, failure),
+                            () -> consumeTransactionServices(batchId, reportDate, exportTime, catalogs, rowNo, serviceQueue, failure,
+                                    ignoredTransactionIds),
                             transactionDetailExecutor))
                     .toList();
             try {
@@ -429,12 +443,13 @@ public class ReportExportBatchRunner {
     private void consumeTransactionServices(String batchId, String reportDate, LocalDateTime exportTime,
                                             Map<String, Catalog> catalogs, AtomicLong rowNo,
                                             ConcurrentLinkedQueue<String> serviceQueue,
-                                            AtomicReference<RuntimeException> failure) {
+                                            AtomicReference<RuntimeException> failure,
+                                            Set<String> ignoredTransactionIds) {
         while (failure.get() == null) {
             String service = serviceQueue.poll();
             if (service == null) return;
             try {
-                streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo);
+                streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo, ignoredTransactionIds);
             } catch (RuntimeException exception) {
                 failure.compareAndSet(null, exception);
                 throw exception;
@@ -469,7 +484,7 @@ public class ReportExportBatchRunner {
     }
 
     private void streamTransactionService(String batchId, String reportDate, LocalDateTime exportTime, String normalizedService,
-                                          Map<String, Catalog> catalogs, AtomicLong rowNo) {
+                                          Map<String, Catalog> catalogs, AtomicLong rowNo, Set<String> ignoredTransactionIds) {
         Map<String, TransactionDetail> detailsByIssueKey = new LinkedHashMap<>();
         Map<String, Set<String>> affectedMesgSeqsByIssueKey = new LinkedHashMap<>();
         String insert = transactionDetailInsertSql();
@@ -490,7 +505,7 @@ public class ReportExportBatchRunner {
             statement.setFetchSize(TRANSACTION_FETCH_SIZE);
             statement.setString(1, normalizedService);
             try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) collectTransactionRow(rs, catalogs, detailsByIssueKey, affectedMesgSeqsByIssueKey);
+                while (rs.next()) collectTransactionRow(rs, catalogs, detailsByIssueKey, affectedMesgSeqsByIssueKey, ignoredTransactionIds);
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to stream transaction details for service " + normalizedService, exception);
@@ -502,8 +517,9 @@ public class ReportExportBatchRunner {
     }
 
     private void collectTransactionRow(ResultSet rs, Map<String, Catalog> catalogs, Map<String, TransactionDetail> detailsByIssueKey,
-                                       Map<String, Set<String>> affectedMesgSeqsByIssueKey) throws SQLException {
+                                       Map<String, Set<String>> affectedMesgSeqsByIssueKey, Set<String> ignoredTransactionIds) throws SQLException {
         Tran row = new Tran(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getString("dest_trcd"), rs.getString("comp_result"));
+        if (ignoredTransactionIds.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex()))) return;
         Retcode retcode = rs.getString("ret_mesg_seq") == null ? null
                 : new Retcode(rs.getString("ret_service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"));
         if (!shouldExportTransaction(row, retcode)) return;
@@ -575,10 +591,14 @@ public class ReportExportBatchRunner {
                 """;
     }
 
-    private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Field> fields, Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings) {
+    private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Field> fields, Map<String, Catalog> catalogs,
+                                    List<FieldMapping> fieldMappings, Set<String> ignoredTransactionIds) {
         Map<String, Field> grouped = new TreeMap<>();
         Map<String, Set<String>> affectedMesgSeqs = new TreeMap<>();
         fields.stream().sorted(FIELD_ORDER).forEach(row -> {
+            if (ignoredTransactionIds.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex()))) {
+                return;
+            }
             String issueKey = fieldIssueKey(service(row.destTrcd()), normalizedField(row.origFieldName()));
             grouped.putIfAbsent(issueKey, row);
             affectedMesgSeqs.computeIfAbsent(issueKey, ignored -> new HashSet<>()).add(row.mesgSeq());
