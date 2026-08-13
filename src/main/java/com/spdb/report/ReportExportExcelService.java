@@ -204,15 +204,15 @@ public class ReportExportExcelService {
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 1, 1, "领域", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 2, 2, "覆盖528接口", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 3, 3, "发送交易量", mainStyle);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 4, 8, "交易状态分类统计", mainStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 4, 9, "交易状态分类统计", mainStyle);
 
         String[] statusHeaders = {"528成功/CCBS失败", "528失败/CCBS成功", "二者均失败响应码一致",
                 "二者均失败响应码不一致", "二者均成功"};
         for (int i = 0; i < statusHeaders.length; i++) {
             cell(subHeader, 4 + i, statusHeaders[i], subStyle);
         }
+        cell(subHeader, 9, "响应码忽略", subStyle);
 
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 9, 9, "比对结果5", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "成功率", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "比对通过率", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "问题总数", issueStyle);

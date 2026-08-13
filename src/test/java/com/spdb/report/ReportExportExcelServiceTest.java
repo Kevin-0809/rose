@@ -450,8 +450,7 @@ class ReportExportExcelServiceTest {
             assertMergedRegion(sheet, 1, 2, 1, 1);
             assertMergedRegion(sheet, 1, 2, 2, 2);
             assertMergedRegion(sheet, 1, 2, 3, 3);
-            assertMergedRegion(sheet, 1, 1, 4, 8);
-            assertMergedRegion(sheet, 1, 2, 9, 9);
+            assertMergedRegion(sheet, 1, 1, 4, 9);
             assertMergedRegion(sheet, 1, 2, 10, 10);
             assertMergedRegion(sheet, 1, 2, 11, 11);
             assertMergedRegion(sheet, 1, 2, 12, 12);
@@ -513,8 +512,7 @@ class ReportExportExcelServiceTest {
             assertMergedRegion(sheet, 8, 9, 1, 1);
             assertMergedRegion(sheet, 8, 9, 2, 2);
             assertMergedRegion(sheet, 8, 9, 3, 3);
-            assertMergedRegion(sheet, 8, 8, 4, 8);
-            assertMergedRegion(sheet, 8, 9, 9, 9);
+            assertMergedRegion(sheet, 8, 8, 4, 9);
             assertMergedRegion(sheet, 8, 9, 10, 10);
             assertMergedRegion(sheet, 8, 9, 11, 11);
             assertMergedRegion(sheet, 8, 9, 12, 12);
@@ -623,7 +621,6 @@ class ReportExportExcelServiceTest {
         assertThat(row.getCell(2).getStringCellValue()).isEqualTo("覆盖528接口");
         assertThat(row.getCell(3).getStringCellValue()).isEqualTo("发送交易量");
         assertThat(row.getCell(4).getStringCellValue()).isEqualTo("交易状态分类统计");
-        assertThat(row.getCell(9).getStringCellValue()).isEqualTo("比对结果5");
         assertThat(row.getCell(10).getStringCellValue()).isEqualTo("成功率");
         assertThat(row.getCell(11).getStringCellValue()).isEqualTo("比对通过率");
         assertThat(row.getCell(12).getStringCellValue()).isEqualTo("问题总数");
@@ -643,6 +640,7 @@ class ReportExportExcelServiceTest {
         assertThat(row.getCell(statusStartColumn + 2).getStringCellValue()).isEqualTo("二者均失败响应码一致");
         assertThat(row.getCell(statusStartColumn + 3).getStringCellValue()).isEqualTo("二者均失败响应码不一致");
         assertThat(row.getCell(statusStartColumn + 4).getStringCellValue()).isEqualTo("二者均成功");
+        assertThat(row.getCell(statusStartColumn + 5).getStringCellValue()).isEqualTo("响应码忽略");
         assertThat(row.getCell(solvedStartColumn).getStringCellValue()).isEqualTo("迁移问题");
         assertThat(row.getCell(solvedStartColumn + 1).getStringCellValue()).isEqualTo("防腐问题");
         assertThat(row.getCell(solvedStartColumn + 2).getStringCellValue()).isEqualTo("功能问题");
