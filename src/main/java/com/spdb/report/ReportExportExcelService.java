@@ -56,6 +56,9 @@ public class ReportExportExcelService {
             "字段名", "问题描述", "交易负责人", "问题类型", "初步问题分析", "最终处理方案", "解决日期", "需协同组",
             "解决人员", "流水号", "全局流水号", "缺陷修复日期", "备注", "该问题出现在的交易笔数", "issue_id", "issue_key",
             "历史出现次数", "首次出现日期", "上次出现日期"};
+    private static final String SUCCESS_RATE_FORMULA = "成功率 =（二者均失败响应码一致 + 二者均成功）÷（发送交易量 − 响应码忽略）";
+    private static final String COMPARISON_PASS_RATE_FORMULA = "比对通过率 =（二者均成功且无字段差异交易数 + 二者均失败响应码一致）÷（发送交易量 − 响应码忽略）";
+    private static final String RESOLUTION_RATE_FORMULA = "上轮问题解决率 =（上一批次问题总数 − 上一批次未解决问题数量）÷ 上一批次问题总数";
     private final NamedParameterJdbcTemplate jdbc;
     private final int delayGraceDays;
 
@@ -160,8 +163,8 @@ public class ReportExportExcelService {
                 weekly ? "周报" : "日报", batchId, previousBatchId, currentRows.size(), previousRows.size());
 
         String previousTitle = weekly ? "周期周报 - 上周期" : "上一批次";
-        int nextRow = writeSummarySection(sheet, 0, previousBatchId, previousTitle, previousRows, Map.of(), false, styles);
-        writeSummarySection(sheet, nextRow + 2, batchId, "本批次", currentRows, issueTotalsByModule(previousRows), true, styles);
+        int nextRow = writeSummarySection(sheet, 0, previousBatchId, previousTitle, previousRows, false, styles);
+        writeSummarySection(sheet, nextRow + 2, batchId, "本批次", currentRows, true, styles);
 
         for (int i = 0; i < 20; i++) {
             sheet.setColumnWidth(i, i == 1 ? 4600 : 3600);
@@ -169,7 +172,7 @@ public class ReportExportExcelService {
     }
 
     private int writeSummarySection(SXSSFSheet sheet, int startRow, String batchId, String title, List<SummaryRow> rows,
-                                    Map<String, Long> previousIssueTotals, boolean current, Styles styles) {
+                                    boolean current, Styles styles) {
         int lastColumn = current ? 19 : 17;
         Row titleRow = sheet.createRow(startRow);
         titleRow.setHeightInPoints(24f);
@@ -182,11 +185,24 @@ public class ReportExportExcelService {
         int rowIndex = startRow + 3;
         int dataOrdinal = 1;
         for (SummaryRow row : rows) {
-            writeSummaryDataRow(sheet.createRow(rowIndex++), row, previousIssueTotals.get(row.moduleName()),
-                    current, dataOrdinal++, styles);
+            writeSummaryDataRow(sheet.createRow(rowIndex++), row, current, dataOrdinal++, styles);
         }
-        writeSummaryTotalRow(sheet.createRow(rowIndex), rows, previousIssueTotals, current, dataOrdinal, styles);
-        return rowIndex;
+        writeSummaryTotalRow(sheet.createRow(rowIndex), rows, current, dataOrdinal, styles);
+        int formulaRows = writeSummaryFormulas(sheet, rowIndex + 1, current, styles);
+        return rowIndex + formulaRows;
+    }
+
+    private int writeSummaryFormulas(SXSSFSheet sheet, int startRow, boolean current, Styles styles) {
+        int lastColumn = current ? 20 : 18;
+        StringBuilder formulas = new StringBuilder(SUCCESS_RATE_FORMULA)
+                .append('\n')
+                .append(COMPARISON_PASS_RATE_FORMULA);
+        if (current) {
+            formulas.append('\n').append(RESOLUTION_RATE_FORMULA);
+        }
+        mergedCell(sheet, startRow, startRow, 0, lastColumn, formulas.toString(), styles.summaryFormulaStyle());
+        sheet.getRow(startRow).setHeightInPoints(current ? 45f : 30f);
+        return 1;
     }
 
     private void writeSummaryHeaders(SXSSFSheet sheet, int mainHeaderRowIndex, boolean current, Styles styles) {
@@ -239,56 +255,52 @@ public class ReportExportExcelService {
         }
     }
 
-    private void writeSummaryDataRow(Row excelRow, SummaryRow row, Long previousIssueTotal,
+    private void writeSummaryDataRow(Row excelRow, SummaryRow row,
                                      boolean current, int dataOrdinal, Styles styles) {
         CellStyle rowStyle = styles.summaryBodyStyle();
         cell(excelRow, 0, row.batchId(), rowStyle);
         cell(excelRow, 1, row.moduleName(), rowStyle);
-        cell(excelRow, 2, text(row.covered528InterfaceCount()), rowStyle);
-        cell(excelRow, 3, text(row.sentTransactionCount()), rowStyle);
-        cell(excelRow, 4, text(row.compResult2Count()), rowStyle);
-        cell(excelRow, 5, text(row.compResult1Count()), rowStyle);
-        cell(excelRow, 6, text(row.compResult3Count()), rowStyle);
-        cell(excelRow, 7, text(row.compResult8Count()), rowStyle);
-        cell(excelRow, 8, text(row.compResult4Count()), rowStyle);
-        cell(excelRow, 9, text(row.compResult5Count()), rowStyle);
+        numericCell(excelRow, 2, row.covered528InterfaceCount(), rowStyle);
+        numericCell(excelRow, 3, row.sentTransactionCount(), rowStyle);
+        numericCell(excelRow, 4, row.compResult2Count(), rowStyle);
+        numericCell(excelRow, 5, row.compResult1Count(), rowStyle);
+        numericCell(excelRow, 6, row.compResult3Count(), rowStyle);
+        numericCell(excelRow, 7, row.compResult8Count(), rowStyle);
+        numericCell(excelRow, 8, row.compResult4Count(), rowStyle);
+        numericCell(excelRow, 9, row.compResult5Count(), rowStyle);
         percentCell(excelRow, 10, row.successRate(), styles.summaryPercentStyle());
         percentCell(excelRow, 11, row.comparisonPassRate(), styles.summaryPercentStyle());
-        cell(excelRow, 12, text(row.issueTotalCount()), rowStyle);
+        numericCell(excelRow, 12, row.issueTotalCount(), rowStyle);
         if (current) {
-            cell(excelRow, 13, text(row.duplicateIssueCount()), rowStyle);
-            percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, row.duplicateIssueCount()), styles.summaryPercentStyle());
+            blankCells(excelRow, 13, 14, rowStyle);
             blankCells(excelRow, 15, 20, styles.summaryManualFillStyle());
         } else {
             blankCells(excelRow, 13, 18, styles.summaryManualFillStyle());
         }
     }
 
-    private void writeSummaryTotalRow(Row excelRow, List<SummaryRow> rows, Map<String, Long> previousIssueTotals,
+    private void writeSummaryTotalRow(Row excelRow, List<SummaryRow> rows,
                                       boolean current, int dataOrdinal, Styles styles) {
         CellStyle rowStyle = styles.summaryTotalStyle(current);
         SummaryTotals totals = SummaryTotals.of(rows);
         cell(excelRow, 0, "", rowStyle);
         cell(excelRow, 1, "合计", rowStyle);
-        cell(excelRow, 2, text(totals.covered528InterfaceCount()), rowStyle);
-        cell(excelRow, 3, text(totals.sentTransactionCount()), rowStyle);
-        cell(excelRow, 4, text(totals.compResult2Count()), rowStyle);
-        cell(excelRow, 5, text(totals.compResult1Count()), rowStyle);
-        cell(excelRow, 6, text(totals.compResult3Count()), rowStyle);
-        cell(excelRow, 7, text(totals.compResult8Count()), rowStyle);
-        cell(excelRow, 8, text(totals.compResult4Count()), rowStyle);
-        cell(excelRow, 9, text(totals.compResult5Count()), rowStyle);
+        numericCell(excelRow, 2, totals.covered528InterfaceCount(), rowStyle);
+        numericCell(excelRow, 3, totals.sentTransactionCount(), rowStyle);
+        numericCell(excelRow, 4, totals.compResult2Count(), rowStyle);
+        numericCell(excelRow, 5, totals.compResult1Count(), rowStyle);
+        numericCell(excelRow, 6, totals.compResult3Count(), rowStyle);
+        numericCell(excelRow, 7, totals.compResult8Count(), rowStyle);
+        numericCell(excelRow, 8, totals.compResult4Count(), rowStyle);
+        numericCell(excelRow, 9, totals.compResult5Count(), rowStyle);
         long effectiveTotal = Math.max(0, totals.sentTransactionCount() - totals.compResult5Count());
         percentCell(excelRow, 10, rate(totals.compResult3Count() + totals.compResult4Count(),
                 effectiveTotal), styles.summaryTotalPercentStyle(current));
         percentCell(excelRow, 11, rate(totals.fieldPassTransactionCount() + totals.compResult3Count(),
                 effectiveTotal), styles.summaryTotalPercentStyle(current));
-        cell(excelRow, 12, text(totals.issueTotalCount()), rowStyle);
+        numericCell(excelRow, 12, totals.issueTotalCount(), rowStyle);
         if (current) {
-            long previousIssueTotal = previousIssueTotals.values().stream().mapToLong(Long::longValue).sum();
-            cell(excelRow, 13, text(totals.duplicateIssueCount()), rowStyle);
-            percentCell(excelRow, 14, previousResolutionRate(previousIssueTotal, totals.duplicateIssueCount()),
-                    styles.summaryTotalPercentStyle(current));
+            blankCells(excelRow, 13, 14, rowStyle);
             blankCells(excelRow, 15, 20, rowStyle);
         } else {
             blankCells(excelRow, 13, 18, rowStyle);
@@ -404,14 +416,6 @@ public class ReportExportExcelService {
                 rs.getLong("comp_result_8_count"), rs.getLong("comp_result_5_count"), rs.getBigDecimal("success_rate"),
                 rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("comparison_pass_rate"),
                 rs.getLong("issue_total_count"), rs.getLong("duplicate_issue_count")));
-    }
-
-    private static Map<String, Long> issueTotalsByModule(List<SummaryRow> rows) {
-        Map<String, Long> result = new HashMap<>();
-        for (SummaryRow row : rows) {
-            result.put(row.moduleName(), row.issueTotalCount());
-        }
-        return result;
     }
 
     private void writeModule(SXSSFWorkbook book, String batchId, String module, boolean rawFieldValues, Styles styles) {
@@ -707,6 +711,12 @@ public class ReportExportExcelService {
         cell.setCellStyle(style);
     }
 
+    private static void numericCell(Row row, int column, long value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value);
+        cell.setCellStyle(style);
+    }
+
     private static void mergedCell(SXSSFSheet sheet, int firstRow, int lastRow, int firstCol, int lastCol,
                                    String value, CellStyle style) {
         for (int rowIndex = firstRow; rowIndex <= lastRow; rowIndex++) {
@@ -722,7 +732,8 @@ public class ReportExportExcelService {
 
     private static void percentCell(Row row, int column, BigDecimal value, CellStyle style) {
         Cell cell = row.createCell(column);
-        cell.setCellValue(value == null ? 0d : value.doubleValue());
+        BigDecimal scaled = (value == null ? BigDecimal.ZERO : value).setScale(4, RoundingMode.HALF_UP);
+        cell.setCellValue(scaled.doubleValue());
         cell.setCellStyle(style);
     }
 
@@ -731,13 +742,6 @@ public class ReportExportExcelService {
             return BigDecimal.ZERO;
         }
         return BigDecimal.valueOf(numerator).divide(BigDecimal.valueOf(denominator), 8, RoundingMode.HALF_UP);
-    }
-
-    private static BigDecimal previousResolutionRate(Long previousIssueTotal, long duplicateIssueCount) {
-        if (previousIssueTotal == null || previousIssueTotal == 0) {
-            return BigDecimal.ZERO;
-        }
-        return rate(previousIssueTotal - duplicateIssueCount, previousIssueTotal);
     }
 
     private static void blankCells(Row row, int firstColumn, int lastColumn, CellStyle style) {
@@ -927,6 +931,7 @@ public class ReportExportExcelService {
         private final CellStyle evenBody;
         private final CellStyle oddPercent;
         private final CellStyle evenPercent;
+        private final CellStyle summaryFormula;
 
         private Styles(SXSSFWorkbook book) {
             detailHeader = headerStyle(book, TABLE_TEAL);
@@ -948,6 +953,7 @@ public class ReportExportExcelService {
             evenBody = style(book, WHITE);
             oddPercent = style(book, STRIPE_BLUE);
             evenPercent = style(book, WHITE);
+            summaryFormula = formulaStyle(book);
             DataFormat format = book.createDataFormat();
             summaryPercent.setDataFormat(format.getFormat("0.00%"));
             previousSummaryTotalPercent.setDataFormat(format.getFormat("0.00%"));
@@ -1004,6 +1010,10 @@ public class ReportExportExcelService {
             return current ? currentSummaryTotalPercent : previousSummaryTotalPercent;
         }
 
+        private CellStyle summaryFormulaStyle() {
+            return summaryFormula;
+        }
+
         private static CellStyle headerStyle(SXSSFWorkbook book, String color) {
             return headerStyle(book, color, IndexedColors.WHITE.getIndex());
         }
@@ -1037,6 +1047,22 @@ public class ReportExportExcelService {
                 ((XSSFCellStyle) value).setFillForegroundColor(rgb(color));
                 value.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             }
+            return value;
+        }
+
+        private static CellStyle formulaStyle(SXSSFWorkbook book) {
+            CellStyle value = book.createCellStyle();
+            Font font = book.createFont();
+            font.setColor(IndexedColors.GREY_50_PERCENT.getIndex());
+            font.setFontHeightInPoints((short) 9);
+            value.setFont(font);
+            value.setWrapText(true);
+            value.setAlignment(HorizontalAlignment.LEFT);
+            value.setVerticalAlignment(VerticalAlignment.CENTER);
+            value.setBorderBottom(BorderStyle.THIN);
+            value.setBorderTop(BorderStyle.THIN);
+            value.setBorderLeft(BorderStyle.THIN);
+            value.setBorderRight(BorderStyle.THIN);
             return value;
         }
 
