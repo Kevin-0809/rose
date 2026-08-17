@@ -45,6 +45,7 @@ class ReportExportExcelServiceTest {
         jdbc.execute("create table ana_tran_diff_tracking_export(source_batch_id varchar(64), module_name varchar(100), row_no bigint, issue_id bigint, issue_key varchar(600), affected_tran_count bigint not null default 0, tran_code varchar(32), tran_name varchar(200), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), resolution_date varchar(8), coordination_required varchar(100), resolver varchar(100), defect_fix_date varchar(8), historical_occurrence_count bigint not null default 0, first_seen_date date, previous_seen_date date)");
         jdbc.execute("create table ana_field_diff_tracking_export(source_batch_id varchar(64), module_name varchar(100), row_no bigint, issue_id bigint, issue_key varchar(600), affected_tran_count bigint not null default 0, tran_code varchar(32), tran_name varchar(200), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), resolution_date varchar(8), coordination_required varchar(100), resolver varchar(100), defect_fix_date varchar(8), orig_field_value varchar(2000), dest_field_value varchar(2000), historical_occurrence_count bigint not null default 0, first_seen_date date, previous_seen_date date)");
         jdbc.execute("create table msg_flow_log_request(source_ip varchar(64), trans_id varchar(64), txn_time bigint, global_seq_no varchar(64))");
+        jdbc.execute("create table ana_report_export_interface_summary(batch_id varchar(64), report_date varchar(8), service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), owner varchar(100), internal_owner varchar(100), sent_transaction_count bigint not null default 0, comp_result_1_count bigint not null default 0, comp_result_2_count bigint not null default 0, comp_result_3_count bigint not null default 0, comp_result_4_count bigint not null default 0, comp_result_8_count bigint not null default 0, comp_result_5_count bigint not null default 0, field_pass_transaction_count bigint not null default 0, success_rate decimal(12,8) not null default 0, comparison_pass_rate decimal(12,8) not null default 0)");
     }
 
     @Test
@@ -103,6 +104,58 @@ class ReportExportExcelServiceTest {
             assertThat(detail.getRow(2).getCell(23).getStringCellValue()).isEqualTo("2");
         }
         assertThat(output.toString()).doesNotContain("secret");
+    }
+
+    @Test
+    void dailyExportAddsInterfaceComparisonSheetWithOwnersAndRates() throws Exception {
+        jdbc.update("""
+                insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,
+                    sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,
+                    comp_result_4_count,comp_result_8_count,comp_result_5_count,success_rate,diff_528_field_count,
+                    field_pass_transaction_count,comparison_pass_rate,transaction_issue_count,field_issue_count,
+                    issue_total_count,duplicate_issue_count)
+                values ('RPT-IFACE','20260728','支付',1,10,1,2,3,4,5,0,0.7,6,4,0.7,1,5,6,2)
+                """);
+        jdbc.update("""
+                insert into ana_report_export_interface_summary(batch_id,report_date,service_code,tran_code,tran_name,module_name,
+                    owner,internal_owner,sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,
+                    comp_result_4_count,comp_result_8_count,comp_result_5_count,field_pass_transaction_count,success_rate,
+                    comparison_pass_rate)
+                values ('RPT-IFACE','20260728','SVC1','T001','交易一','支付','开发负责人甲','行内负责人甲',10,1,2,3,4,5,0,4,0.7,0.7)
+                """);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        service.stream("RPT-IFACE", output);
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
+            Sheet sheet = workbook.getSheet("接口比对明细");
+            assertThat(sheet).isNotNull();
+            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("批次号");
+            assertThat(sheet.getRow(0).getCell(1).getStringCellValue()).isEqualTo("交易码");
+            assertThat(sheet.getRow(0).getCell(2).getStringCellValue()).isEqualTo("S码");
+            assertThat(sheet.getRow(0).getCell(3).getStringCellValue()).isEqualTo("交易描述");
+            assertThat(sheet.getRow(0).getCell(4).getStringCellValue()).isEqualTo("开发负责人");
+            assertThat(sheet.getRow(0).getCell(5).getStringCellValue()).isEqualTo("行内负责人");
+            assertThat(sheet.getRow(0).getCell(6).getStringCellValue()).isEqualTo("领域");
+            assertThat(sheet.getRow(0).getCell(14).getStringCellValue()).isEqualTo("交易成功率");
+            assertThat(sheet.getRow(0).getCell(15).getStringCellValue()).isEqualTo("接口比对通过率");
+            Row data = sheet.getRow(1);
+            assertThat(data.getCell(0).getStringCellValue()).isEqualTo("RPT-IFACE");
+            assertThat(data.getCell(1).getStringCellValue()).isEqualTo("T001");
+            assertThat(data.getCell(2).getStringCellValue()).isEqualTo("SVC1");
+            assertThat(data.getCell(3).getStringCellValue()).isEqualTo("交易一");
+            assertThat(data.getCell(4).getStringCellValue()).isEqualTo("开发负责人甲");
+            assertThat(data.getCell(5).getStringCellValue()).isEqualTo("行内负责人甲");
+            assertThat(data.getCell(6).getStringCellValue()).isEqualTo("支付");
+            assertNumericCell(data, 7, 10L);
+            assertPercentCell(data, 14, 0.7d);
+            assertPercentCell(data, 15, 0.7d);
+            Row total = sheet.getRow(2);
+            assertThat(total.getCell(2).getStringCellValue()).isEqualTo("合计");
+            assertNumericCell(total, 7, 10L);
+            assertPercentCell(total, 14, 0.7d);
+            assertPercentCell(total, 15, 0.7d);
+        }
     }
 
     @Test

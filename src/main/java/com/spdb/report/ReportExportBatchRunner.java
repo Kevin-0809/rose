@@ -102,6 +102,7 @@ public class ReportExportBatchRunner {
                 stageConsumer.accept(ReportExportStage.SUMMARY);
                 log.info("报表明细汇总生成开始，batchId={}", batchId);
                 insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
+                insertInterfaceSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
                 log.info("报表明细汇总生成完成，batchId={}", batchId);
             });
             transactionTemplate.executeWithoutResult(status -> {
@@ -146,8 +147,8 @@ public class ReportExportBatchRunner {
 
     private Map<String, Catalog> catalogs() {
         Map<String, Catalog> result = new LinkedHashMap<>();
-        jdbc.getJdbcTemplate().query("select catalog_id, tran_code, service_code, tran_name, module_name, owner from ana_tran_catalog order by catalog_id", (RowCallbackHandler)
-                rs -> result.putIfAbsent(key(rs.getString("service_code")), new Catalog(rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"), rs.getString("owner"))));
+        jdbc.getJdbcTemplate().query("select catalog_id, tran_code, service_code, tran_name, module_name, owner, internal_owner from ana_tran_catalog order by catalog_id", (RowCallbackHandler)
+                rs -> result.putIfAbsent(key(rs.getString("service_code")), new Catalog(rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("module_name"), rs.getString("owner"), rs.getString("internal_owner"))));
         return result;
     }
 
@@ -221,6 +222,47 @@ public class ReportExportBatchRunner {
                       field_pass_transaction_count, comparison_pass_rate)
                     values (:batchId, :reportDate, :module, :covered, :total, :one, :two, :three, :four, :eight, :five, :rate, :fieldCount,
                       :fieldPass, :comparisonPassRate)
+                    """, p);
+        }
+    }
+
+    private void insertInterfaceSummaries(String batchId, String reportDate, List<Tran> transactions, List<Field> fields,
+                                          Map<String, Catalog> catalogs, Map<String, Retcode> retcodes) {
+        Map<String, List<Tran>> byService = new TreeMap<>();
+        for (Tran tran : transactions) byService.computeIfAbsent(service(tran.destTrcd()), ignored -> new ArrayList<>()).add(tran);
+        Set<String> fieldTransactions = new TreeSet<>();
+        for (Field field : fields) fieldTransactions.add(transactionIdentity(field.mesgSeq(), field.origCdate(), field.convIndex(), field.convCindex()));
+        for (Map.Entry<String, List<Tran>> entry : byService.entrySet()) {
+            String service = entry.getKey();
+            List<Tran> rows = entry.getValue();
+            long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"),
+                    four = count(rows, retcodes, "4"), eight = count(rows, retcodes, "8"), five = count(rows, retcodes, "5");
+            long total = rows.size();
+            long effectiveTotal = Math.max(0, total - five);
+            long fieldPass = rows.stream()
+                    .filter(row -> "4".equals(row.compResult()))
+                    .filter(row -> !fieldTransactions.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex())))
+                    .count();
+            Catalog catalog = catalogs.get(key(service));
+            MapSqlParameterSource p = params(batchId, reportDate).addValue("service", service)
+                    .addValue("tranCode", catalog == null ? null : catalog.tranCode())
+                    .addValue("tranName", catalog == null ? null : catalog.tranName())
+                    .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog))
+                    .addValue("owner", catalog == null ? null : catalog.owner())
+                    .addValue("internalOwner", catalog == null ? null : catalog.internalOwner())
+                    .addValue("total", total).addValue("one", one).addValue("two", two).addValue("three", three)
+                    .addValue("four", four).addValue("eight", eight).addValue("five", five)
+                    .addValue("effectiveTotal", effectiveTotal)
+                    .addValue("rate", rate(three + four, effectiveTotal))
+                    .addValue("fieldPass", fieldPass)
+                    .addValue("comparisonPassRate", rate(fieldPass + three, effectiveTotal));
+            jdbc.update("""
+                    insert into ana_report_export_interface_summary(batch_id, report_date, service_code, tran_code,
+                      tran_name, module_name, owner, internal_owner, sent_transaction_count, comp_result_1_count, comp_result_2_count,
+                      comp_result_3_count, comp_result_4_count, comp_result_8_count, comp_result_5_count,
+                      field_pass_transaction_count, success_rate, comparison_pass_rate)
+                    values (:batchId, :reportDate, :service, :tranCode, :tranName, :module, :owner, :internalOwner, :total, :one, :two,
+                      :three, :four, :eight, :five, :fieldPass, :rate, :comparisonPassRate)
                     """, p);
         }
     }
@@ -469,6 +511,7 @@ public class ReportExportBatchRunner {
             jdbc.update("delete from ana_tran_diff_tracking_export where source_batch_id = :batchId", params);
             jdbc.update("delete from ana_field_diff_tracking_export where source_batch_id = :batchId", params);
             jdbc.update("delete from ana_report_export_summary where batch_id = :batchId", params);
+            jdbc.update("delete from ana_report_export_interface_summary where batch_id = :batchId", params);
         });
     }
 
@@ -722,7 +765,7 @@ public class ReportExportBatchRunner {
     private static MapSqlParameterSource params(String batchId, String reportDate) { return new MapSqlParameterSource("batchId", batchId).addValue("reportDate", reportDate); }
     private static long elapsedMs(long started) { return (System.nanoTime() - started) / 1_000_000L; }
 
-    private record Catalog(String tranCode, String tranName, String moduleName, String owner) {}
+    private record Catalog(String tranCode, String tranName, String moduleName, String owner, String internalOwner) {}
     private record FieldMapping(String tranCode, String serviceCode, String sopFieldName, String soapFieldName, String bizjsonFieldName, String fieldCnName) {}
     private record Retcode(String serviceCode, String origCode, String origDesc, String destCode, String destDesc) {}
     private record Tran(String mesgSeq, String origCdate, int convIndex, int convCindex, String destTrcd, String compResult) {}

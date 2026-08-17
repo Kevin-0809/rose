@@ -85,3 +85,37 @@ on ana_report_export_summary(batch_id, module_name);
 
 create unique index if not exists uk_ana_tran_diff_tracking_export_batch_issue
 on ana_tran_diff_tracking_export(source_batch_id, service_code, orig_error_code, dest_error_code);
+
+create table if not exists ana_report_export_interface_summary (
+    interface_summary_id bigserial primary key,
+    batch_id varchar(64) not null,
+    report_date varchar(8) not null,
+    service_code varchar(200) not null,
+    tran_code varchar(32),
+    tran_name varchar(200),
+    module_name varchar(100) not null,
+    owner varchar(100),
+    internal_owner varchar(100),
+    sent_transaction_count bigint not null default 0,
+    comp_result_1_count bigint not null default 0,
+    comp_result_2_count bigint not null default 0,
+    comp_result_3_count bigint not null default 0,
+    comp_result_4_count bigint not null default 0,
+    comp_result_8_count bigint not null default 0,
+    comp_result_5_count bigint not null default 0,
+    field_pass_transaction_count bigint not null default 0,
+    success_rate numeric(12,8) not null default 0,
+    comparison_pass_rate numeric(12,8) not null default 0,
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_report_export_interface_summary unique (batch_id, service_code)
+);
+
+comment on column ana_report_export_interface_summary.service_code is '528接口服务码（S码）';
+comment on column ana_report_export_interface_summary.owner is '开发负责人';
+comment on column ana_report_export_interface_summary.internal_owner is '行内负责人';
+comment on column ana_report_export_interface_summary.success_rate is '交易成功率';
+comment on column ana_report_export_interface_summary.comparison_pass_rate is '接口比对通过率';
+
+create index if not exists idx_ana_report_export_interface_summary_batch
+on ana_report_export_interface_summary(batch_id, service_code);

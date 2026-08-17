@@ -895,6 +895,57 @@ comment on column ana_report_export_summary.weekly_duplicate_issue_count is '周
 comment on column ana_report_export_summary.created_time is '创建时间';
 comment on column ana_report_export_summary.updated_at is '更新时间';
 
+create table if not exists ana_report_export_interface_summary (
+    interface_summary_id bigserial primary key,
+    batch_id varchar(64) not null,
+    report_date varchar(8) not null,
+    service_code varchar(200) not null,
+    tran_code varchar(32),
+    tran_name varchar(200),
+    module_name varchar(100) not null,
+    owner varchar(100),
+    internal_owner varchar(100),
+    sent_transaction_count bigint not null default 0,
+    comp_result_1_count bigint not null default 0,
+    comp_result_2_count bigint not null default 0,
+    comp_result_3_count bigint not null default 0,
+    comp_result_4_count bigint not null default 0,
+    comp_result_8_count bigint not null default 0,
+    comp_result_5_count bigint not null default 0,
+    field_pass_transaction_count bigint not null default 0,
+    success_rate numeric(12,8) not null default 0,
+    comparison_pass_rate numeric(12,8) not null default 0,
+    created_time timestamp not null default current_timestamp,
+    updated_at timestamp not null default current_timestamp,
+    constraint uk_ana_report_export_interface_summary unique (batch_id, service_code)
+);
+
+comment on table ana_report_export_interface_summary is '报表明细导出接口汇总表';
+comment on column ana_report_export_interface_summary.interface_summary_id is '接口汇总主键';
+comment on column ana_report_export_interface_summary.batch_id is '导出批次号';
+comment on column ana_report_export_interface_summary.report_date is '报表日期，格式yyyymmdd';
+comment on column ana_report_export_interface_summary.service_code is '528接口服务码（S码）';
+comment on column ana_report_export_interface_summary.tran_code is '四位交易码';
+comment on column ana_report_export_interface_summary.tran_name is '交易描述';
+comment on column ana_report_export_interface_summary.module_name is '所属模块名称';
+comment on column ana_report_export_interface_summary.owner is '开发负责人';
+comment on column ana_report_export_interface_summary.internal_owner is '行内负责人';
+comment on column ana_report_export_interface_summary.sent_transaction_count is '发送交易数量';
+comment on column ana_report_export_interface_summary.comp_result_1_count is '比对结果1数量';
+comment on column ana_report_export_interface_summary.comp_result_2_count is '比对结果2数量';
+comment on column ana_report_export_interface_summary.comp_result_3_count is '二者均失败且响应码一致数量';
+comment on column ana_report_export_interface_summary.comp_result_4_count is '二者均成功数量';
+comment on column ana_report_export_interface_summary.comp_result_8_count is '二者均失败且响应码不一致数量';
+comment on column ana_report_export_interface_summary.comp_result_5_count is '比对结果5数量';
+comment on column ana_report_export_interface_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';
+comment on column ana_report_export_interface_summary.success_rate is '交易成功率';
+comment on column ana_report_export_interface_summary.comparison_pass_rate is '接口比对通过率';
+comment on column ana_report_export_interface_summary.created_time is '创建时间';
+comment on column ana_report_export_interface_summary.updated_at is '更新时间';
+
+create index if not exists idx_ana_report_export_interface_summary_batch
+on ana_report_export_interface_summary(batch_id, service_code);
+
 create index if not exists idx_ana_report_export_command_status
 on ana_report_export_command(status, created_time desc);
 

@@ -93,6 +93,7 @@ public class ReportExportExcelService {
             log.info("日报导出批次信息已加载，batchId={}, previousBatchId={}, moduleCount={}",
                     batchId, previousBatchId, modules.size());
             writeSummary(workbook, batchId, previousBatchId, false, styles);
+            writeInterfaceSummary(workbook, batchId, styles);
             for (String module : modules) {
                 writeModule(workbook, batchId, module, rawFieldValues, styles);
             }
@@ -416,6 +417,94 @@ public class ReportExportExcelService {
                 rs.getLong("comp_result_8_count"), rs.getLong("comp_result_5_count"), rs.getBigDecimal("success_rate"),
                 rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("comparison_pass_rate"),
                 rs.getLong("issue_total_count"), rs.getLong("duplicate_issue_count")));
+    }
+
+    private void writeInterfaceSummary(SXSSFWorkbook book, String batchId, Styles styles) {
+        long started = System.nanoTime();
+        SXSSFSheet sheet = book.createSheet("接口比对明细");
+        String[] headers = {"批次号", "交易码", "S码", "交易描述", "开发负责人", "行内负责人", "领域", "发送交易量",
+                "528成功/CCBS失败", "528失败/CCBS成功", "二者均失败响应码一致", "二者均失败响应码不一致",
+                "二者均成功", "响应码忽略", "交易成功率", "接口比对通过率"};
+        writeDetailHeader(sheet, headers, styles);
+        List<InterfaceSummaryRow> rows = interfaceSummaryRows(batchId);
+        int rowIndex = 1;
+        for (InterfaceSummaryRow row : rows) {
+            Row excelRow = sheet.createRow(rowIndex++);
+            CellStyle rowStyle = styles.rowStyle(rowIndex - 1);
+            cell(excelRow, 0, row.batchId(), rowStyle);
+            cell(excelRow, 1, row.tranCode(), rowStyle);
+            cell(excelRow, 2, row.serviceCode(), rowStyle);
+            cell(excelRow, 3, row.tranName(), rowStyle);
+            cell(excelRow, 4, row.owner(), rowStyle);
+            cell(excelRow, 5, row.internalOwner(), rowStyle);
+            cell(excelRow, 6, row.moduleName(), rowStyle);
+            numericCell(excelRow, 7, row.sentTransactionCount(), rowStyle);
+            numericCell(excelRow, 8, row.compResult1Count(), rowStyle);
+            numericCell(excelRow, 9, row.compResult2Count(), rowStyle);
+            numericCell(excelRow, 10, row.compResult3Count(), rowStyle);
+            numericCell(excelRow, 11, row.compResult8Count(), rowStyle);
+            numericCell(excelRow, 12, row.compResult4Count(), rowStyle);
+            numericCell(excelRow, 13, row.compResult5Count(), rowStyle);
+            percentCell(excelRow, 14, row.successRate(), styles.percentStyle(rowIndex - 1));
+            percentCell(excelRow, 15, row.comparisonPassRate(), styles.percentStyle(rowIndex - 1));
+        }
+        writeInterfaceSummaryTotalRow(sheet.createRow(rowIndex), rows, styles);
+        sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, headers.length - 1));
+        sheet.createFreezePane(0, 1);
+        for (int i = 0; i < headers.length; i++) {
+            sheet.setColumnWidth(i, (i == 0 || i == 2 || i == 3 || i == 6) ? 5600 : 3600);
+        }
+        log.info("接口比对明细Sheet写入完成，batchId={}, rowCount={}, elapsedMs={}",
+                batchId, rows.size(), elapsedMs(started));
+    }
+
+    private void writeInterfaceSummaryTotalRow(Row excelRow, List<InterfaceSummaryRow> rows, Styles styles) {
+        CellStyle rowStyle = styles.summaryTotalStyle(true);
+        long total = rows.stream().mapToLong(InterfaceSummaryRow::sentTransactionCount).sum();
+        long one = rows.stream().mapToLong(InterfaceSummaryRow::compResult1Count).sum();
+        long two = rows.stream().mapToLong(InterfaceSummaryRow::compResult2Count).sum();
+        long three = rows.stream().mapToLong(InterfaceSummaryRow::compResult3Count).sum();
+        long four = rows.stream().mapToLong(InterfaceSummaryRow::compResult4Count).sum();
+        long eight = rows.stream().mapToLong(InterfaceSummaryRow::compResult8Count).sum();
+        long five = rows.stream().mapToLong(InterfaceSummaryRow::compResult5Count).sum();
+        long fieldPass = rows.stream().mapToLong(InterfaceSummaryRow::fieldPassTransactionCount).sum();
+        long effectiveTotal = Math.max(0, total - five);
+        cell(excelRow, 0, "", rowStyle);
+        cell(excelRow, 1, "", rowStyle);
+        cell(excelRow, 2, "合计", rowStyle);
+        cell(excelRow, 3, "", rowStyle);
+        cell(excelRow, 4, "", rowStyle);
+        cell(excelRow, 5, "", rowStyle);
+        cell(excelRow, 6, "", rowStyle);
+        numericCell(excelRow, 7, total, rowStyle);
+        numericCell(excelRow, 8, one, rowStyle);
+        numericCell(excelRow, 9, two, rowStyle);
+        numericCell(excelRow, 10, three, rowStyle);
+        numericCell(excelRow, 11, eight, rowStyle);
+        numericCell(excelRow, 12, four, rowStyle);
+        numericCell(excelRow, 13, five, rowStyle);
+        percentCell(excelRow, 14, rate(three + four, effectiveTotal), styles.summaryTotalPercentStyle(true));
+        percentCell(excelRow, 15, rate(fieldPass + three, effectiveTotal), styles.summaryTotalPercentStyle(true));
+    }
+
+    private List<InterfaceSummaryRow> interfaceSummaryRows(String batchId) {
+        return jdbc.query("""
+                select batch_id, tran_code, service_code, tran_name, owner, internal_owner, module_name,
+                       sent_transaction_count, comp_result_1_count, comp_result_2_count, comp_result_3_count,
+                       comp_result_4_count, comp_result_8_count, comp_result_5_count, field_pass_transaction_count,
+                       success_rate, comparison_pass_rate
+                  from ana_report_export_interface_summary
+                 where batch_id = :batchId
+                 order by service_code
+                """, params(batchId), (rs, rowNum) -> new InterfaceSummaryRow(
+                rs.getString("batch_id"), rs.getString("tran_code"), rs.getString("service_code"),
+                rs.getString("tran_name"), rs.getString("owner"), rs.getString("internal_owner"),
+                rs.getString("module_name"), rs.getLong("sent_transaction_count"),
+                rs.getLong("comp_result_1_count"), rs.getLong("comp_result_2_count"),
+                rs.getLong("comp_result_3_count"), rs.getLong("comp_result_4_count"),
+                rs.getLong("comp_result_8_count"), rs.getLong("comp_result_5_count"),
+                rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("success_rate"),
+                rs.getBigDecimal("comparison_pass_rate")));
     }
 
     private void writeModule(SXSSFWorkbook book, String batchId, String module, boolean rawFieldValues, Styles styles) {
@@ -784,6 +873,27 @@ public class ReportExportExcelService {
             BigDecimal comparisonPassRate,
             long issueTotalCount,
             long duplicateIssueCount
+    ) {
+    }
+
+    private record InterfaceSummaryRow(
+            String batchId,
+            String tranCode,
+            String serviceCode,
+            String tranName,
+            String owner,
+            String internalOwner,
+            String moduleName,
+            long sentTransactionCount,
+            long compResult1Count,
+            long compResult2Count,
+            long compResult3Count,
+            long compResult4Count,
+            long compResult8Count,
+            long compResult5Count,
+            long fieldPassTransactionCount,
+            BigDecimal successRate,
+            BigDecimal comparisonPassRate
     ) {
     }
 
