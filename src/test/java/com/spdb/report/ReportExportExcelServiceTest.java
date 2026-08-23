@@ -489,7 +489,8 @@ class ReportExportExcelServiceTest {
             assertCellFill(sheet.getRow(1), 0, "C6E0B4");
             assertCellFontColor(workbook, sheet.getRow(1), 0, (short) 8);
             assertCellFill(sheet.getRow(1), 4, "C6E0B4");
-            assertCellFill(sheet.getRow(1), 12, "FFF2CC");
+            assertThat(fillRgb(sheet.getRow(1).getCell(12).getCellStyle()))
+                    .isEqualTo(fillRgb(sheet.getRow(1).getCell(11).getCellStyle()));
             assertCellFontColor(workbook, sheet.getRow(1), 12, (short) 8);
             assertThat(sheet.getRow(1).getHeightInPoints()).isGreaterThanOrEqualTo(28f);
             assertThat(sheet.getRow(2).getHeightInPoints()).isGreaterThanOrEqualTo(42f);
@@ -544,8 +545,8 @@ class ReportExportExcelServiceTest {
             assertMainHeaders(sheet.getRow(9), true);
             assertCellFill(sheet.getRow(9), 0, "FCE4D6");
             assertCellFill(sheet.getRow(9), 4, "FCE4D6");
-            assertCellFill(sheet.getRow(9), 12, "FFF2CC");
-            assertCellFill(sheet.getRow(9), 12, "FFF2CC");
+            assertThat(fillRgb(sheet.getRow(9).getCell(12).getCellStyle()))
+                    .isEqualTo(fillRgb(sheet.getRow(9).getCell(11).getCellStyle()));
             assertThat(sheet.getRow(9).getHeightInPoints()).isGreaterThanOrEqualTo(28f);
             assertThat(sheet.getRow(10).getHeightInPoints()).isGreaterThanOrEqualTo(42f);
             assertCellFill(sheet.getRow(10), 4, "FCE4D6");

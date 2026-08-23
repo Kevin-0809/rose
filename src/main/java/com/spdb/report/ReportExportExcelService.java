@@ -209,7 +209,6 @@ public class ReportExportExcelService {
 
         CellStyle mainStyle = styles.summaryMainHeaderStyle(current);
         CellStyle subStyle = styles.summarySubHeaderStyle(current);
-        CellStyle issueStyle = styles.summaryIssueHeaderStyle();
 
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 0, 0, "批次", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 1, 1, "领域", mainStyle);
@@ -226,7 +225,7 @@ public class ReportExportExcelService {
 
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 10, 10, "成功率", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "比对通过率", mainStyle);
-        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "问题总数", issueStyle);
+        mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "问题总数", mainStyle);
 
     }
 
