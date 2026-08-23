@@ -46,6 +46,7 @@ import java.util.Set;
 
 @Service
 public class ReportExportExcelService {
+    private static final int SUMMARY_LAST_COLUMN = 12;
     private static final Logger log = LoggerFactory.getLogger(ReportExportExcelService.class);
     private static final int DEFAULT_DELAY_GRACE_DAYS = 4;
     private static final String[] BASE_DETAIL_HEADERS = {"领域", "序号", "批次", "交易码", "交易名称", "问题级别", "登记日期",
@@ -58,7 +59,6 @@ public class ReportExportExcelService {
             "历史出现次数", "首次出现日期", "上次出现日期"};
     private static final String SUCCESS_RATE_FORMULA = "成功率 =（二者均失败响应码一致 + 二者均成功）÷（发送交易量 − 响应码忽略）";
     private static final String COMPARISON_PASS_RATE_FORMULA = "比对通过率 =（二者均成功且无字段差异交易数 + 二者均失败响应码一致）÷（发送交易量 − 响应码忽略）";
-    private static final String RESOLUTION_RATE_FORMULA = "上轮问题解决率 =（上一批次问题总数 − 上一批次未解决问题数量）÷ 上一批次问题总数";
     private final NamedParameterJdbcTemplate jdbc;
     private final int delayGraceDays;
 
@@ -167,17 +167,16 @@ public class ReportExportExcelService {
         int nextRow = writeSummarySection(sheet, 0, previousBatchId, previousTitle, previousRows, false, styles);
         writeSummarySection(sheet, nextRow + 2, batchId, "本批次", currentRows, true, styles);
 
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i <= SUMMARY_LAST_COLUMN; i++) {
             sheet.setColumnWidth(i, i == 1 ? 4600 : 3600);
         }
     }
 
     private int writeSummarySection(SXSSFSheet sheet, int startRow, String batchId, String title, List<SummaryRow> rows,
                                     boolean current, Styles styles) {
-        int lastColumn = current ? 19 : 17;
         Row titleRow = sheet.createRow(startRow);
         titleRow.setHeightInPoints(24f);
-        mergedCell(sheet, startRow, startRow, 0, lastColumn,
+        mergedCell(sheet, startRow, startRow, 0, SUMMARY_LAST_COLUMN,
                 "批次号：" + (batchId == null || batchId.isBlank() ? "-" : batchId) + "（" + title + "）",
                 styles.summaryTitleStyle(current));
 
@@ -194,15 +193,11 @@ public class ReportExportExcelService {
     }
 
     private int writeSummaryFormulas(SXSSFSheet sheet, int startRow, boolean current, Styles styles) {
-        int lastColumn = current ? 20 : 18;
         StringBuilder formulas = new StringBuilder(SUCCESS_RATE_FORMULA)
                 .append('\n')
                 .append(COMPARISON_PASS_RATE_FORMULA);
-        if (current) {
-            formulas.append('\n').append(RESOLUTION_RATE_FORMULA);
-        }
-        mergedCell(sheet, startRow, startRow, 0, lastColumn, formulas.toString(), styles.summaryFormulaStyle());
-        sheet.getRow(startRow).setHeightInPoints(current ? 45f : 30f);
+        mergedCell(sheet, startRow, startRow, 0, SUMMARY_LAST_COLUMN, formulas.toString(), styles.summaryFormulaStyle());
+        sheet.getRow(startRow).setHeightInPoints(30f);
         return 1;
     }
 
@@ -215,7 +210,6 @@ public class ReportExportExcelService {
         CellStyle mainStyle = styles.summaryMainHeaderStyle(current);
         CellStyle subStyle = styles.summarySubHeaderStyle(current);
         CellStyle issueStyle = styles.summaryIssueHeaderStyle();
-        CellStyle manualFillStyle = styles.summaryManualFillHeaderStyle();
 
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 0, 0, "批次", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 1, 1, "领域", mainStyle);
@@ -234,26 +228,6 @@ public class ReportExportExcelService {
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 11, 11, "比对通过率", mainStyle);
         mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 12, 12, "问题总数", issueStyle);
 
-        if (current) {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 13, 13, "上一批次未解决问题数量", issueStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 14, 14, "上轮问题解决率", issueStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 15, 19,
-                    "上一批次已解决问题分类统计（待验证）", manualFillStyle);
-            writeSolvedIssueSubHeaders(subHeader, 15, manualFillStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 20, 20, "问题解决进度", manualFillStyle);
-        } else {
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex, 13, 17,
-                    "已解决问题分类统计（待验证）", manualFillStyle);
-            writeSolvedIssueSubHeaders(subHeader, 13, manualFillStyle);
-            mergedCell(sheet, mainHeaderRowIndex, mainHeaderRowIndex + 1, 18, 18, "问题解决进度", manualFillStyle);
-        }
-    }
-
-    private void writeSolvedIssueSubHeaders(Row subHeader, int firstColumn, CellStyle style) {
-        String[] solvedHeaders = {"迁移问题", "防腐问题", "功能问题", "新核心下线", "其他问题"};
-        for (int i = 0; i < solvedHeaders.length; i++) {
-            cell(subHeader, firstColumn + i, solvedHeaders[i], style);
-        }
     }
 
     private void writeSummaryDataRow(Row excelRow, SummaryRow row,
@@ -272,12 +246,6 @@ public class ReportExportExcelService {
         percentCell(excelRow, 10, row.successRate(), styles.summaryPercentStyle());
         percentCell(excelRow, 11, row.comparisonPassRate(), styles.summaryPercentStyle());
         numericCell(excelRow, 12, row.issueTotalCount(), rowStyle);
-        if (current) {
-            blankCells(excelRow, 13, 14, rowStyle);
-            blankCells(excelRow, 15, 20, styles.summaryManualFillStyle());
-        } else {
-            blankCells(excelRow, 13, 18, styles.summaryManualFillStyle());
-        }
     }
 
     private void writeSummaryTotalRow(Row excelRow, List<SummaryRow> rows,
@@ -300,12 +268,6 @@ public class ReportExportExcelService {
         percentCell(excelRow, 11, rate(totals.fieldPassTransactionCount() + totals.compResult3Count(),
                 effectiveTotal), styles.summaryTotalPercentStyle(current));
         numericCell(excelRow, 12, totals.issueTotalCount(), rowStyle);
-        if (current) {
-            blankCells(excelRow, 13, 14, rowStyle);
-            blankCells(excelRow, 15, 20, rowStyle);
-        } else {
-            blankCells(excelRow, 13, 18, rowStyle);
-        }
     }
 
     private String previousSucceededBatchId(String batchId) {
