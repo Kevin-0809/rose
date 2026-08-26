@@ -35,6 +35,21 @@ alter table ana_tran_catalog drop constraint if exists ck_ana_tran_catalog_is_ke
 alter table ana_tran_catalog add constraint ck_ana_tran_catalog_is_key_tran
 check (is_key_tran in ('true', 'false'));
 
+create table if not exists ana_replay_transaction_catalog (
+    tran_code varchar(200) primary key,
+    tran_name varchar(200),
+    business_domain varchar(200),
+    batch_type varchar(200),
+    new_core_tran_code varchar(200),
+    new_tran_name varchar(200),
+    replay_required varchar(200),
+    original_service_scene_code varchar(200),
+    new_service_scene_code varchar(200),
+    latest_transaction_date varchar(200),
+    created_at timestamp default current_timestamp,
+    updated_at timestamp default current_timestamp
+);
+
 create table if not exists ana_tran_code_service_mapping (
     mapping_id bigserial primary key,
     tran_code varchar(32) not null,
@@ -1076,6 +1091,9 @@ on tss_retcode_comp(orig_cdate, mesg_seq);
 
 create index if not exists idx_ana_tran_catalog_service
 on ana_tran_catalog(service_code);
+
+create index if not exists idx_ana_replay_transaction_catalog_query
+on ana_replay_transaction_catalog(tran_code, tran_name, business_domain, batch_type, replay_required);
 
 create index if not exists idx_ana_tran_code_service_mapping_tran
 on ana_tran_code_service_mapping(tran_code);

@@ -120,6 +120,28 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlContainsReplayTransactionCatalogTableAndQueryIndex() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql")).toLowerCase();
+
+        assertThat(ddl).contains("create table if not exists ana_replay_transaction_catalog");
+        assertThat(ddl).contains("tran_code varchar(200) primary key");
+        List.of(
+                "tran_name varchar(200)",
+                "business_domain varchar(200)",
+                "batch_type varchar(200)",
+                "new_core_tran_code varchar(200)",
+                "new_tran_name varchar(200)",
+                "replay_required varchar(200)",
+                "original_service_scene_code varchar(200)",
+                "new_service_scene_code varchar(200)",
+                "latest_transaction_date varchar(200)",
+                "created_at timestamp",
+                "updated_at timestamp"
+        ).forEach(column -> assertThat(ddl).contains(column));
+        assertThat(ddl).contains("idx_ana_replay_transaction_catalog_query");
+    }
+
+    @Test
     void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
         String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8)
                 .replace("\r\n", "\n");
