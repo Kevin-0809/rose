@@ -4,6 +4,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +69,32 @@ class ReplayTransactionCatalogWorkbookParserTest {
             values(duplicate, "ABC", "", "n2", "d", "查询", "", "", "否", "", "", "20260826");
             assertThatThrownBy(() -> new ReplayTransactionCatalogWorkbookParser().parse(workbook))
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("重复");
+        }
+    }
+
+    @Test
+    void convertsNumericExcelDateAndRejectsNumericCodeAndOversizedText() throws Exception {
+        try (var workbook = workbook()) {
+            var row = workbook.getSheetAt(0).createRow(1);
+            values(row, "DATE", "", "n", "d", "查询", "", "", "", "", "", "");
+            row.getCell(10).setCellValue(Date.from(java.time.LocalDate.of(2026, 8, 26).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()));
+            var style = workbook.createCellStyle();
+            style.setDataFormat(workbook.createDataFormat().getFormat("yyyyMMdd"));
+            row.getCell(10).setCellStyle(style);
+            assertThat(new ReplayTransactionCatalogWorkbookParser().parse(workbook).get(0).latestTransactionDate()).isEqualTo("20260826");
+        }
+        try (var workbook = workbook()) {
+            var row = workbook.getSheetAt(0).createRow(1);
+            values(row, "123", "", "n", "d", "查询", "", "", "", "", "", "");
+            row.getCell(0).setCellValue(123);
+            assertThatThrownBy(() -> new ReplayTransactionCatalogWorkbookParser().parse(workbook))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("第2行");
+        }
+        try (var workbook = workbook()) {
+            var row = workbook.getSheetAt(0).createRow(1);
+            values(row, "LONG", "", "x".repeat(201), "d", "查询", "", "", "", "", "", "");
+            assertThatThrownBy(() -> new ReplayTransactionCatalogWorkbookParser().parse(workbook))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("第2行");
         }
     }
 

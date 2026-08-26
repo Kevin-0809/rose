@@ -44,17 +44,19 @@ public class ReplayTransactionCatalogController {
     }
 
     @PostMapping(value = "/config/replay-catalog/import", consumes = "multipart/form-data")
-    public String importWorkbook(@RequestParam("file") MultipartFile file, Model model) throws IOException {
+    public String importWorkbook(@RequestParam(value = "file", required = false) MultipartFile file, Model model) throws IOException {
         if (file == null || file.isEmpty()) {
             model.addAttribute("importError", "请选择回放交易清单Excel文件");
         } else if (importService == null) {
             model.addAttribute("importError", "导入服务不可用");
         } else {
             try {
-                int count = importService.importWorkbook(file.getBytes());
-                model.addAttribute("importSuccess", "导入成功");
-                model.addAttribute("importCount", count);
-                model.addAttribute("importTime", IMPORT_TIME.format(LocalDateTime.now()));
+                try (var input = file.getInputStream()) {
+                    int count = importService.importWorkbook(input);
+                    model.addAttribute("importSuccess", "导入成功");
+                    model.addAttribute("importCount", count);
+                    model.addAttribute("importTime", IMPORT_TIME.format(LocalDateTime.now()));
+                }
             } catch (RuntimeException | IOException ex) {
                 model.addAttribute("importError", ex.getMessage());
             }

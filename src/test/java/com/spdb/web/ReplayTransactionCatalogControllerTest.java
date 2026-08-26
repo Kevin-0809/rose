@@ -9,6 +9,7 @@ import org.springframework.ui.ExtendedModelMap;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
+import java.io.ByteArrayInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -44,7 +45,7 @@ class ReplayTransactionCatalogControllerTest {
     void importFeedbackIncludesCountAndFormattedTime() throws Exception {
         ReplayTransactionCatalogService service = mock(ReplayTransactionCatalogService.class);
         var importer = mock(com.spdb.replay.ReplayTransactionCatalogImportService.class);
-        when(importer.importWorkbook(any(byte[].class))).thenReturn(3);
+        when(importer.importWorkbook(any(java.io.InputStream.class))).thenReturn(3);
         var controller = new ReplayTransactionCatalogController(service, importer);
         var model = new ExtendedModelMap();
         var file = new MockMultipartFile("file", "catalog.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[]{1});
@@ -54,5 +55,18 @@ class ReplayTransactionCatalogControllerTest {
         assertThat(model.getAttribute("importCount")).isEqualTo(3);
         assertThat(model.getAttribute("importTime").toString()).matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}");
         assertThat(model.getAttribute("importSuccess")).isEqualTo("导入成功");
+    }
+
+    @Test
+    void missingMultipartFileReturnsFriendlyError() throws Exception {
+        var service = mock(ReplayTransactionCatalogService.class);
+        var importer = mock(com.spdb.replay.ReplayTransactionCatalogImportService.class);
+        var controller = new ReplayTransactionCatalogController(service, importer);
+        var model = new ExtendedModelMap();
+
+        controller.importWorkbook(null, model);
+
+        assertThat(model.getAttribute("importError")).isEqualTo("请选择回放交易清单Excel文件");
+        verifyNoInteractions(importer);
     }
 }

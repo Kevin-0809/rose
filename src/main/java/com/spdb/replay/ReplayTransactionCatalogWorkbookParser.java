@@ -2,6 +2,7 @@ package com.spdb.replay;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -60,7 +61,7 @@ public class ReplayTransactionCatalogWorkbookParser {
         Row header = sheet.getRow(0);
         if (header == null) throw new IllegalArgumentException("第1行表头不能为空");
         for (int i = 0; i < HEADERS.length; i++) {
-            if (!HEADERS[i].equals(text(header, i))) throw new IllegalArgumentException("第1行表头错误，第" + (i + 1) + "列应为" + HEADERS[i]);
+            if (!HEADERS[i].equals(text(header, i, 1))) throw new IllegalArgumentException("第1行表头错误，第" + (i + 1) + "列应为" + HEADERS[i]);
         }
         List<ReplayTransactionCatalogForm> result = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -68,24 +69,40 @@ public class ReplayTransactionCatalogWorkbookParser {
             Row row = sheet.getRow(rowIndex);
             if (row == null || empty(row)) continue;
             try {
-                String first = text(row, 0);
-                String suffix = text(row, 1);
+                String first = text(row, 0, rowIndex + 1);
+                String suffix = text(row, 1, rowIndex + 1);
                 if (!StringUtils.hasText(first)) throw new IllegalArgumentException("A列交易码不能为空");
                 String code = first + (StringUtils.hasText(suffix) ? "-" + suffix : "");
                 if (!seen.add(code)) throw new IllegalArgumentException("重复交易码: " + code);
-                String batch = text(row, 4);
+                String batch = text(row, 4, rowIndex + 1);
                 if (StringUtils.hasText(batch)) {
                     if (batch.length() < 2 || !(batch.startsWith("查询") || batch.startsWith("动账"))) throw new IllegalArgumentException("批次只允许查询或动账");
                     batch = batch.substring(0, 2);
                 }
-                String replay = text(row, 7);
+                String replay = text(row, 7, rowIndex + 1);
                 if (StringUtils.hasText(replay) && !List.of("是", "否").contains(replay)) throw new IllegalArgumentException("是否需要参与回放只允许是或否");
-                String date = text(row, 10);
+                String date = dateText(row, 10, rowIndex + 1);
                 if (StringUtils.hasText(date)) {
                     try { LocalDate.parse(date, DATE); } catch (DateTimeParseException ex) { throw new IllegalArgumentException("最近交易日期必须为合法yyyyMMdd"); }
                 }
-                result.add(new ReplayTransactionCatalogForm(code, text(row, 2), text(row, 3), batch,
-                        text(row, 5), text(row, 6), replay, text(row, 8), text(row, 9), date, null));
+                String tranName = text(row, 2, rowIndex + 1);
+                String domain = text(row, 3, rowIndex + 1);
+                String newCore = text(row, 5, rowIndex + 1);
+                String newName = text(row, 6, rowIndex + 1);
+                String originalScene = text(row, 8, rowIndex + 1);
+                String newScene = text(row, 9, rowIndex + 1);
+                validateLength(code, "交易码");
+                validateLength(tranName, "交易名称");
+                validateLength(domain, "业务领域");
+                validateLength(batch, "批次");
+                validateLength(newCore, "新核心交易码");
+                validateLength(newName, "交易名称");
+                validateLength(replay, "是否需要参与回放");
+                validateLength(originalScene, "原服务场景码");
+                validateLength(newScene, "新服务场景码");
+                validateLength(date, "最近交易日期");
+                result.add(new ReplayTransactionCatalogForm(code, tranName, domain, batch,
+                        newCore, newName, replay, originalScene, newScene, date, null));
             } catch (IllegalArgumentException ex) {
                 throw new IllegalArgumentException("第" + (rowIndex + 1) + "行: " + ex.getMessage(), ex);
             }
@@ -95,12 +112,31 @@ public class ReplayTransactionCatalogWorkbookParser {
     }
 
     private boolean empty(Row row) {
-        for (int i = 0; i < HEADERS.length; i++) if (StringUtils.hasText(text(row, i))) return false;
+        for (int i = 0; i < HEADERS.length; i++) if (row.getCell(i) != null && StringUtils.hasText(FORMATTER.formatCellValue(row.getCell(i)))) return false;
         return true;
     }
 
-    private String text(Row row, int column) {
+    private String text(Row row, int column, int rowNumber) {
         Cell cell = row.getCell(column);
-        return cell == null ? "" : FORMATTER.formatCellValue(cell).replaceAll("[\\r\\n]+", " ").trim();
+        if (cell == null) return "";
+        if (cell.getCellType() == org.apache.poi.ss.usermodel.CellType.NUMERIC) {
+            throw new IllegalArgumentException("第" + rowNumber + "行第" + (column + 1) + "列必须为文本，数值单元格可能丢失前导零");
+        }
+        return FORMATTER.formatCellValue(cell).replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    private String dateText(Row row, int column, int rowNumber) {
+        Cell cell = row.getCell(column);
+        if (cell == null) return "";
+        if (cell.getCellType() == org.apache.poi.ss.usermodel.CellType.NUMERIC) {
+            if (!DateUtil.isCellDateFormatted(cell)) throw new IllegalArgumentException("第" + rowNumber + "行最近交易日期数值单元格必须为Excel日期");
+            java.util.Date date = DateUtil.getJavaDate(cell.getNumericCellValue());
+            return new java.text.SimpleDateFormat("yyyyMMdd", Locale.ROOT).format(date);
+        }
+        return FORMATTER.formatCellValue(cell).replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    private void validateLength(String value, String field) {
+        if (value != null && value.length() > 200) throw new IllegalArgumentException(field + "长度不能超过200字符");
     }
 }
