@@ -142,6 +142,44 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlContainsReplayVolumeCheckPersistenceTablesAndStates() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase()
+                .replace("\r\n", "\n");
+
+        assertThat(ddl).contains("create table if not exists ana_replay_volume_check_batch");
+        assertThat(ddl).contains("check_id bigserial primary key");
+        assertThat(ddl).contains("status varchar(32) not null default 'checking'");
+        assertThat(ddl).contains("check (status in ('checking','waiting_confirm','executing','completed','failed'))");
+        assertThat(ddl).contains("sample_size integer not null default 100");
+        assertThat(ddl).contains("lookback_days integer not null default 30");
+        List.of("catalog_snapshot_time", "catalog_count", "no_volume_count", "cleanup_service_count",
+                "cleanup_row_count", "actual_cleanup_row_count", "migration_command_id", "created_time",
+                "started_time", "ended_time", "error_message").forEach(column -> assertThat(ddl).contains(column));
+        assertThat(ddl).contains("idx_ana_replay_volume_check_batch_status");
+
+        assertThat(ddl).contains("create table if not exists ana_replay_volume_check_detail");
+        assertThat(ddl).contains("detail_id bigserial primary key");
+        assertThat(ddl).contains("check_id bigint not null");
+        assertThat(ddl).contains("foreign key (check_id) references ana_replay_volume_check_batch(check_id)");
+        assertThat(ddl).contains("tran_code varchar(200) not null");
+        List.of("tran_name", "business_domain", "batch_type", "mapped_service_count", "complete_volume_count",
+                "status", "migration_status", "error_message").forEach(column -> assertThat(ddl).contains(column));
+        assertThat(ddl).contains("check (status in ('has_volume','no_volume','no_mapping','migration_started','migration_completed','migration_failed'))");
+        assertThat(ddl).contains("idx_ana_replay_volume_check_detail_batch");
+
+        assertThat(ddl).contains("create table if not exists ana_replay_volume_cleanup_detail");
+        assertThat(ddl).contains("cleanup_id bigserial primary key");
+        assertThat(ddl).contains("service_code varchar(200) not null");
+        assertThat(ddl).contains("mapped_tran_codes text");
+        assertThat(ddl).contains("pending_cleanup_row_count bigint not null default 0");
+        assertThat(ddl).contains("actual_cleanup_row_count bigint not null default 0");
+        assertThat(ddl).contains("status varchar(32) not null default 'pending'");
+        assertThat(ddl).contains("check (status in ('pending','executing','completed','failed'))");
+        assertThat(ddl).contains("foreign key (check_id) references ana_replay_volume_check_batch(check_id)");
+        assertThat(ddl).contains("idx_ana_replay_volume_cleanup_detail_batch");
+    }
+
+    @Test
     void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
         String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8)
                 .replace("\r\n", "\n");
