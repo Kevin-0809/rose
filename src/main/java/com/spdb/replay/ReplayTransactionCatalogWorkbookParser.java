@@ -25,7 +25,7 @@ import java.util.Set;
 
 @Component
 public class ReplayTransactionCatalogWorkbookParser {
-    public static final String[] HEADERS = {"528交易码", "交易码后缀", "528交易名称", "业务领域（沙箱）", "批次", "新核心交易码", "交易名称", "是否需要参与回放", "原服务场景码", "新服务场景码", "最近交易日期"};
+    public static final String[] HEADERS = {"528交易码", "交易后缀", "528交易名称", "业务领域（沙箱）", "批次", "新核心交易码", "交易名称", "是否需要参与回放", "原服务场景码", "新服务场景码", "最近交易日期"};
     private static final DataFormatter FORMATTER = new DataFormatter(Locale.CHINA);
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("uuuuMMdd").withResolverStyle(ResolverStyle.STRICT);
 

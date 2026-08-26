@@ -50,7 +50,7 @@ class ReplayTransactionCatalogImportServiceTest {
     private byte[] workbookBytes(String... values) throws Exception {
         try (var workbook = new XSSFWorkbook()) {
             var sheet = workbook.createSheet("清单");
-            String[] headers = {"528交易码", "交易码后缀", "528交易名称", "业务领域（沙箱）", "批次", "新核心交易码", "交易名称", "是否需要参与回放", "原服务场景码", "新服务场景码", "最近交易日期"};
+            String[] headers = {"528交易码", "交易后缀", "528交易名称", "业务领域（沙箱）", "批次", "新核心交易码", "交易名称", "是否需要参与回放", "原服务场景码", "新服务场景码", "最近交易日期"};
             var header = sheet.createRow(0);
             for (int i = 0; i < headers.length; i++) header.createCell(i).setCellValue(headers[i]);
             if (values.length > 0) {
