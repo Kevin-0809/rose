@@ -31,7 +31,9 @@ class LayoutTemplateTest {
                 .contains("/config/import")
                 .contains("/config/trans")
                 .contains("/config/fields")
-                .contains("/config/recording");
+                .contains("/config/recording")
+                .contains("/config/replay-catalog")
+                .contains("全量回放交易清单");
         assertThat(sectionForGroup(html, "analysis"))
                 .contains("/report-exports")
                 .contains("/diff-issues")
@@ -77,6 +79,7 @@ class LayoutTemplateTest {
         List<String> templates = List.of(
                 "/templates/config/fields.html",
                 "/templates/config/recording.html",
+                "/templates/config/replay-catalog.html",
                 "/templates/config/trans.html",
                 "/templates/samples/field-diffs.html",
                 "/templates/samples/transaction-diffs.html",
@@ -103,6 +106,8 @@ class LayoutTemplateTest {
                 "/templates/config/trans.html",
                 "/templates/config/fields.html",
                 "/templates/config/recording.html",
+                "/templates/config/replay-catalog.html",
+                "/templates/config/replay-catalog-edit.html",
                 "/templates/sampling/commands.html",
                 "/templates/sampling/summaries.html",
                 "/templates/samples/transaction-diffs.html",

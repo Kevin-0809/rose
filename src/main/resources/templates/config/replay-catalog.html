@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>全量回放交易清单</title><link rel="stylesheet" href="/css/app.css"></head>
+<body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
+  <div class="page-head"><div><div class="eyebrow">Replay Transaction Catalog</div><h1>全量回放交易清单</h1></div><a class="btn primary" href="/config/replay-catalog/new">新增清单</a></div>
+  <form class="panel filters" method="get" action="/config/replay-catalog"><div class="filter-grid">
+    <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div><div><label>交易名称</label><input name="tranName" th:value="${criteria.tranName()}"></div><div><label>业务领域</label><input name="businessDomain" th:value="${criteria.businessDomain()}"></div>
+    <div><label>批次类型</label><select name="batchType"><option value="">全部</option><option value="查询" th:selected="${criteria.batchType() == '查询'}">查询</option><option value="动账" th:selected="${criteria.batchType() == '动账'}">动账</option></select></div>
+    <div><label>是否需要回放</label><select name="replayRequired"><option value="">全部</option><option value="是" th:selected="${criteria.replayRequired() == '是'}">是</option><option value="否" th:selected="${criteria.replayRequired() == '否'}">否</option></select></div>
+    <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/config/replay-catalog">重置</a></div>
+  </div><div th:replace="~{fragments/layout :: pager(${result})}"></div></form>
+  <section class="panel table-wrap"><table><thead><tr><th>交易码</th><th>交易名称</th><th>业务领域</th><th>批次类型</th><th>新核心交易码</th><th>新交易名称</th><th>是否需要回放</th><th>原服务场景码</th><th>新服务场景码</th><th>最近交易日期</th><th>创建时间</th><th>更新时间</th><th>操作</th></tr></thead><tbody>
+  <tr th:each="row : ${result.rows()}"><td th:text="${row.tranCode()}"></td><td th:text="${row.tranName()}"></td><td th:text="${row.businessDomain()}"></td><td th:text="${row.batchType()}"></td><td th:text="${row.newCoreTranCode()}"></td><td th:text="${row.newTranName()}"></td><td th:text="${row.replayRequired()}"></td><td th:text="${row.originalServiceSceneCode()}"></td><td th:text="${row.newServiceSceneCode()}"></td><td th:text="${row.latestTransactionDate()}"></td><td th:text="${row.createdAt()}"></td><td th:text="${row.updatedAt()}"></td><td class="actions"><a class="btn" th:href="@{/config/replay-catalog/{tranCode}/edit(tranCode=${row.tranCode()})}">编辑</a><form method="post" th:action="@{/config/replay-catalog/{tranCode}/delete(tranCode=${row.tranCode()})}"><button class="btn" type="submit">删除</button></form></td></tr>
+  </tbody></table></section>
+</main></div></div><div th:replace="~{fragments/layout :: sidebarScript}"></div></body></html>
