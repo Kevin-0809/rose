@@ -2,7 +2,15 @@
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>全量回放交易清单</title><link rel="stylesheet" href="/css/app.css"></head>
 <body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
-  <div class="page-head"><div><div class="eyebrow">Replay Transaction Catalog</div><h1>全量回放交易清单</h1></div><a class="btn primary" href="/config/replay-catalog/new">新增清单</a></div>
+  <div class="page-head"><div><div class="eyebrow">Replay Transaction Catalog</div><h1>全量回放交易清单</h1></div><div class="actions"><a class="btn primary" href="/config/replay-catalog/new">新增清单</a></div></div>
+  <section class="panel form-grid">
+    <form class="span-4 form-grid" method="post" action="/config/replay-catalog/import" enctype="multipart/form-data">
+      <div class="span-2"><label>Excel文件</label><input type="file" name="file" accept=".xlsx,.xls" required></div>
+      <div class="actions"><button class="btn primary" type="submit">导入Excel</button></div>
+    </form>
+  </section>
+  <section class="panel" th:if="${importError}"><p class="muted" th:text="${importError}"></p><p class="muted">导入失败，原清单已保留。</p></section>
+  <section class="panel" th:if="${importSuccess}"><p class="muted" th:text="${importSuccess}"></p></section>
   <form class="panel filters" method="get" action="/config/replay-catalog"><div class="filter-grid">
     <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div><div><label>交易名称</label><input name="tranName" th:value="${criteria.tranName()}"></div><div><label>业务领域</label><input name="businessDomain" th:value="${criteria.businessDomain()}"></div>
     <div><label>批次类型</label><select name="batchType"><option value="">全部</option><option value="查询" th:selected="${criteria.batchType() == '查询'}">查询</option><option value="动账" th:selected="${criteria.batchType() == '动账'}">动账</option></select></div>
