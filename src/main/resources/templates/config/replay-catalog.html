@@ -10,7 +10,7 @@
     </form>
   </section>
   <section class="panel" th:if="${importError}"><p class="muted" th:text="${importError}"></p><p class="muted">导入失败，原清单已保留。</p></section>
-  <section class="panel" th:if="${importSuccess}"><p class="muted" th:text="${importSuccess}"></p></section>
+  <section class="panel" th:if="${importSuccess}"><p class="muted" th:text="${importSuccess}"></p><p class="muted">写入条数：<span th:text="${importCount}">0</span></p><p class="muted">导入时间：<span th:text="${importTime}">yyyy-MM-dd HH:mm:ss</span></p></section>
   <form class="panel filters" method="get" action="/config/replay-catalog"><div class="filter-grid">
     <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div><div><label>交易名称</label><input name="tranName" th:value="${criteria.tranName()}"></div><div><label>业务领域</label><input name="businessDomain" th:value="${criteria.businessDomain()}"></div>
     <div><label>批次类型</label><select name="batchType"><option value="">全部</option><option value="查询" th:selected="${criteria.batchType() == '查询'}">查询</option><option value="动账" th:selected="${criteria.batchType() == '动账'}">动账</option></select></div>

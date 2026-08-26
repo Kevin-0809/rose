@@ -14,9 +14,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Controller
 public class ReplayTransactionCatalogController {
+    private static final DateTimeFormatter IMPORT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final ReplayTransactionCatalogService service;
     private final ReplayTransactionCatalogImportService importService;
 
@@ -49,7 +52,9 @@ public class ReplayTransactionCatalogController {
         } else {
             try {
                 int count = importService.importWorkbook(file.getBytes());
-                model.addAttribute("importSuccess", "导入成功，共写入 " + count + " 条");
+                model.addAttribute("importSuccess", "导入成功");
+                model.addAttribute("importCount", count);
+                model.addAttribute("importTime", IMPORT_TIME.format(LocalDateTime.now()));
             } catch (RuntimeException | IOException ex) {
                 model.addAttribute("importError", ex.getMessage());
             }

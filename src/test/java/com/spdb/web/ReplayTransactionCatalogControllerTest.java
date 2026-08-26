@@ -6,6 +6,7 @@ import com.spdb.replay.ReplayTransactionCatalogSearch;
 import com.spdb.replay.ReplayTransactionCatalogService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ExtendedModelMap;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
 
@@ -37,5 +38,21 @@ class ReplayTransactionCatalogControllerTest {
         assertThat(controller.save(form, "T001")).isEqualTo("redirect:/config/replay-catalog");
         assertThat(controller.delete("T001")).isEqualTo("redirect:/config/replay-catalog");
         verify(service).delete("T001");
+    }
+
+    @Test
+    void importFeedbackIncludesCountAndFormattedTime() throws Exception {
+        ReplayTransactionCatalogService service = mock(ReplayTransactionCatalogService.class);
+        var importer = mock(com.spdb.replay.ReplayTransactionCatalogImportService.class);
+        when(importer.importWorkbook(any(byte[].class))).thenReturn(3);
+        var controller = new ReplayTransactionCatalogController(service, importer);
+        var model = new ExtendedModelMap();
+        var file = new MockMultipartFile("file", "catalog.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[]{1});
+
+        controller.importWorkbook(file, model);
+
+        assertThat(model.getAttribute("importCount")).isEqualTo(3);
+        assertThat(model.getAttribute("importTime").toString()).matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}");
+        assertThat(model.getAttribute("importSuccess")).isEqualTo("导入成功");
     }
 }
