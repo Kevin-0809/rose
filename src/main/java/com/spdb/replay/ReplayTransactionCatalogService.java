@@ -34,7 +34,9 @@ public class ReplayTransactionCatalogService {
         eq(clauses, params, "batch_type", "batchType", c.batchType());
         eq(clauses, params, "replay_required", "replayRequired", c.replayRequired());
         String where = clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses);
-        params.addValue("limit", page.size()).addValue("offset", page.offset());
+        long rawOffset = ((long) page.page() - 1L) * page.size();
+        int safeOffset = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, rawOffset));
+        params.addValue("limit", page.size()).addValue("offset", safeOffset);
         List<ReplayTransactionCatalogRow> rows = jdbc.query("""
                 select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name,
                        replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date,

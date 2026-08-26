@@ -64,6 +64,14 @@ class ReplayTransactionCatalogServiceTest {
         service.save(form("T1", "n", "d", "", "", ""), null);
     }
 
+    @Test
+    void normalizesExtremelyLargePageWithoutNegativeSqlOffset() {
+        var result = service.search(new ReplayTransactionCatalogSearch(null, null, null, null, null),
+                PageRequestParams.of(Integer.MAX_VALUE, 200));
+        assertThat(result.rows()).isEmpty();
+        assertThat(result.total()).isZero();
+    }
+
     private ReplayTransactionCatalogForm form(String code, String name, String domain, String batch, String required, String date) {
         return new ReplayTransactionCatalogForm(code, name, domain, batch, "NC", "新", required, "OS", "NS", date, null);
     }
