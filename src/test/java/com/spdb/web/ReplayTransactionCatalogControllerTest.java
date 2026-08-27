@@ -7,6 +7,7 @@ import com.spdb.replay.ReplayTransactionCatalogService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 
 import java.util.List;
 import java.io.ByteArrayInputStream;
@@ -15,6 +16,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class ReplayTransactionCatalogControllerTest {
+    private final WebApplicationContextRunner contextRunner = new WebApplicationContextRunner()
+            .withBean(ReplayTransactionCatalogService.class, () -> mock(ReplayTransactionCatalogService.class))
+            .withBean(com.spdb.replay.ReplayTransactionCatalogImportService.class,
+                    () -> mock(com.spdb.replay.ReplayTransactionCatalogImportService.class))
+            .withBean(ReplayTransactionCatalogController.class);
+
+    @Test
+    void springCanCreateControllerWithAutowiredProductionConstructor() {
+        contextRunner.run(context -> assertThat(context).hasSingleBean(ReplayTransactionCatalogController.class));
+    }
+
     @Test
     void listUsesCriteriaAndActiveNavigation() {
         ReplayTransactionCatalogService service = mock(ReplayTransactionCatalogService.class);

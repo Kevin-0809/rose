@@ -4,6 +4,7 @@ import com.spdb.replay.ReplayTransactionCatalogForm;
 import com.spdb.replay.ReplayTransactionCatalogSearch;
 import com.spdb.replay.ReplayTransactionCatalogService;
 import com.spdb.replay.ReplayTransactionCatalogImportService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +26,7 @@ public class ReplayTransactionCatalogController {
 
     public ReplayTransactionCatalogController(ReplayTransactionCatalogService service) { this(service, null); }
 
+    @Autowired
     public ReplayTransactionCatalogController(ReplayTransactionCatalogService service,
                                               ReplayTransactionCatalogImportService importService) {
         this.service = service;
