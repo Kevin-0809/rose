@@ -4,6 +4,8 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
@@ -27,9 +29,16 @@ public class ReplayVolumeCheckService {
     private static final Set<String> MESSAGE_TYPES = Set.of("bzjson", "sop", "soap");
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final TransactionTemplate transactionTemplate;
 
-    public ReplayVolumeCheckService(NamedParameterJdbcTemplate jdbc) {
+    ReplayVolumeCheckService(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.transactionTemplate = null;
+    }
+
+    public ReplayVolumeCheckService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+        this.jdbc = jdbc;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     public ReplayVolumeCheckResult check() {
@@ -44,6 +53,15 @@ public class ReplayVolumeCheckService {
         if (sampleSize <= 0) {
             throw new IllegalArgumentException("sampleSize must be positive");
         }
+        if (transactionTemplate != null) {
+            ReplayVolumeCheckResult result = transactionTemplate.execute(status -> checkInTransaction(sampleSize));
+            if (result == null) throw new IllegalStateException("volume check transaction returned no result");
+            return result;
+        }
+        return checkInTransaction(sampleSize);
+    }
+
+    private ReplayVolumeCheckResult checkInTransaction(int sampleSize) {
         LocalDateTime now = LocalDateTime.now();
         List<Catalog> catalogs = readCatalog();
         Map<String, Set<String>> requestKeys = readFlows("msg_flow_log_request");
@@ -131,12 +149,13 @@ public class ReplayVolumeCheckService {
     private Map<String, Set<String>> readMappings() {
         Map<String, Set<String>> online = new HashMap<>();
         for (Map<String, Object> row : jdbc.queryForList("select tran_code, esf_service_code from tp_online_service_in", new MapSqlParameterSource())) {
-            String code = (String) row.get("esf_service_code");
-            if (code != null) online.computeIfAbsent(code.replace(".", ""), ignored -> new LinkedHashSet<>()).add((String) row.get("tran_code"));
+            String code = normalizeServiceCode((String) row.get("esf_service_code"));
+            if (code != null) online.computeIfAbsent(code, ignored -> new LinkedHashSet<>()).add((String) row.get("tran_code"));
         }
         Map<String, Set<String>> fallback = new HashMap<>();
         for (Map<String, Object> row : jdbc.queryForList("select tran_code, \"528_service_code\" as service_code from ana_tran_code_service_mapping", new MapSqlParameterSource())) {
-            fallback.computeIfAbsent((String) row.get("service_code"), ignored -> new LinkedHashSet<>()).add((String) row.get("tran_code"));
+            String code = normalizeServiceCode((String) row.get("service_code"));
+            if (code != null) fallback.computeIfAbsent(code, ignored -> new LinkedHashSet<>()).add((String) row.get("tran_code"));
         }
         Map<String, Set<String>> result = new HashMap<>();
         Set<String> services = new HashSet<>(online.keySet());
@@ -149,9 +168,16 @@ public class ReplayVolumeCheckService {
         if (value == null) return null;
         int index = value.lastIndexOf('&');
         if (index <= 0 || index == value.length() - 1) return null;
-        String type = value.substring(index + 1).toLowerCase();
+        String type = value.substring(index + 1).trim().toLowerCase();
         if (!MESSAGE_TYPES.contains(type)) return null;
-        return new ParsedTxn(value.substring(0, index), type);
+        String serviceCode = normalizeServiceCode(value.substring(0, index));
+        return serviceCode == null ? null : new ParsedTxn(serviceCode, type);
+    }
+
+    private String normalizeServiceCode(String value) {
+        if (value == null) return null;
+        String normalized = value.trim().toLowerCase().replace(".", "");
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private long insertBatch(LocalDateTime now, int sampleSize, int catalogCount) {
