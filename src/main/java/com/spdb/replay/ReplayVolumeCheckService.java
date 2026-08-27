@@ -1,5 +1,9 @@
 package com.spdb.replay;
 
+import com.spdb.migration.MigrationCommandService;
+import com.spdb.migration.MigrationTranCodeCommandForm;
+import com.spdb.web.PageRequestParams;
+import com.spdb.web.PagedResult;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -7,6 +11,7 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -30,15 +35,25 @@ public class ReplayVolumeCheckService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final TransactionTemplate transactionTemplate;
+    private final MigrationCommandService migrationCommandService;
 
     ReplayVolumeCheckService(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
         this.transactionTemplate = null;
+        this.migrationCommandService = null;
     }
 
     public ReplayVolumeCheckService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+        this(jdbc, transactionManager, null);
+    }
+
+    @Autowired
+    public ReplayVolumeCheckService(NamedParameterJdbcTemplate jdbc,
+                                    PlatformTransactionManager transactionManager,
+                                    MigrationCommandService migrationCommandService) {
         this.jdbc = jdbc;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.migrationCommandService = migrationCommandService;
     }
 
     public ReplayVolumeCheckResult check() {
@@ -47,6 +62,134 @@ public class ReplayVolumeCheckService {
 
     public ReplayVolumeCheckResult startCheck() {
         return check(DEFAULT_SAMPLE_SIZE);
+    }
+
+    public ReplayVolumeCheckResult execute(long checkId) {
+        return confirm(checkId);
+    }
+
+    public ReplayVolumeCheckResult confirm(long checkId) {
+        ReplayVolumeCheckBatch current = readBatch(checkId);
+        if (current == null) {
+            throw new IllegalArgumentException("volume check batch not found: " + checkId);
+        }
+        if (current.status() != ReplayVolumeCheckBatchStatus.WAITING_CONFIRM) {
+            throw new IllegalStateException("volume check batch status does not allow confirmation: " + current.status());
+        }
+        claimForExecution(checkId);
+
+        long actualCleanupRows = 0L;
+        try {
+            List<ReplayVolumeCleanupDetail> cleanupDetails = readCleanupDetails(checkId);
+            for (ReplayVolumeCleanupDetail cleanup : cleanupDetails) {
+                try {
+                    long deleted = executeCleanup(cleanup);
+                    actualCleanupRows += deleted;
+                } catch (RuntimeException ex) {
+                    markFailed(checkId, actualCleanupRows, cleanup.cleanupId(), ex);
+                    throw ex;
+                }
+            }
+
+            List<String> noVolumeCodes = readNoVolumeCodes(checkId);
+            Long migrationCommandId = null;
+            if (!noVolumeCodes.isEmpty()) {
+                if (migrationCommandService == null) {
+                    throw new IllegalStateException("migration command service is unavailable");
+                }
+                jdbc.update("update ana_replay_volume_check_detail set migration_status='MIGRATION_STARTED' where check_id=:checkId and status='NO_VOLUME'",
+                        new MapSqlParameterSource("checkId", checkId));
+                try {
+                    migrationCommandId = migrationCommandService.createTranCodeCommand(new MigrationTranCodeCommandForm(
+                            String.join(",", noVolumeCodes), current.sampleSize(), LOOKBACK_DAYS,
+                            MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查"));
+                } catch (RuntimeException migrationFailure) {
+                    markMigrationFailed(checkId, migrationFailure);
+                    throw migrationFailure;
+                }
+                jdbc.update("update ana_replay_volume_check_batch set migration_command_id=:commandId where check_id=:checkId",
+                        new MapSqlParameterSource().addValue("commandId", migrationCommandId).addValue("checkId", checkId));
+                jdbc.update("update ana_replay_volume_check_batch set actual_cleanup_row_count=:actual where check_id=:checkId",
+                        new MapSqlParameterSource().addValue("actual", actualCleanupRows).addValue("checkId", checkId));
+                return loadResult(checkId);
+            }
+            LocalDateTime ended = LocalDateTime.now();
+            jdbc.update("update ana_replay_volume_check_batch set status='COMPLETED', actual_cleanup_row_count=:actual, ended_time=:ended where check_id=:checkId",
+                    new MapSqlParameterSource().addValue("actual", actualCleanupRows).addValue("ended", Timestamp.valueOf(ended)).addValue("checkId", checkId));
+            return loadResult(checkId);
+        } catch (RuntimeException ex) {
+            markFailed(checkId, actualCleanupRows, null, ex);
+            throw ex;
+        }
+    }
+
+    public ReplayVolumeCheckResult refresh(long checkId) {
+        ReplayVolumeCheckBatch batch = readBatch(checkId);
+        if (batch == null) {
+            throw new IllegalArgumentException("volume check batch not found: " + checkId);
+        }
+        if (batch.status() != ReplayVolumeCheckBatchStatus.EXECUTING || batch.migrationCommandId() == null) {
+            return loadResult(checkId);
+        }
+        if (migrationCommandService == null) {
+            throw new IllegalStateException("migration command service is unavailable");
+        }
+        com.spdb.migration.MigrationProgressRow progress;
+        try {
+            progress = migrationCommandService.progress(batch.migrationCommandId());
+        } catch (RuntimeException progressFailure) {
+            markMigrationFailed(checkId, progressFailure);
+            markFailed(checkId, batch.actualCleanupRowCount(), null, progressFailure);
+            throw progressFailure;
+        }
+        if (progress == null || "CREATED".equals(progress.status()) || "RUNNING".equals(progress.status()) || "CANCEL_REQUESTED".equals(progress.status())) {
+            return loadResult(checkId);
+        }
+        LocalDateTime ended = LocalDateTime.now();
+        if ("COMPLETED".equals(progress.status())) {
+            jdbc.update("update ana_replay_volume_check_detail set migration_status='MIGRATION_COMPLETED' where check_id=:checkId and migration_status='MIGRATION_STARTED'",
+                    new MapSqlParameterSource("checkId", checkId));
+            jdbc.update("update ana_replay_volume_check_batch set status='COMPLETED', ended_time=:ended where check_id=:checkId and status='EXECUTING'",
+                    new MapSqlParameterSource().addValue("ended", Timestamp.valueOf(ended)).addValue("checkId", checkId));
+        } else if ("FAILED".equals(progress.status()) || "CANCELLED".equals(progress.status())) {
+            String message = progress.errorMessage() == null ? "migration command " + progress.status().toLowerCase() : progress.errorMessage();
+            jdbc.update("update ana_replay_volume_check_detail set migration_status='MIGRATION_FAILED', error_message=:error where check_id=:checkId and migration_status='MIGRATION_STARTED'",
+                    new MapSqlParameterSource().addValue("error", message).addValue("checkId", checkId));
+            jdbc.update("update ana_replay_volume_check_batch set status='FAILED', error_message=:error, ended_time=:ended where check_id=:checkId and status='EXECUTING'",
+                    new MapSqlParameterSource().addValue("error", message).addValue("ended", Timestamp.valueOf(ended)).addValue("checkId", checkId));
+        }
+        return loadResult(checkId);
+    }
+
+    public ReplayVolumeCheckResult result(long checkId) {
+        return loadResult(checkId);
+    }
+
+    public ReplayVolumeCheckResult latest() {
+        Long id = jdbc.queryForObject("select max(check_id) from ana_replay_volume_check_batch", new MapSqlParameterSource(), Long.class);
+        return id == null ? null : loadResult(id);
+    }
+
+    public PagedResult<ReplayVolumeCheckBatch> history(PageRequestParams page) {
+        Long totalValue = jdbc.queryForObject("select count(*) from ana_replay_volume_check_batch", new MapSqlParameterSource(), Long.class);
+        long total = totalValue == null ? 0 : totalValue;
+        List<ReplayVolumeCheckBatch> rows = jdbc.query("select * from ana_replay_volume_check_batch order by check_id desc limit :limit offset :offset",
+                new MapSqlParameterSource().addValue("limit", page.size()).addValue("offset", page.offset()), (rs, n) -> new ReplayVolumeCheckBatch(rs.getLong("check_id"), ReplayVolumeCheckBatchStatus.valueOf(rs.getString("status")), localDateTime(rs.getTimestamp("catalog_snapshot_time")), rs.getInt("sample_size"), rs.getInt("lookback_days"), rs.getLong("catalog_count"), rs.getLong("no_volume_count"), rs.getLong("cleanup_service_count"), rs.getLong("cleanup_row_count"), rs.getLong("actual_cleanup_row_count"), rs.getObject("migration_command_id", Long.class), localDateTime(rs.getTimestamp("created_time")), localDateTime(rs.getTimestamp("started_time")), localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message")));
+        return PagedResult.of(rows, total, page);
+    }
+
+    public PagedResult<ReplayVolumeCheckDetail> details(long checkId, PageRequestParams page) {
+        Long totalValue = jdbc.queryForObject("select count(*) from ana_replay_volume_check_detail where check_id=:checkId", new MapSqlParameterSource("checkId", checkId), Long.class);
+        long total = totalValue == null ? 0 : totalValue;
+        List<ReplayVolumeCheckDetail> rows = jdbc.query("select * from ana_replay_volume_check_detail where check_id=:checkId order by detail_id limit :limit offset :offset", new MapSqlParameterSource().addValue("checkId", checkId).addValue("limit", page.size()).addValue("offset", page.offset()), (rs, n) -> new ReplayVolumeCheckDetail(rs.getLong("detail_id"), rs.getLong("check_id"), rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("business_domain"), rs.getString("batch_type"), rs.getLong("mapped_service_count"), rs.getLong("complete_volume_count"), ReplayVolumeCheckDetailStatus.valueOf(rs.getString("status")), rs.getString("migration_status") == null ? null : ReplayVolumeMigrationStatus.valueOf(rs.getString("migration_status")), rs.getString("error_message"), localDateTime(rs.getTimestamp("created_time"))));
+        return PagedResult.of(rows, total, page);
+    }
+
+    public PagedResult<ReplayVolumeCleanupDetail> cleanupDetails(long checkId, PageRequestParams page) {
+        Long totalValue = jdbc.queryForObject("select count(*) from ana_replay_volume_cleanup_detail where check_id=:checkId", new MapSqlParameterSource("checkId", checkId), Long.class);
+        long total = totalValue == null ? 0 : totalValue;
+        List<ReplayVolumeCleanupDetail> rows = jdbc.query("select * from ana_replay_volume_cleanup_detail where check_id=:checkId order by cleanup_id limit :limit offset :offset", new MapSqlParameterSource().addValue("checkId", checkId).addValue("limit", page.size()).addValue("offset", page.offset()), (rs, n) -> new ReplayVolumeCleanupDetail(rs.getLong("cleanup_id"), rs.getLong("check_id"), rs.getString("service_code"), rs.getString("mapped_tran_codes"), rs.getBoolean("catalog_hit"), rs.getLong("pending_cleanup_row_count"), rs.getLong("actual_cleanup_row_count"), ReplayVolumeCleanupStatus.valueOf(rs.getString("status")), rs.getString("error_message"), localDateTime(rs.getTimestamp("created_time")), localDateTime(rs.getTimestamp("started_time")), localDateTime(rs.getTimestamp("ended_time"))));
+        return PagedResult.of(rows, total, page);
     }
 
     public ReplayVolumeCheckResult check(int sampleSize) {
@@ -129,8 +272,8 @@ public class ReplayVolumeCheckService {
     }
 
     private List<Catalog> readCatalog() {
-        return jdbc.query("select tran_code, tran_name, business_domain, batch_type from ana_replay_transaction_catalog order by tran_code",
-                new MapSqlParameterSource(), (rs, n) -> new Catalog(rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("business_domain"), rs.getString("batch_type")));
+        return jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_transaction_catalog order by tran_code",
+                new MapSqlParameterSource(), (rs, n) -> catalog(rs));
     }
 
     private Map<String, Set<String>> readFlows(String table) {
@@ -164,6 +307,151 @@ public class ReplayVolumeCheckService {
         return result;
     }
 
+    private ReplayVolumeCheckBatch readBatch(long checkId) {
+        List<ReplayVolumeCheckBatch> rows = jdbc.query("select * from ana_replay_volume_check_batch where check_id=:checkId",
+                new MapSqlParameterSource("checkId", checkId), (rs, n) -> new ReplayVolumeCheckBatch(
+                        rs.getLong("check_id"), ReplayVolumeCheckBatchStatus.valueOf(rs.getString("status")),
+                        localDateTime(rs.getTimestamp("catalog_snapshot_time")), rs.getInt("sample_size"), rs.getInt("lookback_days"),
+                        rs.getLong("catalog_count"), rs.getLong("no_volume_count"), rs.getLong("cleanup_service_count"),
+                        rs.getLong("cleanup_row_count"), rs.getLong("actual_cleanup_row_count"),
+                        rs.getObject("migration_command_id", Long.class), localDateTime(rs.getTimestamp("created_time")),
+                        localDateTime(rs.getTimestamp("started_time")), localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message")));
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private void claimForExecution(long checkId) {
+        Runnable claim = () -> {
+            jdbc.query("select tran_code from ana_replay_transaction_catalog for update", new MapSqlParameterSource(), (rs, n) -> rs.getString("tran_code"));
+            if (!catalogSnapshotMatches(checkId)) {
+                throw new IllegalStateException("catalog snapshot has changed; please run a new check");
+            }
+            int claimed = jdbc.update("update ana_replay_volume_check_batch set status='EXECUTING', started_time=:started, error_message=null where check_id=:checkId and status='WAITING_CONFIRM'",
+                    new MapSqlParameterSource().addValue("started", Timestamp.valueOf(LocalDateTime.now())).addValue("checkId", checkId));
+            if (claimed != 1) {
+                throw new IllegalStateException("volume check batch status does not allow confirmation");
+            }
+        };
+        if (transactionTemplate == null) {
+            claim.run();
+        } else {
+            transactionTemplate.executeWithoutResult(status -> claim.run());
+        }
+    }
+
+    private boolean catalogSnapshotMatches(long checkId) {
+        Map<String, Catalog> current = new LinkedHashMap<>();
+        jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_transaction_catalog",
+                new MapSqlParameterSource(), (rs, n) -> {
+                    current.put(rs.getString("tran_code"), catalog(rs));
+                    return null;
+                });
+        Map<String, Catalog> snapshot = new LinkedHashMap<>();
+        jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_volume_check_detail where check_id=:checkId",
+                new MapSqlParameterSource("checkId", checkId), (rs, n) -> {
+                    snapshot.put(rs.getString("tran_code"), catalog(rs));
+                    return null;
+                });
+        if (!current.equals(snapshot)) {
+            return false;
+        }
+        ReplayVolumeCheckBatch batch = readBatch(checkId);
+        LocalDateTime snapshotTime = batch == null ? null : batch.catalogSnapshotTime();
+        if (snapshotTime == null) {
+            return false;
+        }
+        Timestamp latest = jdbc.queryForObject("select max(updated_at) from ana_replay_transaction_catalog", new MapSqlParameterSource(), Timestamp.class);
+        return latest == null || !latest.toLocalDateTime().isAfter(snapshotTime);
+    }
+
+    private List<ReplayVolumeCleanupDetail> readCleanupDetails(long checkId) {
+        return jdbc.query("select * from ana_replay_volume_cleanup_detail where check_id=:checkId order by cleanup_id",
+                new MapSqlParameterSource("checkId", checkId), (rs, n) -> new ReplayVolumeCleanupDetail(
+                        rs.getLong("cleanup_id"), rs.getLong("check_id"), rs.getString("service_code"), rs.getString("mapped_tran_codes"),
+                        rs.getBoolean("catalog_hit"), rs.getLong("pending_cleanup_row_count"), rs.getLong("actual_cleanup_row_count"),
+                        ReplayVolumeCleanupStatus.valueOf(rs.getString("status")), rs.getString("error_message"),
+                        localDateTime(rs.getTimestamp("created_time")), localDateTime(rs.getTimestamp("started_time")), localDateTime(rs.getTimestamp("ended_time"))));
+    }
+
+    private List<String> readNoVolumeCodes(long checkId) {
+        return jdbc.queryForList("select tran_code from ana_replay_volume_check_detail where check_id=:checkId and status='NO_VOLUME' order by tran_code",
+                new MapSqlParameterSource("checkId", checkId), String.class);
+    }
+
+    private long executeCleanup(ReplayVolumeCleanupDetail cleanup) {
+        if (transactionTemplate == null) {
+            return executeCleanupInTransaction(cleanup);
+        }
+        Long deleted = transactionTemplate.execute(status -> executeCleanupInTransaction(cleanup));
+        return deleted == null ? 0L : deleted;
+    }
+
+    private long executeCleanupInTransaction(ReplayVolumeCleanupDetail cleanup) {
+        LocalDateTime started = LocalDateTime.now();
+        jdbc.update("update ana_replay_volume_cleanup_detail set status='EXECUTING', started_time=:started, error_message=null where cleanup_id=:cleanupId and status='PENDING'",
+                new MapSqlParameterSource().addValue("started", Timestamp.valueOf(started)).addValue("cleanupId", cleanup.cleanupId()));
+        Map<String, Set<String>> requestRows = readTxnRows("msg_flow_log_request").getOrDefault(cleanup.serviceCode(), Map.of());
+        Map<String, Set<String>> responseRows = readTxnRows("msg_flow_log_response").getOrDefault(cleanup.serviceCode(), Map.of());
+        Set<String> requestKeys = requestRows.keySet();
+        Set<String> responseKeys = responseRows.keySet();
+        Set<String> completeKeys = new HashSet<>(requestKeys);
+        completeKeys.retainAll(responseKeys);
+        long deleted = 0L;
+        for (String key : completeKeys) {
+            String[] parts = key.split("\\u0000", -1);
+            MapSqlParameterSource params = new MapSqlParameterSource().addValue("sourceIp", parts[0]).addValue("transId", parts[1]);
+            params.addValue("responseTxnCodes", responseRows.get(key));
+            params.addValue("requestTxnCodes", requestRows.get(key));
+            int responseDeleted = jdbc.update("delete from msg_flow_log_response where source_ip=:sourceIp and trans_id=:transId and txn_code in (:responseTxnCodes)", params);
+            int requestDeleted = jdbc.update("delete from msg_flow_log_request where source_ip=:sourceIp and trans_id=:transId and txn_code in (:requestTxnCodes)", params);
+            if (responseDeleted > 0 && requestDeleted > 0) deleted++;
+        }
+        LocalDateTime ended = LocalDateTime.now();
+        jdbc.update("update ana_replay_volume_cleanup_detail set status='COMPLETED', actual_cleanup_row_count=:actual, ended_time=:ended where cleanup_id=:cleanupId",
+                new MapSqlParameterSource().addValue("actual", deleted).addValue("ended", Timestamp.valueOf(ended)).addValue("cleanupId", cleanup.cleanupId()));
+        return deleted;
+    }
+
+    private void markFailed(long checkId, long actualCleanupRows, Long cleanupId, RuntimeException ex) {
+        String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+        if (cleanupId != null) {
+            jdbc.update("update ana_replay_volume_cleanup_detail set status='FAILED', error_message=:error, ended_time=:ended where cleanup_id=:cleanupId",
+                    new MapSqlParameterSource().addValue("error", message).addValue("ended", Timestamp.valueOf(LocalDateTime.now())).addValue("cleanupId", cleanupId));
+        }
+        jdbc.update("update ana_replay_volume_check_batch set status='FAILED', actual_cleanup_row_count=:actual, error_message=:error, ended_time=:ended where check_id=:checkId",
+                new MapSqlParameterSource().addValue("actual", actualCleanupRows).addValue("error", message).addValue("ended", Timestamp.valueOf(LocalDateTime.now())).addValue("checkId", checkId));
+    }
+
+    private void markMigrationFailed(long checkId, RuntimeException ex) {
+        String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+        jdbc.update("update ana_replay_volume_check_detail set migration_status='MIGRATION_FAILED', error_message=:error where check_id=:checkId and status='NO_VOLUME'",
+                new MapSqlParameterSource().addValue("error", message).addValue("checkId", checkId));
+    }
+
+    private ReplayVolumeCheckResult loadResult(long checkId) {
+        ReplayVolumeCheckBatch batch = readBatch(checkId);
+        List<ReplayVolumeCheckDetail> details = jdbc.query("select * from ana_replay_volume_check_detail where check_id=:checkId order by detail_id",
+                new MapSqlParameterSource("checkId", checkId), (rs, n) -> new ReplayVolumeCheckDetail(rs.getLong("detail_id"), rs.getLong("check_id"), rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("business_domain"), rs.getString("batch_type"), rs.getLong("mapped_service_count"), rs.getLong("complete_volume_count"), ReplayVolumeCheckDetailStatus.valueOf(rs.getString("status")), rs.getString("migration_status") == null ? null : ReplayVolumeMigrationStatus.valueOf(rs.getString("migration_status")), rs.getString("error_message"), localDateTime(rs.getTimestamp("created_time"))));
+        return new ReplayVolumeCheckResult(batch, details, readCleanupDetails(checkId));
+    }
+
+    private Map<String, Map<String, Set<String>>> readTxnRows(String table) {
+        Map<String, Map<String, Set<String>>> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbc.queryForList("select source_ip, trans_id, txn_code from " + table, new MapSqlParameterSource())) {
+            String txnCode = (String) row.get("txn_code");
+            ParsedTxn parsed = parseTxnCode(txnCode);
+            if (parsed != null) {
+                String key = row.get("source_ip") + "\u0000" + row.get("trans_id");
+                result.computeIfAbsent(parsed.serviceCode(), ignored -> new LinkedHashMap<>())
+                        .computeIfAbsent(key, ignored -> new LinkedHashSet<>()).add(txnCode);
+            }
+        }
+        return result;
+    }
+
+    private LocalDateTime localDateTime(Timestamp value) {
+        return value == null ? null : value.toLocalDateTime();
+    }
+
     private ParsedTxn parseTxnCode(String value) {
         if (value == null) return null;
         int index = value.lastIndexOf('&');
@@ -192,8 +480,8 @@ public class ReplayVolumeCheckService {
 
     private long insertDetail(long checkId, Catalog c, long mappedCount, long volume, ReplayVolumeCheckDetailStatus status, LocalDateTime now) {
         KeyHolder holder = new GeneratedKeyHolder();
-        jdbc.update("insert into ana_replay_volume_check_detail(check_id,tran_code,tran_name,business_domain,batch_type,mapped_service_count,complete_volume_count,status,created_time) values (:checkId,:tranCode,:tranName,:domain,:batch,:mapped,:volume,:status,:created)",
-                new MapSqlParameterSource().addValue("checkId", checkId).addValue("tranCode", c.tranCode()).addValue("tranName", c.tranName()).addValue("domain", c.businessDomain()).addValue("batch", c.batchType()).addValue("mapped", mappedCount).addValue("volume", volume).addValue("status", status.name()).addValue("created", Timestamp.valueOf(now)), holder, new String[]{"detail_id"});
+        jdbc.update("insert into ana_replay_volume_check_detail(check_id,tran_code,tran_name,business_domain,batch_type,new_core_tran_code,new_tran_name,replay_required,original_service_scene_code,new_service_scene_code,latest_transaction_date,mapped_service_count,complete_volume_count,status,created_time) values (:checkId,:tranCode,:tranName,:domain,:batch,:newCore,:newName,:replay,:original,:newScene,:latest,:mapped,:volume,:status,:created)",
+                new MapSqlParameterSource().addValue("checkId", checkId).addValue("tranCode", c.tranCode()).addValue("tranName", c.tranName()).addValue("domain", c.businessDomain()).addValue("batch", c.batchType()).addValue("newCore", c.newCoreTranCode()).addValue("newName", c.newTranName()).addValue("replay", c.replayRequired()).addValue("original", c.originalServiceSceneCode()).addValue("newScene", c.newServiceSceneCode()).addValue("latest", c.latestTransactionDate()).addValue("mapped", mappedCount).addValue("volume", volume).addValue("status", status.name()).addValue("created", Timestamp.valueOf(now)), holder, new String[]{"detail_id"});
         return holder.getKey().longValue();
     }
 
@@ -204,7 +492,13 @@ public class ReplayVolumeCheckService {
         return holder.getKey().longValue();
     }
 
-    private record Catalog(String tranCode, String tranName, String businessDomain, String batchType) {}
+    private Catalog catalog(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new Catalog(rs.getString("tran_code"), rs.getString("tran_name"), rs.getString("business_domain"), rs.getString("batch_type"), rs.getString("new_core_tran_code"), rs.getString("new_tran_name"), rs.getString("replay_required"), rs.getString("original_service_scene_code"), rs.getString("new_service_scene_code"), rs.getString("latest_transaction_date"));
+    }
+
+    private record Catalog(String tranCode, String tranName, String businessDomain, String batchType,
+                           String newCoreTranCode, String newTranName, String replayRequired,
+                           String originalServiceSceneCode, String newServiceSceneCode, String latestTransactionDate) {}
     private record ParsedTxn(String serviceCode, String messageType) {}
     private record CleanupDraft(String serviceCode, Set<String> mappedCodes, boolean catalogHit, long pendingRows) {}
 }

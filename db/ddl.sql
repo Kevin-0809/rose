@@ -82,6 +82,12 @@ create table if not exists ana_replay_volume_check_detail (
     tran_name varchar(200),
     business_domain varchar(200),
     batch_type varchar(200),
+    new_core_tran_code varchar(200),
+    new_tran_name varchar(200),
+    replay_required varchar(200),
+    original_service_scene_code varchar(200),
+    new_service_scene_code varchar(200),
+    latest_transaction_date varchar(200),
     mapped_service_count bigint not null default 0,
     complete_volume_count bigint not null default 0,
     status varchar(32) not null default 'NO_MAPPING',
@@ -96,6 +102,13 @@ create table if not exists ana_replay_volume_check_detail (
     constraint ck_ana_replay_volume_check_detail_migration_status
         check (migration_status is null or migration_status in ('MIGRATION_STARTED','MIGRATION_COMPLETED','MIGRATION_FAILED'))
 );
+
+alter table ana_replay_volume_check_detail add column if not exists new_core_tran_code varchar(200);
+alter table ana_replay_volume_check_detail add column if not exists new_tran_name varchar(200);
+alter table ana_replay_volume_check_detail add column if not exists replay_required varchar(200);
+alter table ana_replay_volume_check_detail add column if not exists original_service_scene_code varchar(200);
+alter table ana_replay_volume_check_detail add column if not exists new_service_scene_code varchar(200);
+alter table ana_replay_volume_check_detail add column if not exists latest_transaction_date varchar(200);
 
 create table if not exists ana_replay_volume_cleanup_detail (
     cleanup_id bigserial primary key,
