@@ -17,6 +17,7 @@
         <a th:classappend="${active == 'fields'} ? 'active'" th:attr="aria-current=${active == 'fields'} ? 'page' : null" href="/config/fields">字段映射</a>
         <a th:classappend="${active == 'recording'} ? 'active'" th:attr="aria-current=${active == 'recording'} ? 'page' : null" href="/config/recording">录制配置</a>
         <a th:classappend="${active == 'replay-catalog'} ? 'active'" th:attr="aria-current=${active == 'replay-catalog'} ? 'page' : null" href="/config/replay-catalog">全量回放交易清单</a>
+        <a th:classappend="${active == 'replay-volume-check'} ? 'active'" th:attr="aria-current=${active == 'replay-volume-check'} ? 'page' : null" href="/config/replay-volume-check">回放交易量检查</a>
       </div>
     </section>
 
@@ -109,6 +110,12 @@
   <select name="size" onchange="this.form.submit()">
     <option th:each="s : ${result.allowedSizes()}" th:value="${s}" th:text="${s}" th:selected="${s == result.size()}"></option>
   </select>
+</div>
+<div th:fragment="pagerNamed(result,paramName)" class="pager">
+  <span class="muted" th:text="'共 ' + ${result.total()} + ' 条，第 ' + ${result.page()} + ' / ' + ${result.totalPages()} + ' 页'">共 0 条</span>
+  <button class="btn" type="submit" th:name="${paramName}" th:value="${result.page() > 1 ? result.page() - 1 : 1}">上一页</button>
+  <button class="btn" type="submit" th:name="${paramName}" th:value="${result.page() < result.totalPages() ? result.page() + 1 : result.totalPages()}">下一页</button>
+  <select th:name="${paramName.replace('Page','Size')}" onchange="this.form.submit()"><option th:each="s : ${result.allowedSizes()}" th:value="${s}" th:text="${s}" th:selected="${s == result.size()}"></option></select>
 </div>
 </body>
 </html>

@@ -33,6 +33,8 @@ class LayoutTemplateTest {
                 .contains("/config/fields")
                 .contains("/config/recording")
                 .contains("/config/replay-catalog")
+                .contains("/config/replay-volume-check")
+                .contains("回放交易量检查")
                 .contains("全量回放交易清单");
         assertThat(sectionForGroup(html, "analysis"))
                 .contains("/report-exports")
@@ -107,6 +109,8 @@ class LayoutTemplateTest {
                 "/templates/config/fields.html",
                 "/templates/config/recording.html",
                 "/templates/config/replay-catalog.html",
+                "/templates/config/replay-volume-check.html",
+                "/templates/config/replay-volume-check-detail.html",
                 "/templates/config/replay-catalog-edit.html",
                 "/templates/sampling/commands.html",
                 "/templates/sampling/summaries.html",

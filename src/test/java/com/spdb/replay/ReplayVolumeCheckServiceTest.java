@@ -215,6 +215,7 @@ class ReplayVolumeCheckServiceTest {
         jdbc.getJdbcTemplate().update("update ana_replay_transaction_catalog set new_core_tran_code='CORE-2' where tran_code='EMPTY'");
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(checked.batch().checkId()))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("catalog");
+        assertThat(service.canConfirm(checked.batch().checkId())).isFalse();
     }
 
     @Test
