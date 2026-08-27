@@ -34,9 +34,11 @@ public class ReplayTransactionCatalogService {
         eq(clauses, params, "batch_type", "batchType", c.batchType());
         eq(clauses, params, "replay_required", "replayRequired", c.replayRequired());
         String where = clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses);
-        long rawOffset = ((long) page.page() - 1L) * page.size();
-        int safeOffset = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, rawOffset));
-        params.addValue("limit", page.size()).addValue("offset", safeOffset);
+        Long total = jdbc.queryForObject("select count(*) from ana_replay_transaction_catalog" + where, params, Long.class);
+        long totalRows = total == null ? 0 : total;
+        PageRequestParams effectivePage = new PageRequestParams(Math.min(page.page(), page.totalPages(totalRows)), page.size());
+        long offset = ((long) effectivePage.page() - 1L) * effectivePage.size();
+        params.addValue("limit", effectivePage.size()).addValue("offset", offset);
         List<ReplayTransactionCatalogRow> rows = jdbc.query("""
                 select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name,
                        replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date,
@@ -47,8 +49,7 @@ public class ReplayTransactionCatalogService {
                         rs.getString("new_tran_name"), rs.getString("replay_required"), rs.getString("original_service_scene_code"),
                         rs.getString("new_service_scene_code"), rs.getString("latest_transaction_date"),
                         rs.getObject("created_at", LocalDateTime.class), rs.getObject("updated_at", LocalDateTime.class)));
-        Long total = jdbc.queryForObject("select count(*) from ana_replay_transaction_catalog" + where, params, Long.class);
-        return PagedResult.of(rows, total == null ? 0 : total, page);
+        return PagedResult.of(rows, totalRows, effectivePage);
     }
 
     public ReplayTransactionCatalogRow find(String tranCode) {

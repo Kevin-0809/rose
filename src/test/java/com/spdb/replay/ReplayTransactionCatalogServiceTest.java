@@ -65,11 +65,16 @@ class ReplayTransactionCatalogServiceTest {
     }
 
     @Test
-    void normalizesExtremelyLargePageWithoutNegativeSqlOffset() {
+    void clampsExtremelyLargePageToLastPageBeforeLoadingRows() {
+        for (int i = 1; i <= 21; i++) {
+            service.save(form("T%03d".formatted(i), "交易" + i, "支付", "查询", "是", "20260826"), null);
+        }
+
         var result = service.search(new ReplayTransactionCatalogSearch(null, null, null, null, null),
-                PageRequestParams.of(Integer.MAX_VALUE, 200));
-        assertThat(result.rows()).isEmpty();
-        assertThat(result.total()).isZero();
+                PageRequestParams.of(Integer.MAX_VALUE, 20));
+        assertThat(result.rows()).extracting(ReplayTransactionCatalogRow::tranCode).containsExactly("T021");
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.totalPages()).isEqualTo(2);
     }
 
     private ReplayTransactionCatalogForm form(String code, String name, String domain, String batch, String required, String date) {
