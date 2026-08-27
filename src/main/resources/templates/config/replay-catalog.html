@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>全量回放交易清单</title><link rel="stylesheet" href="/css/app.css"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>全量回放交易清单</title><link rel="stylesheet" href="/css/app.css?v=20260827-2"></head>
 <body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
   <div class="page-head"><div><div class="eyebrow">Full Replay Transaction Catalog</div><h1>全量回放交易清单</h1><p class="muted">维护参与全量回放的 528 与新核心交易映射。</p></div><div class="actions"><a class="btn" href="#import">⬆ 导入 Excel</a><a class="btn primary" href="/config/replay-catalog/new">＋ 新增交易</a></div></div>
   <section id="import" class="panel replay-import-panel">
