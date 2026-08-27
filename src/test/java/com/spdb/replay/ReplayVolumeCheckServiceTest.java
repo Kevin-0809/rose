@@ -50,7 +50,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void splitsMessageTypesPairsCompleteRowsAndPersistsReadonlyResult() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,tran_name) values ('T001','交易一'),('T002','交易二'),('T003','交易三')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,tran_name,replay_required) values ('T001','交易一','是'),('T002','交易二','是'),('T003','交易三','是')");
         jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('T001','SVC.1'),('T002','SVC.1')");
         jdbc.getJdbcTemplate().update("insert into ana_tran_code_service_mapping(tran_code,\"528_service_code\",ccbs_service_code) values ('T003','SVC2','X')");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_request values ('ip','1','SVC1&bzjson',1),('ip','2','SVC1&sop',2),('ip','3','SVC1&soap',3),('ip','4','SVC1&soap',4),('ip','5','UNKNOWN&bzjson',5)");
@@ -78,7 +78,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void normalizesServiceCodesWhenResolvingMappings() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('DIRTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('DIRTY','是')");
         jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('DIRTY',' D.i.R.t.Y. ')");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_request values ('ip','dirty-1',' DiR.Ty &SoP ',1)");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_response values ('ip','dirty-1',' dirty&sop ',1)");
@@ -95,7 +95,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void rollsBackBatchWhenDetailPersistenceFails() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('ROLLBACK')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('ROLLBACK','是')");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_request values ('ip','rollback-1','UNKNOWN&bzjson',1)");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_response values ('ip','rollback-1','UNKNOWN&bzjson',1)");
         jdbc.getJdbcTemplate().execute("drop table ana_replay_volume_cleanup_detail");
@@ -108,7 +108,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void confirmsCleanupAndStartsMigrationForNoVolumeCodes() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('KEEP'),('EMPTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('KEEP','是'),('EMPTY','是')");
         jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('KEEP','mapped.keep'),('EMPTY','mapped.empty')");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_request values ('ip','stale','stale.service&bzjson',1),('ip','kept','mapped.keep&bzjson',2),('ip','orphan','orphan&bzjson',3)");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_response values ('ip','stale','stale.service&bzjson',1),('ip','kept','mapped.keep&bzjson',2),('ip','orphan','orphan&bzjson',3)");
@@ -133,10 +133,10 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void rejectsRepeatedConfirmationAndCatalogSnapshotChanges() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('EMPTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('EMPTY','是')");
         jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('EMPTY','empty.service')");
         ReplayVolumeCheckResult checked = service.check();
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('NEW')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('NEW','是')");
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(checked.batch().checkId()))
                 .isInstanceOf(IllegalStateException.class)
@@ -152,7 +152,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void recordsMigrationFailureAndPreservesCleanupCount() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('EMPTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('EMPTY','是')");
         jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('EMPTY','empty.service')");
         when(migrationService.createTranCodeCommand(any(MigrationTranCodeCommandForm.class)))
                 .thenThrow(new IllegalStateException("migration unavailable"));
@@ -168,7 +168,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void recordsCleanupFailureAsFailed() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('EMPTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('EMPTY','是')");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_request values ('ip','broken','unknown&bzjson',1)");
         jdbc.getJdbcTemplate().update("insert into msg_flow_log_response values ('ip','broken','unknown&bzjson',1)");
         ReplayVolumeCheckResult checked = service.check();
@@ -184,7 +184,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void rejectsConfirmationWhenCatalogFieldsChange() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,tran_name,business_domain,batch_type) values ('EMPTY','旧名称','旧领域','批')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,tran_name,business_domain,batch_type,replay_required) values ('EMPTY','旧名称','旧领域','批','是')");
         ReplayVolumeCheckResult checked = service.check();
         jdbc.getJdbcTemplate().update("update ana_replay_transaction_catalog set tran_name='新名称' where tran_code='EMPTY'");
 
@@ -195,7 +195,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void refreshesFailedMigrationStatus() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('EMPTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('EMPTY','是')");
         jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('EMPTY','empty.service')");
         when(migrationService.createTranCodeCommand(any(MigrationTranCodeCommandForm.class))).thenReturn(43L);
         ReplayVolumeCheckResult checked = service.check();
@@ -220,10 +220,24 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void rejectsCatalogRowDeletion() {
-        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code) values ('EMPTY')");
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('EMPTY','是')");
         ReplayVolumeCheckResult checked = service.check();
         jdbc.getJdbcTemplate().update("delete from ana_replay_transaction_catalog where tran_code='EMPTY'");
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirm(checked.batch().checkId()))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("catalog");
+    }
+
+    @Test
+    void excludesNonReplayCatalogRowsFromCheckAndAllowsTheirServiceCleanup() {
+        jdbc.getJdbcTemplate().update("insert into ana_replay_transaction_catalog(tran_code,replay_required) values ('YES','是'),('NO','否'),('BLANK',null)");
+        jdbc.getJdbcTemplate().update("insert into tp_online_service_in(tran_code,esf_service_code) values ('NO','shared.service'),('YES','kept.service')");
+        jdbc.getJdbcTemplate().update("insert into msg_flow_log_request values ('ip','non-replay','shared.service&bzjson',1),('ip','keep','kept.service&bzjson',2)");
+        jdbc.getJdbcTemplate().update("insert into msg_flow_log_response values ('ip','non-replay','shared.service&bzjson',1),('ip','keep','kept.service&bzjson',2)");
+
+        ReplayVolumeCheckResult result = service.check();
+
+        assertThat(result.batch().catalogCount()).isEqualTo(1L);
+        assertThat(result.details()).extracting(ReplayVolumeCheckDetail::tranCode).containsExactly("YES");
+        assertThat(result.cleanupDetails()).extracting(ReplayVolumeCleanupDetail::serviceCode).contains("sharedservice");
     }
 }

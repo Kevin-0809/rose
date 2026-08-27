@@ -315,7 +315,7 @@ public class ReplayVolumeCheckService {
     }
 
     private List<Catalog> readCatalog() {
-        return jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_transaction_catalog order by tran_code",
+        return jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_transaction_catalog where replay_required='是' order by tran_code",
                 new MapSqlParameterSource(), (rs, n) -> catalog(rs));
     }
 
@@ -387,7 +387,7 @@ public class ReplayVolumeCheckService {
 
     private boolean catalogSnapshotMatches(long checkId) {
         Map<String, Catalog> current = new LinkedHashMap<>();
-        jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_transaction_catalog",
+        jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date from ana_replay_transaction_catalog where replay_required='是'",
                 new MapSqlParameterSource(), (rs, n) -> {
                     current.put(rs.getString("tran_code"), catalog(rs));
                     return null;
