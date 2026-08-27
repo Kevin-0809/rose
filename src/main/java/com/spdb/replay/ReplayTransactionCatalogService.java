@@ -52,6 +52,16 @@ public class ReplayTransactionCatalogService {
         return PagedResult.of(rows, totalRows, effectivePage);
     }
 
+    public long countReplayRequired() {
+        Long count = jdbc.queryForObject("select count(*) from ana_replay_transaction_catalog where replay_required = '是'", new MapSqlParameterSource(), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    public String latestTransactionDate() {
+        String date = jdbc.queryForObject("select coalesce(max(latest_transaction_date), '') from ana_replay_transaction_catalog", new MapSqlParameterSource(), String.class);
+        return date == null ? "" : date;
+    }
+
     public ReplayTransactionCatalogRow find(String tranCode) {
         if (!StringUtils.hasText(tranCode)) return null;
         List<ReplayTransactionCatalogRow> rows = jdbc.query("select tran_code, tran_name, business_domain, batch_type, new_core_tran_code, new_tran_name, replay_required, original_service_scene_code, new_service_scene_code, latest_transaction_date, created_at, updated_at from ana_replay_transaction_catalog where tran_code = :tranCode", new MapSqlParameterSource("tranCode", tranCode.trim()),

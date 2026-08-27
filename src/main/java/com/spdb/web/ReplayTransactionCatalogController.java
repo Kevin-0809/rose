@@ -41,6 +41,8 @@ public class ReplayTransactionCatalogController {
         PageRequestParams params = PageRequestParams.of(page, size);
         model.addAttribute("criteria", new ReplayTransactionCatalogSearch(tranCode, tranName, businessDomain, batchType, replayRequired));
         model.addAttribute("result", service.search(new ReplayTransactionCatalogSearch(tranCode, tranName, businessDomain, batchType, replayRequired), params));
+        model.addAttribute("replayCount", service.countReplayRequired());
+        model.addAttribute("latestTransactionDate", service.latestTransactionDate());
         model.addAttribute("active", "replay-catalog");
         return "config/replay-catalog";
     }

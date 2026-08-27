@@ -2,16 +2,17 @@
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>全量回放交易清单</title><link rel="stylesheet" href="/css/app.css"></head>
 <body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
-  <div class="page-head"><div><div class="eyebrow">Replay Transaction Catalog</div><h1>全量回放交易清单</h1></div><div class="actions"><a class="btn primary" href="/config/replay-catalog/new">新增清单</a></div></div>
-  <section class="panel form-grid">
+  <div class="page-head"><div><div class="eyebrow">Full Replay Transaction Catalog</div><h1>全量回放交易清单</h1><p class="muted">维护参与全量回放的 528 与新核心交易映射。</p></div><div class="actions"><a class="btn" href="#import">⬆ 导入 Excel</a><a class="btn primary" href="/config/replay-catalog/new">＋ 新增交易</a></div></div>
+  <section id="import" class="panel replay-import-panel">
     <form class="span-4 form-grid" method="post" action="/config/replay-catalog/import" enctype="multipart/form-data">
       <div class="span-2"><label>Excel文件</label><input type="file" name="file" accept=".xlsx,.xls" required></div>
       <div class="actions"><button class="btn primary" type="submit">导入Excel</button></div>
     </form>
   </section>
-  <section class="panel" th:if="${importError}"><p class="muted" th:text="${importError}"></p><p class="muted">导入失败，原清单已保留。</p></section>
-  <section class="panel" th:if="${importSuccess}"><p class="muted" th:text="${importSuccess}"></p><p class="muted">写入条数：<span th:text="${importCount}">0</span></p><p class="muted">导入时间：<span th:text="${importTime}">yyyy-MM-dd HH:mm:ss</span></p></section>
-  <form class="panel filters" method="get" action="/config/replay-catalog"><div class="filter-grid">
+  <section class="panel replay-notice" th:if="${importError}"><strong>导入失败</strong><span th:text="${importError}"></span><span>原清单已保留。</span></section>
+  <section class="panel replay-notice success" th:if="${importSuccess}"><strong>✓ 最近一次全量导入成功</strong><span>写入 <b th:text="${importCount}">0</b> 条记录</span><span>导入时间：<b th:text="${importTime}">yyyy-MM-dd HH:mm:ss</b></span></section>
+  <section class="replay-metrics"><div><span>清单总数</span><strong th:text="${result.total()}">0</strong></div><div><span>参与回放</span><strong th:text="${replayCount}">0</strong></div><div><span>最近交易日期</span><strong th:text="${latestTransactionDate ?: '-'}">-</strong></div></section>
+  <form class="panel filters replay-catalog-filters" method="get" action="/config/replay-catalog"><div class="filter-grid">
     <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div><div><label>交易名称</label><input name="tranName" th:value="${criteria.tranName()}"></div><div><label>业务领域</label><input name="businessDomain" th:value="${criteria.businessDomain()}"></div>
     <div><label>批次类型</label><select name="batchType"><option value="">全部</option><option value="查询" th:selected="${criteria.batchType() == '查询'}">查询</option><option value="动账" th:selected="${criteria.batchType() == '动账'}">动账</option></select></div>
     <div><label>是否需要回放</label><select name="replayRequired"><option value="">全部</option><option value="是" th:selected="${criteria.replayRequired() == '是'}">是</option><option value="否" th:selected="${criteria.replayRequired() == '否'}">否</option></select></div>
