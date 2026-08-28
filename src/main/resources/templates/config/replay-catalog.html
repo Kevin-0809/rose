@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>全量回放交易清单</title><link rel="stylesheet" href="/css/app.css?v=20260827-2"></head>
+<body><div class="app-shell" th:attr="data-active=${active}"><div th:replace="~{fragments/layout :: sidebar(${active})}"></div><div class="app-workspace"><div th:replace="~{fragments/layout :: workspaceBar}"></div><main class="shell layout-frame">
+  <div class="page-head"><div><div class="eyebrow">Full Replay Transaction Catalog</div><h1>全量回放交易清单</h1><p class="muted">维护参与全量回放的 528 与新核心交易映射。</p></div><div class="actions"><a class="btn" href="#import">⬆ 导入 Excel</a><a class="btn primary" href="/config/replay-catalog/new">＋ 新增交易</a></div></div>
+  <section id="import" class="panel replay-import-panel">
+    <form class="span-4 form-grid" method="post" action="/config/replay-catalog/import" enctype="multipart/form-data">
+      <div class="span-2"><label>Excel文件</label><input type="file" name="file" accept=".xlsx,.xls" required></div>
+      <div class="actions"><button class="btn primary" type="submit">导入Excel</button></div>
+    </form>
+  </section>
+  <section class="panel replay-notice" th:if="${importError}"><strong>导入失败</strong><span th:text="${importError}"></span><span>原清单已保留。</span></section>
+  <section id="import-result" class="panel replay-notice success" th:if="${importSuccess}"><div class="replay-notice-copy"><strong>✓ 最近一次全量导入成功</strong><span>写入 <b th:text="${importCount}">0</b> 条记录</span><span>导入时间：<b th:text="${importTime}">yyyy-MM-dd HH:mm:ss</b></span></div><a class="btn small" href="#catalog-table">查看导入结果</a></section>
+  <section class="replay-metrics"><div><span>清单总数</span><strong th:text="${result.total()}">0</strong></div><div><span>参与回放</span><strong th:text="${replayCount}">0</strong></div><div><span>最近交易日期</span><strong th:text="${latestTransactionDate ?: '-'}">-</strong></div></section>
+  <form class="panel filters replay-catalog-filters" method="get" action="/config/replay-catalog"><div class="filter-grid">
+    <div><label>交易码</label><input name="tranCode" th:value="${criteria.tranCode()}"></div><div><label>交易名称</label><input name="tranName" th:value="${criteria.tranName()}"></div><div><label>业务领域</label><input name="businessDomain" th:value="${criteria.businessDomain()}"></div>
+    <div><label>批次类型</label><select name="batchType"><option value="">全部</option><option value="查询" th:selected="${criteria.batchType() == '查询'}">查询</option><option value="动账" th:selected="${criteria.batchType() == '动账'}">动账</option></select></div>
+    <div><label>是否需要回放</label><select name="replayRequired"><option value="">全部</option><option value="是" th:selected="${criteria.replayRequired() == '是'}">是</option><option value="否" th:selected="${criteria.replayRequired() == '否'}">否</option></select></div>
+    <div class="actions"><button class="btn primary" type="submit">查询</button><a class="btn" href="/config/replay-catalog">重置</a></div>
+  </div><div th:replace="~{fragments/layout :: pager(${result})}"></div></form>
+  <section id="catalog-table" class="panel table-wrap replay-catalog-table"><table><thead><tr><th>交易码</th><th>交易名称</th><th>业务领域</th><th>批次</th><th>新核心交易码</th><th>新交易名称</th><th>参与回放</th><th>原服务场景码</th><th>新服务场景码</th><th>最近交易日期</th><th>操作</th></tr></thead><tbody>
+  <tr th:each="row : ${result.rows()}"><td><code class="replay-code" th:text="${row.tranCode()}"></code></td><td th:text="${row.tranName()}"></td><td th:text="${row.businessDomain()}"></td><td><span class="tag batch-tag" th:classappend="${row.batchType() == '动账'} ? ' yellow' : ''" th:text="${row.batchType() ?: '-'}"></span></td><td><code class="replay-code" th:text="${row.newCoreTranCode() ?: '-'}"></code></td><td th:text="${row.newTranName() ?: '-'}"></td><td><span class="tag" th:classappend="${row.replayRequired() == '是'} ? ' green' : ''" th:text="${row.replayRequired() ?: '-'}"></span></td><td th:text="${row.originalServiceSceneCode() ?: '-'}"></td><td th:text="${row.newServiceSceneCode() ?: '-'}"></td><td th:text="${row.latestTransactionDate() ?: '-'}"></td><td class="actions table-actions"><a class="btn small" th:href="@{/config/replay-catalog/{tranCode}/edit(tranCode=${row.tranCode()})}">编辑</a><form method="post" th:action="@{/config/replay-catalog/{tranCode}/delete(tranCode=${row.tranCode()})}"><button class="btn small danger" type="submit">删除</button></form></td></tr>
+  </tbody></table></section>
+</main></div></div><div th:replace="~{fragments/layout :: sidebarScript}"></div></body></html>

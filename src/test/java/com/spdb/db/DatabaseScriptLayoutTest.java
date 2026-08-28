@@ -120,6 +120,66 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlContainsReplayTransactionCatalogTableAndQueryIndex() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql")).toLowerCase();
+
+        assertThat(ddl).contains("create table if not exists ana_replay_transaction_catalog");
+        assertThat(ddl).contains("tran_code varchar(200) primary key");
+        List.of(
+                "tran_name varchar(200)",
+                "business_domain varchar(200)",
+                "batch_type varchar(200)",
+                "new_core_tran_code varchar(200)",
+                "new_tran_name varchar(200)",
+                "replay_required varchar(200)",
+                "original_service_scene_code varchar(200)",
+                "new_service_scene_code varchar(200)",
+                "latest_transaction_date varchar(200)",
+                "created_at timestamp",
+                "updated_at timestamp"
+        ).forEach(column -> assertThat(ddl).contains(column));
+        assertThat(ddl).contains("idx_ana_replay_transaction_catalog_query");
+    }
+
+    @Test
+    void ddlContainsReplayVolumeCheckPersistenceTablesAndStates() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql"), StandardCharsets.UTF_8).toLowerCase()
+                .replace("\r\n", "\n");
+
+        assertThat(ddl).contains("create table if not exists ana_replay_volume_check_batch");
+        assertThat(ddl).contains("check_id bigserial primary key");
+        assertThat(ddl).contains("status varchar(32) not null default 'checking'");
+        assertThat(ddl).contains("check (status in ('checking','waiting_confirm','executing','completed','failed'))");
+        assertThat(ddl).contains("sample_size integer not null default 100");
+        assertThat(ddl).contains("lookback_days integer not null default 30");
+        List.of("catalog_snapshot_time", "catalog_count", "no_volume_count", "cleanup_service_count",
+                "cleanup_row_count", "actual_cleanup_row_count", "migration_command_id", "created_time",
+                "started_time", "ended_time", "error_message").forEach(column -> assertThat(ddl).contains(column));
+        assertThat(ddl).contains("idx_ana_replay_volume_check_batch_status");
+
+        assertThat(ddl).contains("create table if not exists ana_replay_volume_check_detail");
+        assertThat(ddl).contains("detail_id bigserial primary key");
+        assertThat(ddl).contains("check_id bigint not null");
+        assertThat(ddl).contains("foreign key (check_id) references ana_replay_volume_check_batch(check_id)");
+        assertThat(ddl).contains("tran_code varchar(200) not null");
+        List.of("tran_name", "business_domain", "batch_type", "mapped_service_count", "complete_volume_count",
+                "status", "migration_status", "error_message").forEach(column -> assertThat(ddl).contains(column));
+        assertThat(ddl).contains("check (status in ('has_volume','no_volume','no_mapping','migration_started','migration_completed','migration_failed'))");
+        assertThat(ddl).contains("idx_ana_replay_volume_check_detail_batch");
+
+        assertThat(ddl).contains("create table if not exists ana_replay_volume_cleanup_detail");
+        assertThat(ddl).contains("cleanup_id bigserial primary key");
+        assertThat(ddl).contains("service_code varchar(200) not null");
+        assertThat(ddl).contains("mapped_tran_codes text");
+        assertThat(ddl).contains("pending_cleanup_row_count bigint not null default 0");
+        assertThat(ddl).contains("actual_cleanup_row_count bigint not null default 0");
+        assertThat(ddl).contains("status varchar(32) not null default 'pending'");
+        assertThat(ddl).contains("check (status in ('pending','executing','completed','failed'))");
+        assertThat(ddl).contains("foreign key (check_id) references ana_replay_volume_check_batch(check_id)");
+        assertThat(ddl).contains("idx_ana_replay_volume_cleanup_detail_batch");
+    }
+
+    @Test
     void manualReportExportScriptCreatesTheReportExportTables() throws Exception {
         String rawSql = Files.readString(Path.of("db/manual-create-ana-report-export.sql"), StandardCharsets.UTF_8)
                 .replace("\r\n", "\n");
@@ -317,8 +377,8 @@ class DatabaseScriptLayoutTest {
                 "bizjson_field_name varchar(200)",
                 "field_cn_name varchar(200)",
                 "mapping_status varchar(32)",
-                "orig_field_value varchar(2000)",
-                "dest_field_value varchar(2000)",
+                "orig_field_value text",
+                "dest_field_value text",
                 "transaction_owner varchar(100)",
                 "tran_seq_no varchar(64)",
                 "problem_level varchar(100)",
@@ -335,6 +395,8 @@ class DatabaseScriptLayoutTest {
                 "created_at timestamp not null default current_timestamp",
                 "updated_at timestamp not null default current_timestamp");
         expectedColumns.forEach(column -> assertThat(tableBlock).contains(column));
+        assertThat(ddlLower).contains("alter table ana_field_diff_tracking_export alter column orig_field_value type text");
+        assertThat(ddlLower).contains("alter table ana_field_diff_tracking_export alter column dest_field_value type text");
 
         List<String> remediationColumns = List.of(
                 "transaction_owner", "tran_seq_no", "problem_level", "registration_date", "field_name",
