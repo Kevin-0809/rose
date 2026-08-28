@@ -16,8 +16,8 @@ create table if not exists ana_field_diff_tracking_export (
     bizjson_field_name varchar(200),
     field_cn_name varchar(200),
     mapping_status varchar(32),
-    orig_field_value varchar(2000),
-    dest_field_value varchar(2000),
+    orig_field_value text,
+    dest_field_value text,
     transaction_owner varchar(100),
     tran_seq_no varchar(64),
     problem_level varchar(100),
@@ -40,6 +40,9 @@ create table if not exists ana_field_diff_tracking_export (
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp
 );
+
+alter table ana_field_diff_tracking_export alter column orig_field_value type text;
+alter table ana_field_diff_tracking_export alter column dest_field_value type text;
 
 alter table ana_field_diff_tracking_export add column if not exists issue_id bigint;
 alter table ana_field_diff_tracking_export add column if not exists issue_key varchar(600);

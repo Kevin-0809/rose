@@ -574,6 +574,8 @@ class ReportExportBatchRunnerTest {
         String sql = (String) method.invoke(runner);
 
         assertThat(sql).contains("merge into ana_field_diff_tracking_export as target")
+                .contains("cast(:orig as text) as orig_field_value")
+                .contains("cast(:dest as text) as dest_field_value")
                 .contains("using (")
                 .contains("when not matched then")
                 .doesNotContain("on conflict")

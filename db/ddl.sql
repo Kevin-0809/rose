@@ -383,8 +383,8 @@ create table if not exists ana_field_diff_tracking_export (
     bizjson_field_name varchar(200),
     field_cn_name varchar(200),
     mapping_status varchar(32),
-    orig_field_value varchar(2000),
-    dest_field_value varchar(2000),
+    orig_field_value text,
+    dest_field_value text,
     transaction_owner varchar(100),
     tran_seq_no varchar(64),
     problem_level varchar(100),
@@ -453,6 +453,9 @@ comment on column ana_field_diff_tracking_export.first_seen_date is '问题首�
 comment on column ana_field_diff_tracking_export.previous_seen_date is '本次前最近出现日期快照';
 comment on column ana_field_diff_tracking_export.created_at is '创建时间';
 comment on column ana_field_diff_tracking_export.updated_at is '更新时间';
+
+alter table ana_field_diff_tracking_export alter column orig_field_value type text;
+alter table ana_field_diff_tracking_export alter column dest_field_value type text;
 
 create table if not exists ana_diff_issue (
     issue_id bigserial primary key,
