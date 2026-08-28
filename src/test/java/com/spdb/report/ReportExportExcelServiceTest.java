@@ -46,6 +46,7 @@ class ReportExportExcelServiceTest {
         jdbc.execute("create table ana_field_diff_tracking_export(source_batch_id varchar(64), module_name varchar(100), row_no bigint, issue_id bigint, issue_key varchar(600), affected_tran_count bigint not null default 0, tran_code varchar(32), tran_name varchar(200), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), resolution_date varchar(8), coordination_required varchar(100), resolver varchar(100), defect_fix_date varchar(8), orig_field_value varchar(2000), dest_field_value varchar(2000), historical_occurrence_count bigint not null default 0, first_seen_date date, previous_seen_date date)");
         jdbc.execute("create table msg_flow_log_request(source_ip varchar(64), trans_id varchar(64), txn_time bigint, global_seq_no varchar(64))");
         jdbc.execute("create table ana_report_export_interface_summary(batch_id varchar(64), report_date varchar(8), service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), owner varchar(100), internal_owner varchar(100), sent_transaction_count bigint not null default 0, comp_result_1_count bigint not null default 0, comp_result_2_count bigint not null default 0, comp_result_3_count bigint not null default 0, comp_result_4_count bigint not null default 0, comp_result_8_count bigint not null default 0, comp_result_5_count bigint not null default 0, field_pass_transaction_count bigint not null default 0, success_rate decimal(12,8) not null default 0, comparison_pass_rate decimal(12,8) not null default 0)");
+        jdbc.execute("create table tss_dest_pkg(mesg_seq varchar(64), orig_trcd varchar(200), dest_sys varchar(32), tran_take_time decimal(18,6))");
     }
 
     @Test
@@ -123,6 +124,11 @@ class ReportExportExcelServiceTest {
                     comparison_pass_rate)
                 values ('RPT-IFACE','20260728','SVC1','T001','交易一','支付','开发负责人甲','行内负责人甲',10,1,2,3,4,5,0,4,0.7,0.7)
                 """);
+        jdbc.update("insert into tss_dest_pkg values (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?)",
+                "M1", "SVC1&soap", "528", 10,
+                "M2", "SVC1&soap", "528", 30,
+                "M1", "SVC1&soap", "ccbs", 15,
+                "M2", "SVC1&soap", "ccbs", 25);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         service.stream("RPT-IFACE", output);
@@ -139,6 +145,8 @@ class ReportExportExcelServiceTest {
             assertThat(sheet.getRow(0).getCell(6).getStringCellValue()).isEqualTo("领域");
             assertThat(sheet.getRow(0).getCell(14).getStringCellValue()).isEqualTo("交易成功率");
             assertThat(sheet.getRow(0).getCell(15).getStringCellValue()).isEqualTo("接口比对通过率");
+            assertThat(sheet.getRow(0).getCell(16).getStringCellValue()).isEqualTo("528平均耗时");
+            assertThat(sheet.getRow(0).getCell(17).getStringCellValue()).isEqualTo("CCBS平均耗时");
             Row data = sheet.getRow(1);
             assertThat(data.getCell(0).getStringCellValue()).isEqualTo("RPT-IFACE");
             assertThat(data.getCell(1).getStringCellValue()).isEqualTo("T001");
@@ -150,11 +158,15 @@ class ReportExportExcelServiceTest {
             assertNumericCell(data, 7, 10L);
             assertPercentCell(data, 14, 0.7d);
             assertPercentCell(data, 15, 0.7d);
+            assertNumericCell(data, 16, 20d);
+            assertNumericCell(data, 17, 20d);
             Row total = sheet.getRow(2);
             assertThat(total.getCell(2).getStringCellValue()).isEqualTo("合计");
             assertNumericCell(total, 7, 10L);
             assertPercentCell(total, 14, 0.7d);
             assertPercentCell(total, 15, 0.7d);
+            assertThat(total.getCell(16).getStringCellValue()).isBlank();
+            assertThat(total.getCell(17).getStringCellValue()).isBlank();
         }
     }
 
@@ -657,6 +669,11 @@ class ReportExportExcelServiceTest {
     private static void assertNumericCell(Row row, int column, long expected) {
         assertThat(row.getCell(column).getCellType()).isEqualTo(CellType.NUMERIC);
         assertThat((long) row.getCell(column).getNumericCellValue()).isEqualTo(expected);
+    }
+
+    private static void assertNumericCell(Row row, int column, double expected) {
+        assertThat(row.getCell(column).getCellType()).isEqualTo(CellType.NUMERIC);
+        assertThat(row.getCell(column).getNumericCellValue()).isEqualTo(expected);
     }
 
     private static void assertMainHeaders(Row row, boolean current) {
