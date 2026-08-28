@@ -384,6 +384,7 @@ public class ReportExportExcelService {
         long started = System.nanoTime();
         SXSSFSheet sheet = book.createSheet("接口比对明细");
         String[] headers = {"批次号", "交易码", "S码", "交易描述", "开发负责人", "行内负责人", "领域", "发送交易量",
+                "528平均耗时", "CCBS平均耗时",
                 "528成功/CCBS失败", "528失败/CCBS成功", "二者均失败响应码一致", "二者均失败响应码不一致",
                 "二者均成功", "响应码忽略", "交易成功率", "接口比对通过率"};
         writeDetailHeader(sheet, headers, styles);
@@ -400,14 +401,16 @@ public class ReportExportExcelService {
             cell(excelRow, 5, row.internalOwner(), rowStyle);
             cell(excelRow, 6, row.moduleName(), rowStyle);
             numericCell(excelRow, 7, row.sentTransactionCount(), rowStyle);
-            numericCell(excelRow, 8, row.compResult1Count(), rowStyle);
-            numericCell(excelRow, 9, row.compResult2Count(), rowStyle);
-            numericCell(excelRow, 10, row.compResult3Count(), rowStyle);
-            numericCell(excelRow, 11, row.compResult8Count(), rowStyle);
-            numericCell(excelRow, 12, row.compResult4Count(), rowStyle);
-            numericCell(excelRow, 13, row.compResult5Count(), rowStyle);
-            percentCell(excelRow, 14, row.successRate(), styles.percentStyle(rowIndex - 1));
-            percentCell(excelRow, 15, row.comparisonPassRate(), styles.percentStyle(rowIndex - 1));
+            numericCell(excelRow, 8, row.average528TakeTime(), rowStyle);
+            numericCell(excelRow, 9, row.averageCcbsTakeTime(), rowStyle);
+            numericCell(excelRow, 10, row.compResult1Count(), rowStyle);
+            numericCell(excelRow, 11, row.compResult2Count(), rowStyle);
+            numericCell(excelRow, 12, row.compResult3Count(), rowStyle);
+            numericCell(excelRow, 13, row.compResult8Count(), rowStyle);
+            numericCell(excelRow, 14, row.compResult4Count(), rowStyle);
+            numericCell(excelRow, 15, row.compResult5Count(), rowStyle);
+            percentCell(excelRow, 16, row.successRate(), styles.percentStyle(rowIndex - 1));
+            percentCell(excelRow, 17, row.comparisonPassRate(), styles.percentStyle(rowIndex - 1));
         }
         writeInterfaceSummaryTotalRow(sheet.createRow(rowIndex), rows, styles);
         sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, headers.length - 1));
@@ -438,25 +441,39 @@ public class ReportExportExcelService {
         cell(excelRow, 5, "", rowStyle);
         cell(excelRow, 6, "", rowStyle);
         numericCell(excelRow, 7, total, rowStyle);
-        numericCell(excelRow, 8, one, rowStyle);
-        numericCell(excelRow, 9, two, rowStyle);
-        numericCell(excelRow, 10, three, rowStyle);
-        numericCell(excelRow, 11, eight, rowStyle);
-        numericCell(excelRow, 12, four, rowStyle);
-        numericCell(excelRow, 13, five, rowStyle);
-        percentCell(excelRow, 14, rate(three + four, effectiveTotal), styles.summaryTotalPercentStyle(true));
-        percentCell(excelRow, 15, rate(fieldPass + three, effectiveTotal), styles.summaryTotalPercentStyle(true));
+        cell(excelRow, 8, "", rowStyle);
+        cell(excelRow, 9, "", rowStyle);
+        numericCell(excelRow, 10, one, rowStyle);
+        numericCell(excelRow, 11, two, rowStyle);
+        numericCell(excelRow, 12, three, rowStyle);
+        numericCell(excelRow, 13, eight, rowStyle);
+        numericCell(excelRow, 14, four, rowStyle);
+        numericCell(excelRow, 15, five, rowStyle);
+        percentCell(excelRow, 16, rate(three + four, effectiveTotal), styles.summaryTotalPercentStyle(true));
+        percentCell(excelRow, 17, rate(fieldPass + three, effectiveTotal), styles.summaryTotalPercentStyle(true));
     }
 
     private List<InterfaceSummaryRow> interfaceSummaryRows(String batchId) {
         return jdbc.query("""
-                select batch_id, tran_code, service_code, tran_name, owner, internal_owner, module_name,
+                with take_times as (
+                    select case when position('&' in coalesce(orig_trcd, '')) > 0
+                                     then substring(orig_trcd, 1, position('&' in orig_trcd) - 1)
+                                     else orig_trcd end service_code,
+                           avg(case when lower(dest_sys) = '528' then tran_take_time end) average_528_take_time,
+                           avg(case when lower(dest_sys) = 'ccbs' then tran_take_time end) average_ccbs_take_time
+                      from tss_dest_pkg
+                     group by case when position('&' in coalesce(orig_trcd, '')) > 0
+                                     then substring(orig_trcd, 1, position('&' in orig_trcd) - 1)
+                                     else orig_trcd end
+                )
+                select s.batch_id, s.tran_code, s.service_code, s.tran_name, s.owner, s.internal_owner, s.module_name,
                        sent_transaction_count, comp_result_1_count, comp_result_2_count, comp_result_3_count,
                        comp_result_4_count, comp_result_8_count, comp_result_5_count, field_pass_transaction_count,
-                       success_rate, comparison_pass_rate
-                  from ana_report_export_interface_summary
-                 where batch_id = :batchId
-                 order by service_code
+                       success_rate, comparison_pass_rate, t.average_528_take_time, t.average_ccbs_take_time
+                  from ana_report_export_interface_summary s
+                  left join take_times t on t.service_code = s.service_code
+                 where s.batch_id = :batchId
+                 order by s.service_code
                 """, params(batchId), (rs, rowNum) -> new InterfaceSummaryRow(
                 rs.getString("batch_id"), rs.getString("tran_code"), rs.getString("service_code"),
                 rs.getString("tran_name"), rs.getString("owner"), rs.getString("internal_owner"),
@@ -465,7 +482,8 @@ public class ReportExportExcelService {
                 rs.getLong("comp_result_3_count"), rs.getLong("comp_result_4_count"),
                 rs.getLong("comp_result_8_count"), rs.getLong("comp_result_5_count"),
                 rs.getLong("field_pass_transaction_count"), rs.getBigDecimal("success_rate"),
-                rs.getBigDecimal("comparison_pass_rate")));
+                rs.getBigDecimal("comparison_pass_rate"), rs.getBigDecimal("average_528_take_time"),
+                rs.getBigDecimal("average_ccbs_take_time")));
     }
 
     private void writeModule(SXSSFWorkbook book, String batchId, String module, boolean rawFieldValues, Styles styles) {
@@ -767,6 +785,14 @@ public class ReportExportExcelService {
         cell.setCellStyle(style);
     }
 
+    private static void numericCell(Row row, int column, BigDecimal value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        if (value != null) {
+            cell.setCellValue(value.doubleValue());
+        }
+        cell.setCellStyle(style);
+    }
+
     private static void mergedCell(SXSSFSheet sheet, int firstRow, int lastRow, int firstCol, int lastCol,
                                    String value, CellStyle style) {
         for (int rowIndex = firstRow; rowIndex <= lastRow; rowIndex++) {
@@ -854,7 +880,9 @@ public class ReportExportExcelService {
             long compResult5Count,
             long fieldPassTransactionCount,
             BigDecimal successRate,
-            BigDecimal comparisonPassRate
+            BigDecimal comparisonPassRate,
+            BigDecimal average528TakeTime,
+            BigDecimal averageCcbsTakeTime
     ) {
     }
 
