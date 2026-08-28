@@ -143,10 +143,10 @@ class ReportExportExcelServiceTest {
             assertThat(sheet.getRow(0).getCell(4).getStringCellValue()).isEqualTo("开发负责人");
             assertThat(sheet.getRow(0).getCell(5).getStringCellValue()).isEqualTo("行内负责人");
             assertThat(sheet.getRow(0).getCell(6).getStringCellValue()).isEqualTo("领域");
-            assertThat(sheet.getRow(0).getCell(8).getStringCellValue()).isEqualTo("528平均耗时");
-            assertThat(sheet.getRow(0).getCell(9).getStringCellValue()).isEqualTo("CCBS平均耗时");
-            assertThat(sheet.getRow(0).getCell(16).getStringCellValue()).isEqualTo("交易成功率");
-            assertThat(sheet.getRow(0).getCell(17).getStringCellValue()).isEqualTo("接口比对通过率");
+            assertThat(sheet.getRow(0).getCell(14).getStringCellValue()).isEqualTo("交易成功率");
+            assertThat(sheet.getRow(0).getCell(15).getStringCellValue()).isEqualTo("接口比对通过率");
+            assertThat(sheet.getRow(0).getCell(16).getStringCellValue()).isEqualTo("528平均耗时");
+            assertThat(sheet.getRow(0).getCell(17).getStringCellValue()).isEqualTo("CCBS平均耗时");
             Row data = sheet.getRow(1);
             assertThat(data.getCell(0).getStringCellValue()).isEqualTo("RPT-IFACE");
             assertThat(data.getCell(1).getStringCellValue()).isEqualTo("T001");
@@ -156,17 +156,17 @@ class ReportExportExcelServiceTest {
             assertThat(data.getCell(5).getStringCellValue()).isEqualTo("行内负责人甲");
             assertThat(data.getCell(6).getStringCellValue()).isEqualTo("支付");
             assertNumericCell(data, 7, 10L);
-            assertNumericCell(data, 8, 20d);
-            assertNumericCell(data, 9, 20d);
-            assertPercentCell(data, 16, 0.7d);
-            assertPercentCell(data, 17, 0.7d);
+            assertPercentCell(data, 14, 0.7d);
+            assertPercentCell(data, 15, 0.7d);
+            assertNumericCell(data, 16, 20d);
+            assertNumericCell(data, 17, 20d);
             Row total = sheet.getRow(2);
             assertThat(total.getCell(2).getStringCellValue()).isEqualTo("合计");
             assertNumericCell(total, 7, 10L);
-            assertThat(total.getCell(8).getStringCellValue()).isBlank();
-            assertThat(total.getCell(9).getStringCellValue()).isBlank();
-            assertPercentCell(total, 16, 0.7d);
-            assertPercentCell(total, 17, 0.7d);
+            assertPercentCell(total, 14, 0.7d);
+            assertPercentCell(total, 15, 0.7d);
+            assertThat(total.getCell(16).getStringCellValue()).isBlank();
+            assertThat(total.getCell(17).getStringCellValue()).isBlank();
         }
     }
 
