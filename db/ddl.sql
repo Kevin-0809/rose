@@ -1022,6 +1022,8 @@ create table if not exists ana_report_export_interface_summary (
     field_pass_transaction_count bigint not null default 0,
     success_rate numeric(12,8) not null default 0,
     comparison_pass_rate numeric(12,8) not null default 0,
+    average_528_take_time numeric(18,0),
+    average_ccbs_take_time numeric(18,0),
     created_time timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
     constraint uk_ana_report_export_interface_summary unique (batch_id, service_code)
@@ -1047,6 +1049,8 @@ comment on column ana_report_export_interface_summary.comp_result_5_count is '�
 comment on column ana_report_export_interface_summary.field_pass_transaction_count is '二者均成功且无字段差异交易数';
 comment on column ana_report_export_interface_summary.success_rate is '交易成功率';
 comment on column ana_report_export_interface_summary.comparison_pass_rate is '接口比对通过率';
+comment on column ana_report_export_interface_summary.average_528_take_time is '528平均耗时，单位毫秒';
+comment on column ana_report_export_interface_summary.average_ccbs_take_time is 'CCBS平均耗时，单位毫秒';
 comment on column ana_report_export_interface_summary.created_time is '创建时间';
 comment on column ana_report_export_interface_summary.updated_at is '更新时间';
 

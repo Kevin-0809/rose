@@ -228,6 +228,7 @@ public class ReportExportBatchRunner {
 
     private void insertInterfaceSummaries(String batchId, String reportDate, List<Tran> transactions, List<Field> fields,
                                           Map<String, Catalog> catalogs, Map<String, Retcode> retcodes) {
+        Map<String, TakeTimes> takeTimes = takeTimes();
         Map<String, List<Tran>> byService = new TreeMap<>();
         for (Tran tran : transactions) byService.computeIfAbsent(service(tran.destTrcd()), ignored -> new ArrayList<>()).add(tran);
         Set<String> fieldTransactions = new TreeSet<>();
@@ -244,7 +245,10 @@ public class ReportExportBatchRunner {
                     .filter(row -> !fieldTransactions.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex())))
                     .count();
             Catalog catalog = catalogs.get(key(service));
+            TakeTimes takeTime = takeTimes.getOrDefault(service, TakeTimes.EMPTY);
             MapSqlParameterSource p = params(batchId, reportDate).addValue("service", service)
+                    .addValue("average528TakeTime", takeTime.average528())
+                    .addValue("averageCcbsTakeTime", takeTime.averageCcbs())
                     .addValue("tranCode", catalog == null ? null : catalog.tranCode())
                     .addValue("tranName", catalog == null ? null : catalog.tranName())
                     .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog))
@@ -260,11 +264,28 @@ public class ReportExportBatchRunner {
                     insert into ana_report_export_interface_summary(batch_id, report_date, service_code, tran_code,
                       tran_name, module_name, owner, internal_owner, sent_transaction_count, comp_result_1_count, comp_result_2_count,
                       comp_result_3_count, comp_result_4_count, comp_result_8_count, comp_result_5_count,
-                      field_pass_transaction_count, success_rate, comparison_pass_rate)
+                      field_pass_transaction_count, success_rate, comparison_pass_rate, average_528_take_time, average_ccbs_take_time)
                     values (:batchId, :reportDate, :service, :tranCode, :tranName, :module, :owner, :internalOwner, :total, :one, :two,
-                      :three, :four, :eight, :five, :fieldPass, :rate, :comparisonPassRate)
+                      :three, :four, :eight, :five, :fieldPass, :rate, :comparisonPassRate, :average528TakeTime, :averageCcbsTakeTime)
                     """, p);
         }
+    }
+
+    private Map<String, TakeTimes> takeTimes() {
+        Map<String, TakeTimes> result = new HashMap<>();
+        jdbc.getJdbcTemplate().query("""
+                select case when position('&' in coalesce(orig_trcd, '')) > 0
+                                 then substring(orig_trcd, 1, position('&' in orig_trcd) - 1)
+                                 else orig_trcd end service_code,
+                       round(avg(case when lower(dest_sys) = '528' then tran_take_time end)) average_528,
+                       round(avg(case when lower(dest_sys) = 'ccbs' then tran_take_time end)) average_ccbs
+                  from tss_dest_pkg
+                 group by case when position('&' in coalesce(orig_trcd, '')) > 0
+                                 then substring(orig_trcd, 1, position('&' in orig_trcd) - 1)
+                                 else orig_trcd end
+                """, (RowCallbackHandler) rs -> result.put(rs.getString("service_code"),
+                new TakeTimes(rs.getBigDecimal("average_528"), rs.getBigDecimal("average_ccbs"))));
+        return result;
     }
 
     private void updateSummaryIssueMetrics(String batchId, String reportDate) {
@@ -769,6 +790,9 @@ public class ReportExportBatchRunner {
     private record FieldMapping(String tranCode, String serviceCode, String sopFieldName, String soapFieldName, String bizjsonFieldName, String fieldCnName) {}
     private record Retcode(String serviceCode, String origCode, String origDesc, String destCode, String destDesc) {}
     private record Tran(String mesgSeq, String origCdate, int convIndex, int convCindex, String destTrcd, String compResult) {}
+    private record TakeTimes(BigDecimal average528, BigDecimal averageCcbs) {
+        private static final TakeTimes EMPTY = new TakeTimes(null, null);
+    }
     private record Field(String mesgSeq, String origCdate, int convIndex, int convCindex, int fieldIndex, String destTrcd, String origFieldName, String origValue, String destFieldName, String destValue) {}
     private record TransactionDetail(String service, String origCode, String destCode, String issueKey, String tranCode,
                                      String tranName, String module, String origDesc, String destDesc, String owner,

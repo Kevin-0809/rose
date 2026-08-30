@@ -454,25 +454,13 @@ public class ReportExportExcelService {
 
     private List<InterfaceSummaryRow> interfaceSummaryRows(String batchId) {
         return jdbc.query("""
-                with take_times as (
-                    select case when position('&' in coalesce(orig_trcd, '')) > 0
-                                     then substring(orig_trcd, 1, position('&' in orig_trcd) - 1)
-                                     else orig_trcd end service_code,
-                           avg(case when lower(dest_sys) = '528' then tran_take_time end) average_528_take_time,
-                           avg(case when lower(dest_sys) = 'ccbs' then tran_take_time end) average_ccbs_take_time
-                      from tss_dest_pkg
-                     group by case when position('&' in coalesce(orig_trcd, '')) > 0
-                                     then substring(orig_trcd, 1, position('&' in orig_trcd) - 1)
-                                     else orig_trcd end
-                )
-                select s.batch_id, s.tran_code, s.service_code, s.tran_name, s.owner, s.internal_owner, s.module_name,
+                select batch_id, tran_code, service_code, tran_name, owner, internal_owner, module_name,
                        sent_transaction_count, comp_result_1_count, comp_result_2_count, comp_result_3_count,
                        comp_result_4_count, comp_result_8_count, comp_result_5_count, field_pass_transaction_count,
-                       success_rate, comparison_pass_rate, t.average_528_take_time, t.average_ccbs_take_time
-                  from ana_report_export_interface_summary s
-                  left join take_times t on t.service_code = s.service_code
-                 where s.batch_id = :batchId
-                 order by s.service_code
+                       success_rate, comparison_pass_rate, average_528_take_time, average_ccbs_take_time
+                  from ana_report_export_interface_summary
+                 where batch_id = :batchId
+                 order by service_code
                 """, params(batchId), (rs, rowNum) -> new InterfaceSummaryRow(
                 rs.getString("batch_id"), rs.getString("tran_code"), rs.getString("service_code"),
                 rs.getString("tran_name"), rs.getString("owner"), rs.getString("internal_owner"),
