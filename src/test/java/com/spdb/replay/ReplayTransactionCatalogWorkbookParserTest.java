@@ -37,7 +37,7 @@ class ReplayTransactionCatalogWorkbookParserTest {
     }
 
     @Test
-    void rejectsEmptyRowsDuplicateCodesWrongHeaderInvalidDateAndReplayValue() throws Exception {
+    void rejectsEmptyRowsDuplicateCodesWrongHeaderAndInvalidDate() throws Exception {
         try (var workbook = workbook()) {
             workbook.getSheetAt(0).createRow(1);
             var row = workbook.getSheetAt(0).createRow(2);
@@ -58,9 +58,9 @@ class ReplayTransactionCatalogWorkbookParserTest {
         }
         try (var workbook = workbook()) {
             var row = workbook.getSheetAt(0).createRow(1);
-            values(row, "ABC", "", "n", "d", "查询", "", "", "maybe", "", "", "20260826");
-            assertThatThrownBy(() -> new ReplayTransactionCatalogWorkbookParser().parse(workbook))
-                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("第2行");
+            values(row, "ABC", "", "n", "d", "查询", "", "", "待定", "", "", "20260826");
+            assertThat(new ReplayTransactionCatalogWorkbookParser().parse(workbook).get(0).replayRequired())
+                    .isEqualTo("待定");
         }
         try (var workbook = workbook()) {
             var row = workbook.getSheetAt(0).createRow(1);

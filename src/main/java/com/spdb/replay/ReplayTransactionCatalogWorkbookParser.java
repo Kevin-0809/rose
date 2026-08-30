@@ -80,7 +80,6 @@ public class ReplayTransactionCatalogWorkbookParser {
                     batch = batch.substring(0, 2);
                 }
                 String replay = text(row, 7, rowIndex + 1);
-                if (StringUtils.hasText(replay) && !List.of("是", "否").contains(replay)) throw new IllegalArgumentException("是否需要参与回放只允许是或否");
                 String date = dateText(row, 10, rowIndex + 1);
                 if (StringUtils.hasText(date)) {
                     try { LocalDate.parse(date, DATE); } catch (DateTimeParseException ex) { throw new IllegalArgumentException("最近交易日期必须为合法yyyyMMdd"); }
