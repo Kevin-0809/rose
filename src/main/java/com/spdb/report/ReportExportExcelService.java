@@ -43,6 +43,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 @Service
 public class ReportExportExcelService {
@@ -94,6 +95,7 @@ public class ReportExportExcelService {
                     batchId, previousBatchId, modules.size());
             writeSummary(workbook, batchId, previousBatchId, false, styles);
             writeInterfaceSummary(workbook, batchId, styles);
+            writeReplayCoverage(workbook, batchId, styles);
             for (String module : modules) {
                 writeModule(workbook, batchId, module, rawFieldValues, styles);
             }
@@ -419,6 +421,114 @@ public class ReportExportExcelService {
         }
         log.info("接口比对明细Sheet写入完成，batchId={}, rowCount={}, elapsedMs={}",
                 batchId, rows.size(), elapsedMs(started));
+    }
+
+    private void writeReplayCoverage(SXSSFWorkbook book, String batchId, Styles styles) {
+        List<ReplayCoverageRow> rows;
+        try {
+            rows = jdbc.query("""
+                    select batch_id, tran_code, tran_name, business_domain, new_service_scene_code, resolved_service_codes,
+                           replay_required, latest_transaction_date, sent_transaction_count, coverage_status, unsent_reason,
+                           owner, internal_owner
+                      from ana_report_export_replay_coverage
+                     where batch_id=:batchId
+                     order by business_domain, tran_code
+                    """, params(batchId), (rs, n) -> new ReplayCoverageRow(rs.getString("batch_id"), rs.getString("tran_code"), rs.getString("tran_name"),
+                            rs.getString("business_domain"), rs.getString("new_service_scene_code"), rs.getString("resolved_service_codes"),
+                            rs.getString("replay_required"), rs.getString("latest_transaction_date"), rs.getLong("sent_transaction_count"),
+                            rs.getString("coverage_status"), rs.getString("unsent_reason"), rs.getString("owner"), rs.getString("internal_owner")));
+        } catch (RuntimeException e) {
+            log.debug("回放交易覆盖表不可用，跳过新增Sheet，batchId={}", batchId);
+            return;
+        }
+        SXSSFSheet sheet = book.createSheet("回放交易覆盖情况");
+        String[] headers = {"交易码", "交易描述", "业务领域", "S码", "关联S码", "是否需要回放", "最近交易日期", "本次发送交易量", "覆盖状态", "未发送原因", "开发负责人", "行内负责人"};
+        cell(sheet.createRow(0), 0, "按业务领域汇总", styles.detailHeader);
+        Map<String, int[]> domainCounts = new TreeMap<>();
+        Map<String, int[]> groupCounts = new TreeMap<>();
+        for (ReplayCoverageRow row : rows) {
+            accumulateCounts(domainCounts.computeIfAbsent(row.businessDomain() == null ? "" : row.businessDomain(), k -> new int[6]), row);
+            accumulateCounts(groupCounts.computeIfAbsent(groupOf(row.businessDomain()), k -> new int[6]), row);
+        }
+        String[] summaryHeaders = {"业务领域", "全量清单交易数", "本次已发送", "本次未发送", "不回放", "近期无交易", "待分析", "覆盖率"};
+        Row summaryHeader = sheet.createRow(1);
+        for (int i = 0; i < summaryHeaders.length; i++) cell(summaryHeader, i, summaryHeaders[i], styles.detailHeader);
+        int summaryRow = 2;
+        int[] totalCounts = new int[6];
+        for (Map.Entry<String, int[]> entry : domainCounts.entrySet()) {
+            int[] counts = entry.getValue();
+            for (int i = 0; i < counts.length; i++) totalCounts[i] += counts[i];
+            Row row = sheet.createRow(summaryRow++);
+            cell(row, 0, entry.getKey(), styles.rowStyle(summaryRow)); numericCell(row, 1, counts[0], styles.rowStyle(summaryRow));
+            numericCell(row, 2, counts[1], styles.rowStyle(summaryRow)); numericCell(row, 3, counts[0] - counts[1], styles.rowStyle(summaryRow));
+            numericCell(row, 4, counts[2], styles.rowStyle(summaryRow));
+            numericCell(row, 5, counts[3], styles.rowStyle(summaryRow)); numericCell(row, 6, counts[4], styles.rowStyle(summaryRow)); percentCell(row, 7, rate(counts[1], counts[0]), styles.percentStyle(summaryRow));
+        }
+        Row totalRow = sheet.createRow(summaryRow++);
+        CellStyle totalStyle = styles.summaryTotalStyle(true);
+        cell(totalRow, 0, "合计", totalStyle);
+        numericCell(totalRow, 1, totalCounts[0], totalStyle);
+        numericCell(totalRow, 2, totalCounts[1], totalStyle);
+        numericCell(totalRow, 3, totalCounts[0] - totalCounts[1], totalStyle);
+        numericCell(totalRow, 4, totalCounts[2], totalStyle);
+        numericCell(totalRow, 5, totalCounts[3], totalStyle);
+        numericCell(totalRow, 6, totalCounts[4], totalStyle);
+        percentCell(totalRow, 7, rate(totalCounts[1], totalCounts[0]), styles.summaryTotalPercentStyle(true));
+        Row groupTitle = sheet.createRow(summaryRow++);
+        cell(groupTitle, 0, "按大组汇总", styles.detailHeader);
+        String[] groupHeaders = {"大组", "全量清单交易数", "本次已发送", "本次未发送", "不回放", "近期无交易", "待分析", "覆盖率"};
+        Row groupHeader = sheet.createRow(summaryRow++);
+        for (int i = 0; i < groupHeaders.length; i++) cell(groupHeader, i, groupHeaders[i], styles.detailHeader);
+        int[] groupTotalCounts = new int[6];
+        for (Map.Entry<String, int[]> entry : groupCounts.entrySet()) {
+            int[] counts = entry.getValue();
+            for (int i = 0; i < counts.length; i++) groupTotalCounts[i] += counts[i];
+            Row row = sheet.createRow(summaryRow++);
+            cell(row, 0, entry.getKey(), styles.rowStyle(summaryRow)); numericCell(row, 1, counts[0], styles.rowStyle(summaryRow));
+            numericCell(row, 2, counts[1], styles.rowStyle(summaryRow)); numericCell(row, 3, counts[0] - counts[1], styles.rowStyle(summaryRow));
+            numericCell(row, 4, counts[2], styles.rowStyle(summaryRow));
+            numericCell(row, 5, counts[3], styles.rowStyle(summaryRow)); numericCell(row, 6, counts[4], styles.rowStyle(summaryRow)); percentCell(row, 7, rate(counts[1], counts[0]), styles.percentStyle(summaryRow));
+        }
+        Row groupTotalRow = sheet.createRow(summaryRow++);
+        CellStyle groupTotalStyle = styles.summaryTotalStyle(true);
+        cell(groupTotalRow, 0, "合计", groupTotalStyle);
+        numericCell(groupTotalRow, 1, groupTotalCounts[0], groupTotalStyle);
+        numericCell(groupTotalRow, 2, groupTotalCounts[1], groupTotalStyle);
+        numericCell(groupTotalRow, 3, groupTotalCounts[0] - groupTotalCounts[1], groupTotalStyle);
+        numericCell(groupTotalRow, 4, groupTotalCounts[2], groupTotalStyle);
+        numericCell(groupTotalRow, 5, groupTotalCounts[3], groupTotalStyle);
+        numericCell(groupTotalRow, 6, groupTotalCounts[4], groupTotalStyle);
+        percentCell(groupTotalRow, 7, rate(groupTotalCounts[1], groupTotalCounts[0]), styles.summaryTotalPercentStyle(true));
+        int headerRow = summaryRow + 1;
+        Row title = sheet.createRow(headerRow - 1); cell(title, 0, "交易码明细", styles.detailHeader);
+        Row header = sheet.createRow(headerRow); header.setHeightInPoints(24f);
+        for (int i = 0; i < headers.length; i++) cell(header, i, headers[i], styles.detailHeader);
+        int rowIndex = headerRow + 1;
+        for (ReplayCoverageRow row : rows) {
+            Row excelRow = sheet.createRow(rowIndex++);
+            CellStyle style = styles.rowStyle(rowIndex - 1);
+            cell(excelRow, 0, row.tranCode(), style); cell(excelRow, 1, row.tranName(), style); cell(excelRow, 2, row.businessDomain(), style);
+            cell(excelRow, 3, row.newServiceSceneCode(), style); cell(excelRow, 4, row.resolvedServiceCodes(), style);
+            cell(excelRow, 5, row.replayRequired(), style); cell(excelRow, 6, row.latestTransactionDate(), style);
+            numericCell(excelRow, 7, row.sentTransactionCount(), style); cell(excelRow, 8, row.coverageStatus(), style);
+            cell(excelRow, 9, row.unsentReason(), style); cell(excelRow, 10, row.owner(), style); cell(excelRow, 11, row.internalOwner(), style);
+        }
+        sheet.setAutoFilter(new CellRangeAddress(headerRow, headerRow, 0, headers.length - 1));
+        sheet.createFreezePane(0, headerRow + 1);
+        for (int i = 0; i < headers.length; i++) sheet.setColumnWidth(i, i == 1 || i == 4 || i == 9 ? 5200 : 3600);
+    }
+
+    private static void accumulateCounts(int[] counts, ReplayCoverageRow row) {
+        counts[0]++;
+        if (row.sentTransactionCount() > 0) counts[1]++;
+        else if ("不回放".equals(row.unsentReason())) counts[2]++;
+        else if ("近期无交易".equals(row.unsentReason())) counts[3]++;
+        else if ("待分析".equals(row.unsentReason())) counts[4]++;
+    }
+
+    private static String groupOf(String businessDomain) {
+        if (businessDomain == null) return "";
+        return businessDomain.startsWith("沙箱-") ? businessDomain.substring("沙箱-".length()) : businessDomain;
     }
 
     private void writeInterfaceSummaryTotalRow(Row excelRow, List<InterfaceSummaryRow> rows, Styles styles) {
@@ -871,6 +981,12 @@ public class ReportExportExcelService {
             BigDecimal average528TakeTime,
             BigDecimal averageCcbsTakeTime
     ) {
+    }
+
+    private record ReplayCoverageRow(String batchId, String tranCode, String tranName, String businessDomain,
+                                     String newServiceSceneCode, String resolvedServiceCodes, String replayRequired,
+                                     String latestTransactionDate, long sentTransactionCount, String coverageStatus,
+                                     String unsentReason, String owner, String internalOwner) {
     }
 
     private record IssueSnapshot(

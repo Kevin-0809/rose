@@ -56,6 +56,7 @@ public class ReportExportBatchRunner {
     private final TransactionTemplate transactionTemplate;
     private final Executor transactionDetailExecutor;
     private final DiffIssueLedgerService issueLedgerService;
+    private final ReplayCoverageService replayCoverageService;
 
     public ReportExportBatchRunner(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
         this(jdbc, transactionManager, Runnable::run);
@@ -69,6 +70,7 @@ public class ReportExportBatchRunner {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionDetailExecutor = transactionDetailExecutor;
         this.issueLedgerService = new DiffIssueLedgerService(jdbc);
+        this.replayCoverageService = new ReplayCoverageService(jdbc);
     }
 
     public void run(String batchId, String reportDate, LocalDateTime exportTime) {
@@ -103,6 +105,7 @@ public class ReportExportBatchRunner {
                 log.info("报表明细汇总生成开始，batchId={}", batchId);
                 insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
                 insertInterfaceSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
+                replayCoverageService.materialize(batchId, reportDate);
                 log.info("报表明细汇总生成完成，batchId={}", batchId);
             });
             transactionTemplate.executeWithoutResult(status -> {

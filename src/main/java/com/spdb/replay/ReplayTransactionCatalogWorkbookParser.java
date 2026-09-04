@@ -70,14 +70,14 @@ public class ReplayTransactionCatalogWorkbookParser {
             if (row == null || empty(row)) continue;
             try {
                 String first = text(row, 0, rowIndex + 1);
-                String suffix = text(row, 1, rowIndex + 1);
                 if (!StringUtils.hasText(first)) throw new IllegalArgumentException("A列交易码不能为空");
-                String code = first + (StringUtils.hasText(suffix) ? "-" + suffix : "");
+                String code = first;
                 if (!seen.add(code)) throw new IllegalArgumentException("重复交易码: " + code);
                 String batch = text(row, 4, rowIndex + 1);
                 if (StringUtils.hasText(batch)) {
-                    if (batch.length() < 2 || !(batch.startsWith("查询") || batch.startsWith("动账"))) throw new IllegalArgumentException("批次只允许查询或动账");
-                    batch = batch.substring(0, 2);
+                    if (batch.contains("动账")) batch = "动账";
+                    else if (batch.contains("查询")) batch = "查询";
+                    else throw new IllegalArgumentException("批次必须包含查询或动账");
                 }
                 String replay = text(row, 7, rowIndex + 1);
                 String date = dateText(row, 10, rowIndex + 1);

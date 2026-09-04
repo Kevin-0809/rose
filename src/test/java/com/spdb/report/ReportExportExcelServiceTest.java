@@ -171,6 +171,55 @@ class ReportExportExcelServiceTest {
     }
 
     @Test
+    void dailyExportAddsReplayCoverageSheetWhenCoverageRowsExist() throws Exception {
+        jdbc.execute("create table ana_report_export_replay_coverage(batch_id varchar(64), report_date varchar(8), tran_code varchar(200), tran_name varchar(200), business_domain varchar(200), new_service_scene_code varchar(200), resolved_service_codes varchar(1000), replay_required varchar(200), latest_transaction_date varchar(200), sent_transaction_count bigint, coverage_status varchar(32), unsent_reason varchar(200), owner varchar(100), internal_owner varchar(100))");
+        jdbc.update("insert into ana_report_export_replay_coverage values ('RPT-COVER','20260831','T001','交易一','支付','S001','S001','是','20260830',3,'已发送',null,'开发甲','行内甲')");
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        service.stream("RPT-COVER", output);
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
+            Sheet coverage = workbook.getSheet("回放交易覆盖情况");
+            assertThat(coverage).isNotNull();
+            assertThat(coverage.getRow(1).getCell(0).getStringCellValue()).isEqualTo("业务领域");
+            assertThat(coverage.getRow(2).getCell(0).getStringCellValue()).isEqualTo("支付");
+            assertThat(coverage.getRow(3).getCell(0).getStringCellValue()).isEqualTo("合计");
+            assertThat(coverage.getRow(4).getCell(0).getStringCellValue()).isEqualTo("按大组汇总");
+            assertThat(coverage.getRow(5).getCell(0).getStringCellValue()).isEqualTo("大组");
+            assertThat(coverage.getRow(6).getCell(0).getStringCellValue()).isEqualTo("支付");
+            assertThat(coverage.getRow(7).getCell(0).getStringCellValue()).isEqualTo("合计");
+            assertThat(coverage.getRow(8).getCell(0).getStringCellValue()).isEqualTo("交易码明细");
+            assertThat(coverage.getRow(9).getCell(0).getStringCellValue()).isEqualTo("交易码");
+            assertThat(coverage.getRow(10).getCell(0).getStringCellValue()).isEqualTo("T001");
+        }
+    }
+
+    @Test
+    void dailyExportSummarizesSandboxDomainsUnderBaseGroup() throws Exception {
+        jdbc.execute("create table ana_report_export_replay_coverage(batch_id varchar(64), report_date varchar(8), tran_code varchar(200), tran_name varchar(200), business_domain varchar(200), new_service_scene_code varchar(200), resolved_service_codes varchar(1000), replay_required varchar(200), latest_transaction_date varchar(200), sent_transaction_count bigint, coverage_status varchar(32), unsent_reason varchar(200), owner varchar(100), internal_owner varchar(100))");
+        jdbc.update("insert into ana_report_export_replay_coverage values ('RPT-GROUP','20260831','T001','沙箱公共','沙箱-公共组','S001','S001','是','20260830',2,'已发送',null,'开发甲','行内甲')");
+        jdbc.update("insert into ana_report_export_replay_coverage values ('RPT-GROUP','20260831','T002','公共组类','公共组','S002','S002','是','20260701',0,'未发送','待分析','开发乙','行内乙')");
+        jdbc.update("insert into ana_report_export_replay_coverage values ('RPT-GROUP','20260831','T003','存款类','存款组','S003','S003','是','20260830',1,'已发送',null,'开发丙','行内丙')");
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        service.stream("RPT-GROUP", output);
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
+            Sheet coverage = workbook.getSheet("回放交易覆盖情况");
+            assertThat(coverage.getRow(8).getCell(0).getStringCellValue()).isEqualTo("公共组");
+            assertNumericCell(coverage.getRow(8), 1, 2L);
+            assertNumericCell(coverage.getRow(8), 2, 1L);
+            assertNumericCell(coverage.getRow(8), 3, 1L);
+            assertNumericCell(coverage.getRow(8), 6, 1L);
+            assertPercentCell(coverage.getRow(8), 7, 0.5d);
+            assertThat(coverage.getRow(9).getCell(0).getStringCellValue()).isEqualTo("存款组");
+            assertNumericCell(coverage.getRow(9), 1, 1L);
+            assertNumericCell(coverage.getRow(9), 2, 1L);
+        }
+    }
+
+
+    @Test
     void rawDailyExportShowsFieldValuesInExistingDescriptionColumnWithoutAddingColumns() throws Exception {
         jdbc.update("""
                 insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,

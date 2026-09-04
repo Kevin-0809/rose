@@ -27,7 +27,7 @@ class ReplayTransactionCatalogWorkbookParserTest {
             List<ReplayTransactionCatalogForm> parsed = new ReplayTransactionCatalogWorkbookParser().parse(workbook);
 
             assertThat(parsed).extracting(ReplayTransactionCatalogForm::tranCode)
-                    .containsExactly("ABC-01", "XYZ");
+                    .containsExactly("ABC", "XYZ");
             assertThat(parsed.get(0).batchType()).isEqualTo("查询");
             assertThat(parsed.get(1).batchType()).isEqualTo("动账");
             assertThat(parsed.get(0).latestTransactionDate()).isEqualTo("20260826");
@@ -69,6 +69,20 @@ class ReplayTransactionCatalogWorkbookParserTest {
             values(duplicate, "ABC", "", "n2", "d", "查询", "", "", "否", "", "", "20260826");
             assertThatThrownBy(() -> new ReplayTransactionCatalogWorkbookParser().parse(workbook))
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("重复");
+        }
+    }
+
+    @Test
+    void classifiesBatchByContainedKeyword() throws Exception {
+        try (var workbook = workbook()) {
+            var row = workbook.getSheetAt(0).createRow(1);
+            values(row, "T001", "", "n", "d", "批次-动账-2026", "", "", "是", "", "", "");
+            var second = workbook.getSheetAt(0).createRow(2);
+            values(second, "T002", "", "n", "d", "2026-查询批次", "", "", "是", "", "", "");
+
+            assertThat(new ReplayTransactionCatalogWorkbookParser().parse(workbook))
+                    .extracting(ReplayTransactionCatalogForm::batchType)
+                    .containsExactly("动账", "查询");
         }
     }
 
