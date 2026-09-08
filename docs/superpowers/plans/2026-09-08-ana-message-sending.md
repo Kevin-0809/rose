@@ -16,7 +16,7 @@
 
 - [ ] Add `ana_msg_flow_log_request` with original request columns, send status fields, primary key `(source_ip, trans_id)`, and status/time indexes.
 - [ ] Add `ana_msg_flow_log_response` with request key, raw binary response, parsed `return_code/return_msg`, HTTP metadata, and `(trans_id,response_time desc)` index.
-- [ ] Seed `system_config` keys `micServId=10530013` and `authContent=` with conflict-safe inserts.
+- [ ] Seed `system_config` key `micServId=10530013` with a conflict-safe insert; authentication keys come from `tss_service_auth` by `protocol_id`.
 - [ ] Add an integration DDL assertion test for table names, columns, and indexes.
 
 ### Task 2: Response parsing and HTTP sender
@@ -31,7 +31,7 @@
 
 **Files:** Create `src/main/java/com/spdb/message/AnaMessageSendService.java`, `AnaMessageSendCommand.java`, `AnaMessageSendProgress.java`; tests under `src/test/java/com/spdb/message/`.
 
-- [ ] Load `micServId` and `authContent` from `system_config`, treating missing `authContent` as empty string.
+- [ ] Load `micServId` from `system_config`; map `message_type` to protocol type (`bzjson`→`json`, `soap`→`xml`, `sop`→`sop`, `sop2cbsp`→`spec`), prefix with environment to form the `tss_service_auth` `protocol_id`, and compute `authContent` per send via `AuthUtil.packToken`.
 - [ ] Claim rows with an atomic status update, resolve `protocol_id` as `528_`/`ccbs_` plus normalized message type, query `tss_service_control`, split and randomly select nonblank address.
 - [ ] Execute with bounded executor, honor requested concurrency/batch/retry values, stop new claims on cancellation, and conditionally update status to prevent duplicate processing.
 - [ ] Persist parsed response rows and update request send fields for success/failure, HTTP status, elapsed time, attempts, and truncated error.

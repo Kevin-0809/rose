@@ -13,4 +13,3 @@ create table if not exists ana_msg_flow_log_response (
 );
 create index if not exists idx_ana_msg_resp_trans on ana_msg_flow_log_response(trans_id, response_time desc);
 insert into system_config(config_key, config_value, description) values ('micServId','10530013','HTTP micServId') on conflict (config_key) do update set config_value=excluded.config_value;
-insert into system_config(config_key, config_value, description) values ('authContent','','HTTP authContent') on conflict (config_key) do nothing;
