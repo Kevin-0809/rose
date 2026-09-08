@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AnaMessageSendService {
 
     private static final Logger log = LoggerFactory.getLogger(AnaMessageSendService.class);
-    private static final int FLUSH_SIZE = 500;
     private static final int QUEUE_CAPACITY = 10_000;
     private static final int FETCH_SIZE = 1_000;
     private static final long RESET_RANGE_MILLIS = 3600_000L;
@@ -41,8 +40,6 @@ public class AnaMessageSendService {
     private final Map<String, String> configCache = new ConcurrentHashMap<>();
     private final Map<String, List<String>> addressCache = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Object>> authCache = new ConcurrentHashMap<>();
-    private final List<Map<String, Object>> respBuffer = new ArrayList<>();
-    private final List<Map<String, Object>> statusBuffer = new ArrayList<>();
     private volatile boolean running;
 
     public AnaMessageSendService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager txManager) {
@@ -82,7 +79,12 @@ public class AnaMessageSendService {
                     while (true) {
                         Map<String, Object> row = queue.take();
                         if (row == poison) break;
-                        sendOne(row, target, retries, timeout);
+                        try {
+                            sendOne(row, target, retries, timeout);
+                        } catch (Exception e) {
+                            log.error("报文发送处理异常: ip={}, transId={}, error={}",
+                                    row.get("source_ip"), row.get("trans_id"), String.valueOf(e));
+                        }
                         consumed.incrementAndGet();
                     }
                 } catch (InterruptedException e) {
@@ -121,7 +123,6 @@ public class AnaMessageSendService {
             log.error("报文发送异常终止: target={}", target, e);
         } finally {
             pool.shutdownNow();
-            flush();
             running = false;
         }
     }
@@ -280,34 +281,38 @@ public class AnaMessageSendService {
             var response = sender.send(address, type, (byte[]) r.get("request_message"), mic, auth, timeout);
             String code = parser.parseReturnCode(type, response.body());
 
-            Map<String, Object> resp = new HashMap<>();
-            resp.put("ip", ip);
-            resp.put("id", id);
-            resp.put("t", System.currentTimeMillis());
-            resp.put("txn", r.get("txn_code"));
-            resp.put("type", type);
-            resp.put("body", response.body());
-            resp.put("code", code);
-            resp.put("status", response.statusCode());
-            resp.put("addr", address);
-            Map<String, Object> stat = new HashMap<>();
-            stat.put("ip", ip);
-            stat.put("id", id);
-            stat.put("s", response.statusCode() / 100 == 2 ? "SUCCESS" : "FAILED");
-            stat.put("h", response.statusCode());
-            stat.put("e", null);
-            buffer(resp, stat);
+            jdbc.update("insert into ana_msg_flow_log_response(source_ip, trans_id, response_time, " +
+                            "txn_code, message_type, response_message, return_code, http_status, service_address) " +
+                            "values(:ip, :id, :t, :txn, :type, :body, :code, :status, :addr)",
+                    new MapSqlParameterSource()
+                            .addValue("ip", ip)
+                            .addValue("id", id)
+                            .addValue("t", System.currentTimeMillis())
+                            .addValue("txn", r.get("txn_code"))
+                            .addValue("type", type)
+                            .addValue("body", response.body())
+                            .addValue("code", code)
+                            .addValue("status", response.statusCode())
+                            .addValue("addr", address));
+            jdbc.update("update ana_msg_flow_log_request set send_status=:s, send_time=current_timestamp, " +
+                            "send_http_status=:h, send_error=null, send_attempts=send_attempts+1 " +
+                            "where source_ip=:ip and trans_id=:id",
+                    new MapSqlParameterSource()
+                            .addValue("s", response.statusCode() / 100 == 2 ? "SUCCESS" : "FAILED")
+                            .addValue("h", response.statusCode())
+                            .addValue("ip", ip)
+                            .addValue("id", id));
             log.debug("报文发送成功: target={}, ip={}, transId={}, type={}, address={}, httpStatus={}, returnCode={}, 耗时={}ms",
                     target, ip, id, type, address, response.statusCode(), code, System.currentTimeMillis() - begin);
         } catch (Exception e) {
             String msg = String.valueOf(e.getMessage());
-            Map<String, Object> stat = new HashMap<>();
-            stat.put("ip", ip);
-            stat.put("id", id);
-            stat.put("s", "FAILED");
-            stat.put("h", null);
-            stat.put("e", msg.substring(0, Math.min(1000, msg.length())));
-            buffer(null, stat);
+            jdbc.update("update ana_msg_flow_log_request set send_status='FAILED', send_time=current_timestamp, " +
+                            "send_http_status=null, send_error=:e, send_attempts=send_attempts+1 " +
+                            "where source_ip=:ip and trans_id=:id",
+                    new MapSqlParameterSource()
+                            .addValue("e", msg.substring(0, Math.min(1000, msg.length())))
+                            .addValue("ip", ip)
+                            .addValue("id", id));
             log.warn("报文发送失败: target={}, ip={}, transId={}, type={}, 耗时={}ms, error={}",
                     target, ip, id, type, System.currentTimeMillis() - begin, msg);
         } finally {
@@ -364,43 +369,5 @@ public class AnaMessageSendService {
                     new MapSqlParameterSource("k", key), (rs, n) -> rs.getString(1));
             return v.isEmpty() ? d : v.get(0);
         });
-    }
-
-    private synchronized void buffer(Map<String, Object> resp, Map<String, Object> stat) {
-        if (resp != null) respBuffer.add(resp);
-        statusBuffer.add(stat);
-        if (statusBuffer.size() >= FLUSH_SIZE) flush();
-    }
-
-    private synchronized void flush() {
-        if (statusBuffer.isEmpty()) return;
-        List<Map<String, Object>> respRows = new ArrayList<>(respBuffer);
-        List<Map<String, Object>> statRows = new ArrayList<>(statusBuffer);
-        respBuffer.clear();
-        statusBuffer.clear();
-        for (int attempt = 1; attempt <= 2; attempt++) {
-            try {
-                tx.executeWithoutResult(status -> {
-                    if (!respRows.isEmpty()) {
-                        jdbc.batchUpdate("insert into ana_msg_flow_log_response(source_ip, trans_id, response_time, " +
-                                        "txn_code, message_type, response_message, return_code, http_status, service_address) " +
-                                        "values(:ip, :id, :t, :txn, :type, :body, :code, :status, :addr)",
-                                respRows.toArray(new Map[0]));
-                    }
-                    jdbc.batchUpdate("update ana_msg_flow_log_request set send_status=:s, send_time=current_timestamp, " +
-                                    "send_http_status=:h, send_error=:e, send_attempts=send_attempts+1 " +
-                                    "where source_ip=:ip and trans_id=:id",
-                            statRows.toArray(new Map[0]));
-                });
-                return;
-            } catch (Exception e) {
-                if (attempt == 2) {
-                    log.error("报文发送批量落库失败: 响应 {} 条, 状态 {} 条, 对应记录保持原状态可在下轮重发",
-                            respRows.size(), statRows.size(), e);
-                } else {
-                    log.warn("报文发送批量落库失败, 重试一次: {}", String.valueOf(e.getMessage()));
-                }
-            }
-        }
     }
 }
