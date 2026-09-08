@@ -16,15 +16,15 @@
 
 ## 发送流程
 
-用户在发送页面选择目标系统（528 或 CCBS）、并发度、批量大小和重试次数后启动任务。任务以条件更新方式领取 PENDING/FAILED 记录，将状态改为 SENDING；worker 根据目标系统与 `message_type` 组成 `protocol_id`（`528_` 或 `ccbs_` 加下划线加类型），查询 `tss_service_control` 的 `service_address`，对逗号分隔地址随机选择一个。
+用户在发送页面选择目标系统（528 或 CCBS）、并发度、区间分钟数（时间分片粒度，默认 60 分钟）、最大重试次数和超时秒数后启动任务。发送采用时间分片驱动模型：启动时读取待发送记录（`send_status in ('PENDING','FAILED')` 且 `send_attempts <= retries`）的最小和最大 `txn_time` 作为快照边界，从最小值开始每次按区间时长（`[cursor, cursor+rangeMillis)`，按 `txn_time` 正序）推进。区间数据通过流式游标逐行写入固定容量（1 万条）的有界内存队列：队列满时读取阻塞暂停，消费者腾出空间后自动补充，因此内存占用以队列容量为上限，不会随区间大小膨胀。固定大小线程池从队列消费并发送：并发度为 1 时单线程按队列 FIFO 严格按 `txn_time` 顺序串行消费；多线程消费不保证完成顺序。读完全部区间后投放毒丸使消费者退出。任务期间新写入的记录（`txn_time` 大于快照最大值）留待下一轮。读取不置 SENDING，状态仅作为结果标记；启动时将遗留 SENDING 记录恢复为 PENDING。读取条件包含 `send_attempts <= retries`，重发受重试上限约束，发送结果回写时 `send_attempts` 自增。停止操作不再读取后续区间，队列剩余记录继续消费完。worker 根据目标系统与 `message_type` 组成 `protocol_id`（`528_` 或 `ccbs_` 加下划线加类型），查询 `tss_service_control` 的 `service_address`，对逗号分隔地址随机选择一个。
 
-HTTP body 直接使用数据库中的原始二进制 `request_message`。Header 为 `micServId` 和 `authContent`；`micServId` 从 `system_config` 读取，`authContent` 每次发送前实时计算：将 `message_type` 映射为标准协议类型（`bzjson`→`json`、`soap`→`xml`、`sop`→`sop`、`sop2cbsp`→`spec`），加环境前缀组成 `protocol_id`（如 `528_json`）后查询 `tss_service_auth` 获取 `sid`、`gk`、`wk`、`pk`，调用 `AuthUtil.packToken` 生成一次性 token（密钥缺失或解链失败按 FAILED 回写错误信息）。按报文类型设置 JSON/XML 内容类型，未知类型使用 `application/octet-stream`。请求和响应均以原始二进制保存；页面展示时，`sop` 与 `sop2cbsp` 使用 HEX 字符串，`json` 与 `bzjson` 使用 JSON，`soap` 使用 XML。
+HTTP body 直接使用数据库中的原始二进制 `request_message`。Header 为 `micServId` 和 `authContent`；`micServId`、服务地址与认证密钥按任务生命周期缓存（每轮 start 重新加载，负面结果不缓存），token 每次发送前实时计算：将 `message_type` 映射为标准协议类型（`bzjson`→`json`、`soap`→`xml`、`sop`→`sop`、`sop2cbsp`→`spec`），加环境前缀组成 `protocol_id`（如 `528_json`）后取密钥，调用 `AuthUtil.packToken` 生成一次性 token（密钥缺失或解链失败按 FAILED 回写错误信息）。按报文类型设置 JSON/XML 内容类型，未知类型使用 `application/octet-stream`。请求和响应均以原始二进制保存；页面展示时，`sop` 与 `sop2cbsp` 使用 HEX 字符串，`json` 与 `bzjson` 使用 JSON，`soap` 使用 XML。
 
-2xx 标记 SUCCESS；非 2xx、无服务地址、配置缺失、超时或网络异常标记 FAILED，保存 HTTP 状态和截断后的错误信息。超过重试次数不再领取。停止操作阻止继续领取新任务，已发送请求允许自然结束。
+2xx 标记 SUCCESS；非 2xx、无服务地址、配置缺失、超时或网络异常标记 FAILED，保存 HTTP 状态和截断后的错误信息。结果落库采用批量缓冲：响应插入与状态回写各攒 500 条后在同一事务中 batchUpdate 提交，落库失败重试一次，最终丢失的记录保持原状态可在下轮重发。超过重试次数不再读取。停止操作阻止读取后续区间，队列剩余记录自然消费完。
 
 ## 页面与接口
 
-新增发送页面和控制器，提供目标系统下拉框、并发度、批量大小、最大重试次数、启动/停止操作，以及 PENDING/SENDING/SUCCESS/FAILED 统计和最近失败记录。后台任务使用现有 Spring 异步/线程池风格，单并发和多并发共享同一发送逻辑。
+新增发送页面和控制器，提供目标系统下拉框、并发度、批量大小、最大重试次数、启动/停止操作，以及 PENDING/SENDING/SUCCESS/FAILED 统计和最近失败记录。启动请求同步执行：按批次领取记录，批内使用固定线程池并发发送，`invokeAll` 等待本批全部完成后再领取下一批，直到无可领取记录或手动停止后才返回页面；停止操作阻止领取下一批，本批内已提交的发送自然完成。
 
 ## 测试
 
