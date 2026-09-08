@@ -86,8 +86,16 @@ public class MigrationController {
         return "migration/tran-code-commands";
     }
 
+    public String createTranCodeCommand(MigrationTranCodeCommandForm form, Model model) {
+        return createTranCodeCommand(form, form.nearbyCollection(), form.baseDate(), model);
+    }
+
     @PostMapping("/migration/tran-code-commands")
-    public String createTranCodeCommand(@ModelAttribute MigrationTranCodeCommandForm form, Model model) {
+    public String createTranCodeCommand(@ModelAttribute MigrationTranCodeCommandForm form,
+                                        @RequestParam(defaultValue = "false") boolean nearbyCollection,
+                                        @RequestParam(required = false) java.time.LocalDate baseDate, Model model) {
+        form.setNearbyCollection(nearbyCollection);
+        form.setBaseDate(baseDate);
         try {
             long createdId = migrationCommandService.createTranCodeCommand(form);
             return "redirect:/migration/commands/" + createdId;

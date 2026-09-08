@@ -1,6 +1,7 @@
 package com.spdb.migration;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 public record MigrationCommandRow(
         long commandId,
@@ -28,7 +29,9 @@ public record MigrationCommandRow(
         String tranCodes,
         Integer sampleSize,
         String remark,
-        Integer lookbackDays
+        Integer lookbackDays,
+        Boolean nearbyCollection,
+        LocalDate baseDate
 ) {
     public MigrationCommandRow(
             long commandId,
@@ -58,7 +61,7 @@ public record MigrationCommandRow(
         this(commandId, sourceDataSource, targetDataSource, commandType, status, timeFrom, timeTo, windowSeconds,
                 parallelism, totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows,
                 droppedRows, durationText, createdTime, startedTime, endedTime, errorMessage, requestSql, responseSql,
-                null, null, remark, null);
+                null, null, remark, null, false, null);
     }
 
     public MigrationCommandRow(
@@ -72,7 +75,7 @@ public record MigrationCommandRow(
         this(commandId, sourceDataSource, targetDataSource, commandType, status, timeFrom, timeTo, windowSeconds,
                 parallelism, totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows,
                 droppedRows, durationText, createdTime, startedTime, endedTime, errorMessage, requestSql, responseSql,
-                tranCodes, sampleSize, remark, null);
+                tranCodes, sampleSize, remark, null, false, null);
     }
 
     public int completionPercent() {

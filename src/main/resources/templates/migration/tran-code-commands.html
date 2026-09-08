@@ -44,6 +44,20 @@
           <label>回溯自然日数</label>
           <input name="lookbackDays" type="number" th:value="*{lookbackDays}" min="1" required>
         </div>
+        <div class="span-2 migration-nearby-field">
+          <label for="nearbyCollection">采集策略</label>
+          <div class="migration-nearby-controls">
+            <label class="switch-control">
+              <input id="nearbyCollection" name="nearbyCollection" type="checkbox" th:checked="*{nearbyCollection}">
+              <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+              <span>就近原则采集</span>
+            </label>
+            <div class="migration-base-date">
+              <label for="baseDate">铺底日期</label>
+              <input id="baseDate" name="baseDate" type="date" th:value="*{baseDate}">
+            </div>
+          </div>
+        </div>
         <div>
           <label>并行度</label>
           <input name="parallelism" type="number" th:value="*{parallelism}" min="1" max="16" required>
@@ -53,7 +67,7 @@
           <input name="remark" th:value="*{remark}" placeholder="可选，记录本次迁移用途">
         </div>
         <div class="span-2">
-          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 个完整请求/响应交易对；从当天起向前查找指定自然日数，无数据的交易码自动忽略。</p>
+          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 个完整请求/响应交易对；开启“就近原则采集”后，从铺底日期向当前日查找，再向铺底日前查找。</p>
         </div>
         <div class="span-2 actions">
           <button class="btn primary" type="submit">创建交易码迁移</button>

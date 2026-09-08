@@ -48,6 +48,7 @@ public class ReplayVolumeCheckController {
         model.addAttribute("history", history);
         model.addAttribute("currentBatch", current);
         model.addAttribute("sampleSize", current == null ? 100 : current.sampleSize());
+        model.addAttribute("lookbackDays", current == null ? 30 : current.lookbackDays());
         if (current != null) {
             model.addAttribute("noVolumeDetails", service.details(current.checkId(), com.spdb.replay.ReplayVolumeCheckDetailStatus.NO_VOLUME, PageRequestParams.of(noVolumePage, noVolumeSize == null ? size : noVolumeSize)));
             model.addAttribute("noMappingDetails", service.details(current.checkId(), com.spdb.replay.ReplayVolumeCheckDetailStatus.NO_MAPPING, PageRequestParams.of(noMappingPage, noMappingSize == null ? size : noMappingSize)));
@@ -57,14 +58,30 @@ public class ReplayVolumeCheckController {
         return "config/replay-volume-check";
     }
 
-    @PostMapping("/config/replay-volume-check")
-    public String start(@RequestParam(required = false, defaultValue = "100") int sampleSize, Model model) {
+    public String start(int sampleSize, Model model) {
         try {
             ReplayVolumeCheckResult result = service.check(sampleSize);
             return "redirect:/config/replay-volume-check/" + result.batch().checkId();
         } catch (IllegalArgumentException ex) {
             model.addAttribute("active", "replay-volume-check");
             model.addAttribute("sampleSize", sampleSize);
+            model.addAttribute("lookbackDays", 30);
+            model.addAttribute("error", ex.getMessage());
+            model.addAttribute("history", PagedResult.of(List.of(), 0, PageRequestParams.of(null, null)));
+            return "config/replay-volume-check";
+        }
+    }
+
+    @PostMapping("/config/replay-volume-check")
+    public String start(@RequestParam(required = false, defaultValue = "100") int sampleSize,
+                        @RequestParam(required = false, defaultValue = "30") int lookbackDays, Model model) {
+        try {
+            ReplayVolumeCheckResult result = service.check(sampleSize, lookbackDays);
+            return "redirect:/config/replay-volume-check/" + result.batch().checkId();
+        } catch (IllegalArgumentException ex) {
+            model.addAttribute("active", "replay-volume-check");
+            model.addAttribute("sampleSize", sampleSize);
+            model.addAttribute("lookbackDays", lookbackDays);
             model.addAttribute("error", ex.getMessage());
             model.addAttribute("history", PagedResult.of(List.of(), 0, PageRequestParams.of(null, null)));
             return "config/replay-volume-check";

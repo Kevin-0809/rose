@@ -108,15 +108,19 @@ public class MigrationCommandService {
         List<String> tranCodes = validateTranCode(form);
         Long createdCommandId = transactionTemplate.execute(status -> {
             KeyHolder keyHolder = new GeneratedKeyHolder();
-            jdbc.update("""
+            String sql = hasNearbyCollectionColumns() ? """
                     insert into ana_migration_command (
                         source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
-                        status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by
+                        status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, remark, created_by
                     ) values (
                         :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
-                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :remark, '绯荤粺'
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :remark, '绯荤粺'
                     )
-                    """, tranCodeParams(form, tranCodes), keyHolder, new String[]{"command_id"});
+                    """ : """
+                    insert into ana_migration_command (source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism, status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by)
+                    values (:sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism, 'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :remark, '系统')
+                    """;
+            jdbc.update(sql, tranCodeParams(form, tranCodes), keyHolder, new String[]{"command_id"});
             long commandId = generatedLongKey(keyHolder, "command_id");
             insertTranCodeShards(commandId, tranCodes);
             return commandId;
@@ -127,6 +131,11 @@ public class MigrationCommandService {
         long commandId = createdCommandId;
         launch(commandId);
         return commandId;
+    }
+
+    private boolean hasNearbyCollectionColumns() {
+        Integer count = jdbc.getJdbcTemplate().queryForObject("select count(*) from information_schema.columns where upper(table_name) = 'ANA_MIGRATION_COMMAND' and upper(column_name) = 'NEARBY_COLLECTION'", Integer.class);
+        return count != null && count > 0;
     }
 
     public PagedResult<MigrationCommandRow> search(PageRequestParams page) {
@@ -441,6 +450,9 @@ public class MigrationCommandService {
         if (form.lookbackDays() <= 0) {
             throw new IllegalArgumentException("Lookback days must be greater than 0");
         }
+        if (form.nearbyCollection() && form.baseDate() == null) {
+            throw new IllegalArgumentException("启用就近原则采集时必须填写铺底日期");
+        }
         if (form.parallelism() <= 0) {
             throw new IllegalArgumentException("Parallelism must be greater than 0");
         }
@@ -516,6 +528,8 @@ public class MigrationCommandService {
                 .addValue("tranCodes", String.join(",", tranCodes))
                 .addValue("sampleSize", form.sampleSize())
                 .addValue("lookbackDays", form.lookbackDays())
+                .addValue("nearbyCollection", form.nearbyCollection())
+                .addValue("baseDate", form.baseDate())
                 .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
     }
 
@@ -625,8 +639,18 @@ public class MigrationCommandService {
                 rs.getString("tran_codes"),
                 rs.getObject("sample_size", Integer.class),
                 rs.getString("remark"),
-                rs.getObject("lookback_days", Integer.class)
+                rs.getObject("lookback_days", Integer.class),
+                optionalBoolean(rs, "nearby_collection"),
+                optionalDate(rs, "base_date")
         );
+    }
+
+    private Boolean optionalBoolean(ResultSet rs, String column) {
+        try { return rs.getObject(column, Boolean.class); } catch (SQLException ex) { return false; }
+    }
+
+    private java.time.LocalDate optionalDate(ResultSet rs, String column) {
+        try { java.sql.Date value = rs.getDate(column); return value == null ? null : value.toLocalDate(); } catch (SQLException ex) { return null; }
     }
 
     private MigrationShardRow mapShard(ResultSet rs) throws SQLException {

@@ -1226,6 +1226,89 @@ tbody tr:hover {
 .span-2 { grid-column: span 2; }
 .span-4 { grid-column: span 4; }
 
+.migration-nearby-field {
+  min-width: 0;
+}
+
+.migration-nearby-controls {
+  display: grid;
+  grid-template-columns: minmax(140px, .72fr) minmax(210px, 1.28fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.switch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin: 0;
+  color: var(--text-body);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.switch-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: rgba(7, 16, 29, .8);
+  transition: background .18s ease, border-color .18s ease;
+}
+
+.switch-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform .18s ease, background .18s ease;
+}
+
+.switch-control input:checked + .switch-track {
+  border-color: var(--primary);
+  background: rgba(14, 165, 233, .28);
+}
+
+.switch-control input:checked + .switch-track .switch-thumb {
+  background: var(--primary);
+  transform: translateX(14px);
+}
+
+.switch-control input:focus-visible + .switch-track {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.migration-base-date label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.migration-base-date {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
 .message-log-list {
   display: grid;
   gap: 18px;
@@ -1584,6 +1667,8 @@ tbody tr:hover {
 .replay-check-start label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 12px; }
 .replay-check-start-row { display: flex; gap: 8px; }
 .replay-check-start-row input { min-width: 0; flex: 1; }
+.replay-check-start-row > div { min-width: 0; flex: 1; }
+.replay-check-start-row > div input { width: 100%; }
 .field-hint { display: block; margin-top: 7px; color: var(--text-muted); font-size: 12px; }
 .replay-check-card { margin-bottom: 20px; padding: 20px 22px; border: 1px solid var(--border); border-radius: 6px; background: rgba(13, 25, 43, .52); }
 .replay-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }

@@ -712,6 +712,8 @@ create table if not exists ana_migration_command (
     tran_codes text,
     sample_size integer,
     lookback_days integer,
+    nearby_collection boolean not null default false,
+    base_date date,
     error_message varchar(2000),
     remark varchar(1000),
     created_by varchar(100),
@@ -737,6 +739,8 @@ alter table ana_migration_command
 add column if not exists sample_size integer;
 alter table ana_migration_command
 add column if not exists lookback_days integer;
+alter table ana_migration_command add column if not exists nearby_collection boolean not null default false;
+alter table ana_migration_command add column if not exists base_date date;
 update ana_migration_command
 set lookback_days = 5
 where command_type = 'TRAN_CODE'

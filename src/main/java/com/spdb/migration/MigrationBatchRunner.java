@@ -105,7 +105,12 @@ public class MigrationBatchRunner {
                 int lookbackDays = command.lookbackDays() == null
                         ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS
                         : command.lookbackDays();
-                result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays);
+                if (Boolean.TRUE.equals(command.nearbyCollection())) {
+                    result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays,
+                            true, command.baseDate());
+                } else {
+                    result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays);
+                }
             } else {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             }

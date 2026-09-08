@@ -11,6 +11,12 @@ alter table tss.ana_migration_command
 alter table tss.ana_migration_command
     add column if not exists lookback_days integer;
 
+alter table tss.ana_migration_command
+    add column if not exists nearby_collection boolean not null default false;
+
+alter table tss.ana_migration_command
+    add column if not exists base_date date;
+
 update tss.ana_migration_command
 set lookback_days = 5
 where command_type = 'TRAN_CODE'
