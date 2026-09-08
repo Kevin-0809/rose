@@ -7,16 +7,16 @@ import java.util.Base64;
 public final class AuthUtil {
     private AuthUtil() { }
 
-    public static String getGK(String gk) {
-        return new String(Base64.getDecoder().decode(gk), StandardCharsets.UTF_8);
+    public static byte[] getGK(String gk) {
+        return Base64.getDecoder().decode(gk);
     }
 
-    public static String getPK(String pk, String gk) throws Exception {
+    public static String getPK(String pk, byte[] gk) throws Exception {
         return decryptByBase64AndSm4(pk, gk);
     }
 
     public static String getWK(String wk, String pk) throws Exception {
-        return decryptByBase64AndSm4(wk, pk);
+        return decryptByBase64AndSm4(wk, pk.getBytes(StandardCharsets.UTF_8));
     }
 
     public static String encryptBySm4AndBase64(String plainInfo, String encryptKey) throws Exception {
@@ -24,9 +24,9 @@ public final class AuthUtil {
         return Base64.getEncoder().encodeToString(encrypted);
     }
 
-    public static String decryptByBase64AndSm4(String cipherData, String decryptKey) throws Exception {
+    public static String decryptByBase64AndSm4(String cipherData, byte[] decryptKey) throws Exception {
         byte[] decoded = Base64.getDecoder().decode(cipherData.getBytes(StandardCharsets.UTF_8));
-        return new String(SM4Util.decrypt(decoded, decryptKey.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
+        return new String(SM4Util.decrypt(decoded, decryptKey), StandardCharsets.UTF_8);
     }
 
     public static String genToken(String sid, String pk, String wk) throws Exception {
@@ -34,8 +34,10 @@ public final class AuthUtil {
     }
 
     public static String packToken(String sid, String gk, String pk, String wk) throws Exception {
-        String tpk = getPK(pk, getGK(gk));
-        String twk = getWK(wk, tpk);
-        return genToken(sid, tpk, twk);
+        // TODO 临时返回固定 token，密钥解链问题排查清楚后恢复原逻辑
+        return "FIXED_TOKEN";
+        // String tpk = getPK(pk, getGK(gk));
+        // String twk = getWK(wk, tpk);
+        // return genToken(sid, tpk, twk);
     }
 }
