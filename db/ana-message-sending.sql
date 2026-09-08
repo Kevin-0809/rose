@@ -5,6 +5,7 @@ create table if not exists ana_msg_flow_log_request (
  send_error varchar(1000), send_attempts integer not null default 0, primary key (source_ip, trans_id)
 );
 create index if not exists idx_ana_msg_req_send on ana_msg_flow_log_request(send_status, txn_time);
+create index if not exists idx_ana_msg_req_txn_time on ana_msg_flow_log_request(txn_time);
 create table if not exists ana_msg_flow_log_response (
  source_ip varchar(64) not null, trans_id varchar(64) not null, response_time bigint not null,
  txn_code varchar(200), message_type varchar(32), response_message bytea, return_code varchar(64),
