@@ -12,8 +12,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -192,10 +195,10 @@ public class AnaMessageSendService {
     }
 
     public Map<String, Object> stats() {
-        return jdbc.queryForMap("select count(*) filter(where send_status='PENDING') pending, " +
-                "count(*) filter(where send_status='SENDING') sending, " +
-                "count(*) filter(where send_status='SUCCESS') success, " +
-                "count(*) filter(where send_status='FAILED') failed from ana_msg_flow_log_request",
+        return jdbc.queryForMap("select count(case when send_status='PENDING' then 1 end) pending, " +
+                "count(case when send_status='SENDING' then 1 end) sending, " +
+                "count(case when send_status='SUCCESS' then 1 end) success, " +
+                "count(case when send_status='FAILED' then 1 end) failed from ana_msg_flow_log_request",
                 new MapSqlParameterSource());
     }
 
@@ -280,6 +283,7 @@ public class AnaMessageSendService {
 
             var response = sender.send(address, type, (byte[]) r.get("request_message"), mic, auth, timeout);
             String code = parser.parseReturnCode(type, response.body());
+            String stored = storeResponse(target, type, response.body());
 
             jdbc.update("insert into ana_msg_flow_log_response(source_ip, trans_id, response_time, " +
                             "txn_code, message_type, response_message, return_code, http_status, service_address) " +
@@ -290,7 +294,7 @@ public class AnaMessageSendService {
                             .addValue("t", System.currentTimeMillis())
                             .addValue("txn", r.get("txn_code"))
                             .addValue("type", type)
-                            .addValue("body", response.body())
+                            .addValue("body", stored)
                             .addValue("code", code)
                             .addValue("status", response.statusCode())
                             .addValue("addr", address));
@@ -322,6 +326,15 @@ public class AnaMessageSendService {
                 log.info("报文发送进度: target={}, 当前线程累计已发送 {} 笔", target, n);
             }
         }
+    }
+
+    private String storeResponse(String target, String type, byte[] body) {
+        if (body == null) return "";
+        String t = type == null ? "" : type.trim().toLowerCase();
+        if (t.equals("sop") || t.equals("sop2cbsp")) {
+            return HexFormat.of().formatHex(body);
+        }
+        return new String(body, target.equalsIgnoreCase("528") ? Charset.forName("GBK") : StandardCharsets.UTF_8);
     }
 
     private String pickAddress(String protocol) {

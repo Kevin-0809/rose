@@ -20,11 +20,22 @@ public class ResponseMessageParser {
                 return new String(body, 90, 7, GBK).trim();
             }
             if (t.equals("json") || t.equals("bzjson")) {
-                JsonNode node = JSON.readTree(body).get("ReturnCode");
+                JsonNode root = JSON.readTree(body);
+                if (t.equals("json")) {
+                    JsonNode nested = root.path("Body").path("RspSvcHeader").path("ReturnCode");
+                    if (!nested.isMissingNode() && !nested.isNull()) return nested.asText();
+                }
+                JsonNode node = root.get("ReturnCode");
                 return node == null || node.isNull() ? "" : node.asText();
             }
             if (t.equals("soap")) {
-                var doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new ByteArrayInputStream(body));
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(true);
+                factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+                factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                factory.setExpandEntityReferences(false);
+                var doc = factory.newDocumentBuilder().parse(new ByteArrayInputStream(body));
                 NodeList nodes = doc.getElementsByTagNameNS("*", "ReturnCode");
                 if (nodes.getLength() == 0) nodes = doc.getElementsByTagName("ReturnCode");
                 return nodes.getLength() == 0 ? "" : nodes.item(0).getTextContent().trim();
