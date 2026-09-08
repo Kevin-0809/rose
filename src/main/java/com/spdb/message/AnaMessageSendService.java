@@ -31,6 +31,7 @@ public class AnaMessageSendService {
     private static final int FLUSH_SIZE = 500;
     private static final int QUEUE_CAPACITY = 10_000;
     private static final int FETCH_SIZE = 1_000;
+    private static final long RESET_RANGE_MILLIS = 3600_000L;
 
     private final NamedParameterJdbcTemplate jdbc;
     private final TransactionTemplate tx;
@@ -130,6 +131,59 @@ public class AnaMessageSendService {
             running = false;
             log.info("报文发送停止: 不再读取后续区间, 队列剩余记录继续消费完");
         }
+    }
+
+    public synchronized int reset(String scope) {
+        if (running) throw new IllegalStateException("发送任务运行中, 请先停止后再重置");
+        String statusFilter = "failed".equals(scope) ? "send_status='FAILED'" : "send_status in ('SUCCESS','FAILED')";
+        long[] range = resetRange(statusFilter);
+        if (range == null) {
+            log.info("报文重置: scope={}, 无符合条件的记录", scope);
+            return 0;
+        }
+        log.info("报文重置开始: scope={}, 区间 [{}, {}]", scope, range[0], range[1]);
+        long cursor = range[0];
+        int total = 0;
+        int batches = 0;
+        while (cursor <= range[1]) {
+            long to = cursor + RESET_RANGE_MILLIS;
+            MapSqlParameterSource params = new MapSqlParameterSource()
+                    .addValue("from", cursor)
+                    .addValue("to", to);
+            Integer updated = tx.execute(s -> {
+                jdbc.update("delete from ana_msg_flow_log_response r using ana_msg_flow_log_request q " +
+                                "where r.source_ip=q.source_ip and r.trans_id=q.trans_id " +
+                                "and q." + statusFilter + " and q.txn_time >= :from and q.txn_time < :to", params);
+                return jdbc.update("update ana_msg_flow_log_request set send_status='PENDING', send_attempts=0, " +
+                                "send_time=null, send_http_status=null, send_error=null " +
+                                "where " + statusFilter + " and txn_time >= :from and txn_time < :to", params);
+            });
+            if (updated != null) total += updated;
+            if (++batches % 100 == 0) {
+                log.info("报文重置进度: 已处理到 {}, 累计 {} 笔", to, total);
+            }
+            cursor = to;
+        }
+        log.info("报文重置完成: scope={}, 共重置 {} 笔", scope, total);
+        return total;
+    }
+
+    private long[] resetRange(String statusFilter) {
+        List<Map<String, Object>> rows = jdbc.query(
+                "select min(txn_time) as min_t, max(txn_time) as max_t from ana_msg_flow_log_request " +
+                        "where " + statusFilter + " and txn_time is not null",
+                new MapSqlParameterSource(),
+                (rs, n) -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("min_t", rs.getObject(1));
+                    m.put("max_t", rs.getObject(2));
+                    return m;
+                });
+        if (rows.isEmpty() || rows.get(0).get("min_t") == null || rows.get(0).get("max_t") == null) return null;
+        return new long[]{
+                ((Number) rows.get(0).get("min_t")).longValue(),
+                ((Number) rows.get(0).get("max_t")).longValue()
+        };
     }
 
     public boolean isRunning() {
