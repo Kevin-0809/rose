@@ -2,7 +2,6 @@ package com.spdb.migration;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
@@ -16,6 +15,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -128,6 +128,11 @@ public class MigrationShardRunner {
                                              String tranCode,
                                              int maxRowsPerMessageType,
                                              int lookbackDays) {
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, false, null);
+    }
+
+    public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
+                                             int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
         if (maxRowsPerMessageType <= 0) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=sample size is not positive",
                     shardId, tranCode);
@@ -157,13 +162,13 @@ public class MigrationShardRunner {
             int effectiveLookbackDays = effectiveLookbackDays(txnCodes, lookbackDays, currentDate);
             actualLookbackDays = Math.max(actualLookbackDays, effectiveLookbackDays);
             long migratedRows = 0L;
-            for (int dayOffset = 0; dayOffset < effectiveLookbackDays && migratedRows < maxRowsPerMessageType; dayOffset++) {
-                long dayFrom = currentDate.minusDays(dayOffset).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                long dayTo = dayOffset == 0
-                        ? currentTime
-                        : currentDate.minusDays(dayOffset - 1L).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+            List<LocalDate> scanDates = scanDates(currentDate, effectiveLookbackDays, nearbyCollection, baseDate);
+            for (LocalDate scanDate : scanDates) {
+                if (migratedRows >= maxRowsPerMessageType) break;
+                long dayFrom = scanDate.atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+                long dayTo = scanDate.equals(currentDate) ? currentTime : scanDate.plusDays(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 log.info("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, dayOffset={}, timeFrom={}, timeTo={}, migratedRows={}",
-                        shardId, tranCode, messageType, dayOffset, dayFrom, dayTo, migratedRows);
+                        shardId, tranCode, messageType, scanDate, dayFrom, dayTo, migratedRows);
                 int offset = 0;
                 while (migratedRows < maxRowsPerMessageType) {
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
@@ -190,6 +195,18 @@ public class MigrationShardRunner {
         log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}",
                 shardId, tranCode, total.migratedRows, total.skippedRows);
         return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, actualLookbackDays);
+    }
+
+    private List<LocalDate> scanDates(LocalDate currentDate, int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
+        // Legacy scan bound: dayOffset < effectiveLookbackDays
+        if (!nearbyCollection || baseDate == null) {
+            return java.util.stream.IntStream.range(0, lookbackDays).mapToObj(currentDate::minusDays).toList();
+        }
+        List<LocalDate> dates = new ArrayList<>();
+        LocalDate base = baseDate.isAfter(currentDate) ? currentDate : baseDate;
+        for (LocalDate date = base; !date.isAfter(currentDate); date = date.plusDays(1)) dates.add(date);
+        for (LocalDate date = base.minusDays(1), end = base.minusDays(lookbackDays); !date.isBefore(end); date = date.minusDays(1)) dates.add(date);
+        return dates;
     }
 
     private List<ServiceCodeMapping> loadServiceCodeMappings(String tranCode) {
@@ -654,15 +671,29 @@ public class MigrationShardRunner {
 
     private SqlParameterSource[] requestParams(List<MigrationSourceRow> rows) {
         return rows.stream()
-                .map(RequestInsert::from)
-                .map(BeanPropertySqlParameterSource::new)
+                .map(row -> new MapSqlParameterSource()
+                        .addValue("sourceIp", row.sourceIp())
+                        .addValue("transId", row.transId())
+                        .addValue("txnCode", row.requestTxnCode())
+                        .addValue("txnTime", row.txnTime())
+                        .addValue("messageType", row.requestMessageType())
+                        .addValue("requestMessage", row.requestMessage(), Types.BINARY)
+                        .addValue("globalSeqNo", row.globalSeqNo())
+                        .addValue("tranTellerNo", row.tranTellerNo()))
                 .toArray(SqlParameterSource[]::new);
     }
 
     private SqlParameterSource[] responseParams(List<MigrationSourceRow> rows) {
         return rows.stream()
-                .map(ResponseInsert::from)
-                .map(BeanPropertySqlParameterSource::new)
+                .map(row -> new MapSqlParameterSource()
+                        .addValue("sourceIp", row.sourceIp())
+                        .addValue("transId", row.transId())
+                        .addValue("txnCode", row.responseTxnCode())
+                        .addValue("responseTime", row.responseTime())
+                        .addValue("messageType", row.responseMessageType())
+                        .addValue("responseMessage", row.responseMessage(), Types.BINARY)
+                        .addValue("returnCode", row.returnCode())
+                        .addValue("returnMsg", row.returnMsg()))
                 .toArray(SqlParameterSource[]::new);
     }
 
@@ -767,7 +798,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long txnTime,
             String messageType,
-            String requestMessage,
+            byte[] requestMessage,
             String globalSeqNo,
             String tranTellerNo
     ) {
@@ -778,7 +809,7 @@ public class MigrationShardRunner {
                     row.requestTxnCode(),
                     row.txnTime(),
                     row.requestMessageType(),
-                    encodeBlobText(row.requestMessage()),
+                    row.requestMessage(),
                     row.globalSeqNo(),
                     row.tranTellerNo()
             );
@@ -791,7 +822,7 @@ public class MigrationShardRunner {
             String txnCode,
             Long responseTime,
             String messageType,
-            String responseMessage,
+            byte[] responseMessage,
             String returnCode,
             String returnMsg
     ) {
@@ -802,22 +833,11 @@ public class MigrationShardRunner {
                     row.responseTxnCode(),
                     row.responseTime(),
                     row.responseMessageType(),
-                    encodeBlobText(row.responseMessage()),
+                    row.responseMessage(),
                     row.returnCode(),
                     row.returnMsg()
             );
         }
     }
 
-    private static String encodeBlobText(byte[] bytes) {
-        if (bytes == null) {
-            return null;
-        }
-        StringBuilder hex = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            hex.append(Character.toUpperCase(Character.forDigit((b >>> 4) & 0xF, 16)));
-            hex.append(Character.toUpperCase(Character.forDigit(b & 0xF, 16)));
-        }
-        return hex.toString();
-    }
 }

@@ -65,6 +65,15 @@ class MigrationShardRunnerTest {
         assertThat(source).contains("and req.txn_time < :timeTo");
     }
 
+    @Test
+    void insertParameterSourcesBindMessagesAsBinaryValues() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
+
+        assertThat(source).contains("addValue(\"requestMessage\", row.requestMessage(), Types.BINARY)");
+        assertThat(source).contains("addValue(\"responseMessage\", row.responseMessage(), Types.BINARY)");
+        assertThat(source).doesNotContain("BeanPropertySqlParameterSource");
+    }
+
     private JdbcTemplate sourceJdbc;
     private JdbcTemplate targetJdbc;
     private MigrationShardRunner runner;
@@ -110,8 +119,8 @@ class MigrationShardRunnerTest {
                 """);
         assertThat(request.get("txn_code")).isEqualTo("PAY001");
         assertThat(request.get("txn_time")).isEqualTo(1000L);
-        assertThat(new String((byte[]) request.get("request_message"), StandardCharsets.UTF_8))
-                .isEqualTo("726571756573742D54584E2D31");
+        assertThat((byte[]) request.get("request_message"))
+                .containsExactly("request-TXN-1".getBytes(StandardCharsets.UTF_8));
 
         Map<String, Object> response = targetJdbc.queryForMap("""
                 select *
@@ -121,8 +130,8 @@ class MigrationShardRunnerTest {
                 """);
         assertThat(response.get("txn_code")).isEqualTo("PAY001");
         assertThat(response.get("response_time")).isEqualTo(1010L);
-        assertThat(new String((byte[]) response.get("response_message"), StandardCharsets.UTF_8))
-                .isEqualTo("726573706F6E73652D54584E2D31");
+        assertThat((byte[]) response.get("response_message"))
+                .containsExactly("response-TXN-1".getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -325,6 +334,23 @@ class MigrationShardRunnerTest {
     }
 
     @Test
+    void nearbyCollectionScansForwardFromBaseDateThenBackward() {
+        insertServiceCode("TRANNEAR", "ABC.DEF");
+        long base = dayStartMillis(-2);
+        insertSourcePair("10.0.11.1", "BASE", "ABCDEF&bzjson", base, base + 1_000L);
+        insertSourcePair("10.0.11.2", "AFTER", "ABCDEF&bzjson", dayStartMillis(-1), dayStartMillis(-1) + 1_000L);
+        insertSourcePair("10.0.11.3", "BEFORE", "ABCDEF&bzjson", dayStartMillis(-3), dayStartMillis(-3) + 1_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                20L, "TRANNEAR", 2, 5, true, LocalDate.now(FIXED_CLOCK).minusDays(2));
+
+        assertThat(result.migratedRows()).isEqualTo(2L);
+        assertThat(targetExists("msg_flow_log_response", "10.0.11.1", "BASE")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.11.2", "AFTER")).isTrue();
+        assertThat(targetExists("msg_flow_log_response", "10.0.11.3", "BEFORE")).isFalse();
+    }
+
+    @Test
     void responseTimeWindowIsHalfOpen() {
         insertSourcePair("10.0.0.7", "TXN-AT-FROM", "PAY007", 900L, 1000L);
         insertSourcePair("10.0.0.8", "TXN-AT-TO", "PAY008", 900L, 2000L);
@@ -427,7 +453,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void targetBlobColumnsAreBoundAsHexText() {
+    void targetBlobColumnsAreBoundAsBinaryValues() {
         DriverManagerDataSource rawSourceDataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:migration_shard_blob_source;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
                 "sa",
@@ -453,10 +479,9 @@ class MigrationShardRunnerTest {
 
         runner.run(4L, 1000L, 2000L, 100);
 
-        assertThat(boundValues).doesNotHaveAnyElementsOfTypes(byte[].class);
         assertThat(boundValues).contains(
-                "726571756573742D54584E2D424C4F42",
-                "726573706F6E73652D54584E2D424C4F42"
+                "request-TXN-BLOB".getBytes(StandardCharsets.UTF_8),
+                "response-TXN-BLOB".getBytes(StandardCharsets.UTF_8)
         );
     }
 
