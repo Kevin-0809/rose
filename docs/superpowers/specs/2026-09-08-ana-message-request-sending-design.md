@@ -20,7 +20,7 @@
 
 HTTP body 直接使用数据库中的原始二进制 `request_message`。Header 为 `micServId` 和 `authContent`；`micServId`、服务地址与认证密钥按任务生命周期缓存（每轮 start 重新加载，负面结果不缓存），authContent 每次发送前按 `protocol_id` 取密钥并调用 `AuthUtil.packToken` 实时生成一次性 token（密钥缺失或解链失败按 FAILED 回写错误信息）。按报文类型设置 JSON/XML 内容类型，未知类型使用 `application/octet-stream`。请求和响应均以原始二进制保存；页面展示时，`sop` 与 `sop2cbsp` 使用 HEX 字符串，`json` 与 `bzjson` 使用 JSON，`soap` 使用 XML。
 
-2xx 标记 SUCCESS；非 2xx、无服务地址、配置缺失、超时或网络异常标记 FAILED，保存 HTTP 状态和截断后的错误信息。结果落库采用批量缓冲：响应插入与状态回写各攒 500 条后在同一事务中 batchUpdate 提交，落库失败重试一次，最终丢失的记录保持原状态可在下轮重发。超过重试次数不再读取。停止操作阻止读取后续区间，队列剩余记录自然消费完。
+2xx 标记 SUCCESS；非 2xx、无服务地址、配置缺失、超时或网络异常标记 FAILED，保存 HTTP 状态和截断后的错误信息。每笔发送完成后立即落库：插入响应记录并更新请求状态（`send_attempts` 自增），不使用批量缓冲；落库失败时异常由消费者捕获并记录日志，记录保持原状态可在下轮重发。超过重试次数不再读取。停止操作阻止读取后续区间，队列剩余记录自然消费完。
 
 ## 页面与接口
 
