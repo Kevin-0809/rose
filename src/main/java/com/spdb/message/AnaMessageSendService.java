@@ -264,18 +264,16 @@ public class AnaMessageSendService {
         long begin = System.currentTimeMillis();
         try {
             String mic = val("micServId", "10530013");
-            String protocol = target.toLowerCase() + "_" + (type == null ? "" : type.toLowerCase());
-            String address = pickAddress(protocol);
-
-            String authType = switch (type == null ? "" : type.trim().toLowerCase()) {
+            String protocolType = switch (type == null ? "" : type.trim().toLowerCase()) {
                 case "bzjson" -> "json";
                 case "soap" -> "xml";
                 case "sop" -> "sop";
                 case "sop2cbsp" -> "spec";
                 default -> type == null ? "" : type.toLowerCase();
             };
-            String authProtocol = target.toLowerCase() + "_" + authType;
-            Map<String, Object> au = auth(authProtocol);
+            String protocol = target.toLowerCase() + "_" + protocolType;
+            String address = pickAddress(protocol);
+            Map<String, Object> au = auth(protocol);
             String auth = AuthUtil.packToken((String) au.get("sid"), (String) au.get("gk"),
                     (String) au.get("pk"), (String) au.get("wk"));
 
