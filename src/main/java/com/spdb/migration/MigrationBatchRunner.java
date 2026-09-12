@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @Component
@@ -57,6 +58,7 @@ public class MigrationBatchRunner {
 
     private void runRunnableShards(MigrationCommandRow command, int parallelism) {
         long commandId = command.commandId();
+        Map<String, List<MigrationShardRunner.ServiceCodeMapping>> tranCodeMappings = loadTranCodeMappings(command);
         List<Long> shardIds = commandService.runnableShardIds(commandId);
         List<CompletableFuture<Void>> inFlight = new ArrayList<>();
         for (Long shardId : shardIds) {
@@ -64,9 +66,23 @@ public class MigrationBatchRunner {
             if (commandService.isCancelRequested(commandId)) {
                 break;
             }
-            inFlight.add(CompletableFuture.runAsync(() -> runShard(command, shardId), executor));
+            inFlight.add(CompletableFuture.runAsync(() -> runShard(command, shardId, tranCodeMappings), executor));
         }
         joinAll(inFlight);
+    }
+
+    private Map<String, List<MigrationShardRunner.ServiceCodeMapping>> loadTranCodeMappings(MigrationCommandRow command) {
+        if (!"TRAN_CODE".equals(command.commandType()) || command.tranCodes() == null) {
+            return Map.of();
+        }
+        List<String> tranCodes = new ArrayList<>();
+        for (String part : command.tranCodes().split(",")) {
+            String tranCode = part.trim();
+            if (!tranCode.isEmpty()) {
+                tranCodes.add(tranCode);
+            }
+        }
+        return shardRunner.loadTranCodeMappings(tranCodes);
     }
 
     private void joinAnyCompletedAtCapacity(List<CompletableFuture<Void>> inFlight, int parallelism) {
@@ -83,7 +99,9 @@ public class MigrationBatchRunner {
         }
     }
 
-    private void runShard(MigrationCommandRow command, long shardId) {
+    private void runShard(MigrationCommandRow command,
+                          long shardId,
+                          Map<String, List<MigrationShardRunner.ServiceCodeMapping>> tranCodeMappings) {
         long commandId = command.commandId();
         if (commandService.isCancelRequested(commandId)) {
             return;
@@ -105,18 +123,15 @@ public class MigrationBatchRunner {
                 int lookbackDays = command.lookbackDays() == null
                         ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS
                         : command.lookbackDays();
-                if (Boolean.TRUE.equals(command.nearbyCollection())) {
-                    result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays,
-                            true, command.baseDate());
-                } else {
-                    result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays);
-                }
+                List<MigrationShardRunner.ServiceCodeMapping> serviceMappings = tranCodeMappings.get(shard.tranCode());
+                result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays,
+                        Boolean.TRUE.equals(command.nearbyCollection()), command.baseDate(), serviceMappings);
             } else {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             }
             if ("TRAN_CODE".equals(command.commandType()) && isEmpty(result)) {
                 commandService.markShardSkipped(shardId, result);
-                log.info("Migration shard skipped, commandId={}, shardId={}, shardSeq={}, reason=no eligible complete pairs",
+                log.info("Migration shard skipped, commandId={}, shardId={}, shardSeq={}, reason=no eligible request rows",
                         commandId, shardId, shard.shardSeq());
             } else {
                 commandService.markShardCompleted(shardId, result);

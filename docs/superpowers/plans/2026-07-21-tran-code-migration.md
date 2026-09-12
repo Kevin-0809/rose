@@ -1,5 +1,7 @@
 # 交易码报文迁移实施计划
 
+> **状态：部分已被取代（2026-09-12）。** 本计划记录最初的“完整请求/响应对”实现。自 2026-09-12 起，交易码迁移已调整为只迁移请求报文，并引入请求表分区访问、keyset 分页、就近扫描顺序和命令级服务码映射批量加载；请以 `docs/superpowers/specs/2026-07-21-tran-code-migration-design.md` 的当前描述为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 支持多个交易码并行迁移最近五天内的三类完整报文对，每一类最多 N 笔。

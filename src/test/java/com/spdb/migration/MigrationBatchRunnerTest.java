@@ -188,7 +188,9 @@ class MigrationBatchRunnerTest {
                 "TRAN001", 3, 5, 1, "tran code command"
         ));
         Long shardId = shardIds(commandId).get(0);
-        when(shardRunner.runTranCode(shardId, "TRAN001", 3, 5))
+        when(shardRunner.loadTranCodeMappings(org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(java.util.Map.of());
+        when(shardRunner.runTranCode(shardId, "TRAN001", 3, 5, false, null, null))
                 .thenReturn(new MigrationShardResult(0L, 0L, 0L, 5));
 
         batchRunner.run(commandId);
@@ -198,7 +200,7 @@ class MigrationBatchRunnerTest {
         assertThat(progress.completedShardCount()).isEqualTo(1L);
         assertThat(progress.shards()).extracting(MigrationShardRow::status).containsExactly("SKIPPED");
         assertThat(progress.shards()).extracting(MigrationShardRow::actualLookbackDays).containsExactly(5);
-        verify(shardRunner).runTranCode(shardId, "TRAN001", 3, 5);
+        verify(shardRunner).runTranCode(shardId, "TRAN001", 3, 5, false, null, null);
         verify(shardRunner, never()).run(anyLong(), anyLong(), anyLong(), anyInt());
         verify(shardRunner, never()).runSql(anyLong(), org.mockito.ArgumentMatchers.anyString(), anyInt());
     }

@@ -17,15 +17,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Component
@@ -67,22 +68,33 @@ public class MigrationShardRunner {
     private final NamedParameterJdbcTemplate targetJdbc;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final TranCodeSourcePartition tranCodePartition;
 
     @Autowired
     public MigrationShardRunner(@Qualifier("bxdsJdbcTemplate") NamedParameterJdbcTemplate sourceJdbc,
                                 NamedParameterJdbcTemplate targetJdbc,
                                 PlatformTransactionManager transactionManager) {
-        this(sourceJdbc, targetJdbc, transactionManager, Clock.system(SHANGHAI));
+        this(sourceJdbc, targetJdbc, transactionManager, Clock.system(SHANGHAI),
+                new JdbcTranCodeSourcePartition(sourceJdbc));
     }
 
     MigrationShardRunner(@Qualifier("bxdsJdbcTemplate") NamedParameterJdbcTemplate sourceJdbc,
                          NamedParameterJdbcTemplate targetJdbc,
                          PlatformTransactionManager transactionManager,
                          Clock clock) {
+        this(sourceJdbc, targetJdbc, transactionManager, clock, new JdbcTranCodeSourcePartition(sourceJdbc));
+    }
+
+    MigrationShardRunner(@Qualifier("bxdsJdbcTemplate") NamedParameterJdbcTemplate sourceJdbc,
+                         NamedParameterJdbcTemplate targetJdbc,
+                         PlatformTransactionManager transactionManager,
+                         Clock clock,
+                         TranCodeSourcePartition tranCodePartition) {
         this.sourceJdbc = sourceJdbc;
         this.targetJdbc = targetJdbc;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
+        this.tranCodePartition = tranCodePartition;
     }
 
     public MigrationShardResult run(long shardId, long timeFrom, long timeTo, int fetchSize) {
@@ -128,11 +140,17 @@ public class MigrationShardRunner {
                                              String tranCode,
                                              int maxRowsPerMessageType,
                                              int lookbackDays) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, false, null);
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, false, null, null);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
                                              int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, nearbyCollection, baseDate, null);
+    }
+
+    public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
+                                             int lookbackDays, boolean nearbyCollection, LocalDate baseDate,
+                                             List<ServiceCodeMapping> preloadedMappings) {
         if (maxRowsPerMessageType <= 0) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=sample size is not positive",
                     shardId, tranCode);
@@ -143,7 +161,9 @@ public class MigrationShardRunner {
                     shardId, tranCode);
             return new MigrationShardResult(0L, 0L, 0L, 0);
         }
-        List<ServiceCodeMapping> serviceMappings = loadServiceCodeMappings(tranCode);
+        List<ServiceCodeMapping> serviceMappings = preloadedMappings != null
+                ? preloadedMappings
+                : loadServiceCodeMappings(tranCode);
         if (serviceMappings.isEmpty()) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=no service code mapping",
                     shardId, tranCode);
@@ -151,42 +171,48 @@ public class MigrationShardRunner {
         }
 
         BatchResult total = new BatchResult();
-        int actualLookbackDays = 0;
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
         long currentTime = clock.instant().toEpochMilli();
+        int effectiveLookbackDays = effectiveLookbackDays(lookbackDays, currentDate);
         log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
                 shardId, tranCode, serviceMappings.size(), maxRowsPerMessageType, lookbackDays, currentDate);
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
             Map<String, String> targetTxnCodeBySourceTxnCode = txnCodeMappings(serviceMappings, messageType);
-            List<String> txnCodes = new ArrayList<>(targetTxnCodeBySourceTxnCode.keySet());
-            int effectiveLookbackDays = effectiveLookbackDays(txnCodes, lookbackDays, currentDate);
-            actualLookbackDays = Math.max(actualLookbackDays, effectiveLookbackDays);
+            List<String> sourceTxnCodes = new ArrayList<>(targetTxnCodeBySourceTxnCode.keySet());
             long migratedRows = 0L;
             List<LocalDate> scanDates = scanDates(currentDate, effectiveLookbackDays, nearbyCollection, baseDate);
             for (LocalDate scanDate : scanDates) {
                 if (migratedRows >= maxRowsPerMessageType) break;
+                if (!tranCodePartition.exists(scanDate)) {
+                    log.info("Transaction-code migration skipped missing partition, shardId={}, tranCode={}, messageType={}, scanDate={}",
+                            shardId, tranCode, messageType, scanDate);
+                    continue;
+                }
                 long dayFrom = scanDate.atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 long dayTo = scanDate.equals(currentDate) ? currentTime : scanDate.plusDays(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                log.info("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, dayOffset={}, timeFrom={}, timeTo={}, migratedRows={}",
+                log.info("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, scanDate={}, timeFrom={}, timeTo={}, migratedRows={}",
                         shardId, tranCode, messageType, scanDate, dayFrom, dayTo, migratedRows);
-                int offset = 0;
+                TranCodeKeyset keyset = null;
                 while (migratedRows < maxRowsPerMessageType) {
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
-                    List<MigrationSourceRow> rows = loadTranCodeRows(txnCodes, dayFrom, dayTo, remainingRows, offset);
+                    List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, dayFrom, dayTo, remainingRows, keyset);
                     if (rows.isEmpty()) {
                         break;
                     }
-                    List<MigrationSourceRow> targetRows = rows.stream()
-                            .map(row -> withTxnCode(row, targetTxnCodeBySourceTxnCode.getOrDefault(
-                                    row.responseTxnCode(),
-                                    row.responseTxnCode()
+                    List<TranCodeRequestRow> targetRows = rows.stream()
+                            .map(row -> withTargetTxnCode(row, targetTxnCodeBySourceTxnCode.getOrDefault(
+                                    row.txnCode(),
+                                    row.txnCode()
                             )))
                             .toList();
-                    BatchResult result = transactionTemplate.execute(status -> writeBatch(targetRows));
+                    BatchResult result = transactionTemplate.execute(status -> writeRequestBatch(targetRows));
                     BatchResult batchResult = result == null ? new BatchResult() : result;
                     total.add(batchResult);
                     migratedRows += batchResult.migratedRows;
-                    offset += rows.size();
+                    keyset = TranCodeKeyset.after(rows.get(rows.size() - 1));
+                    if (rows.size() < remainingRows) {
+                        break;
+                    }
                 }
             }
             log.info("Transaction-code migration message type completed, shardId={}, tranCode={}, messageType={}, migratedRows={}, targetRows={}",
@@ -194,44 +220,71 @@ public class MigrationShardRunner {
         }
         log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}",
                 shardId, tranCode, total.migratedRows, total.skippedRows);
-        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, actualLookbackDays);
+        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, effectiveLookbackDays);
     }
 
     private List<LocalDate> scanDates(LocalDate currentDate, int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
-        // Legacy scan bound: dayOffset < effectiveLookbackDays
         if (!nearbyCollection || baseDate == null) {
             return java.util.stream.IntStream.range(0, lookbackDays).mapToObj(currentDate::minusDays).toList();
         }
         List<LocalDate> dates = new ArrayList<>();
         LocalDate base = baseDate.isAfter(currentDate) ? currentDate : baseDate;
-        for (LocalDate date = base; !date.isAfter(currentDate); date = date.plusDays(1)) dates.add(date);
-        for (LocalDate date = base.minusDays(1), end = base.minusDays(lookbackDays); !date.isBefore(end); date = date.minusDays(1)) dates.add(date);
+        for (int dayOffset = 0; dayOffset < lookbackDays; dayOffset++) {
+            dates.add(base.minusDays(dayOffset));
+        }
+        for (LocalDate date = base.plusDays(1); !date.isAfter(currentDate); date = date.plusDays(1)) {
+            dates.add(date);
+        }
         return dates;
     }
 
-    private List<ServiceCodeMapping> loadServiceCodeMappings(String tranCode) {
-        List<ServiceCodeMapping> mappedServiceCodes = targetJdbc.query("""
-                select "528_service_code" as lookup_service_code,
+    public Map<String, List<ServiceCodeMapping>> loadTranCodeMappings(List<String> tranCodes) {
+        List<String> distinctCodes = tranCodes == null ? List.of() : tranCodes.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(code -> !code.isEmpty())
+                .distinct()
+                .toList();
+        if (distinctCodes.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<ServiceCodeMapping>> mappedByCode = new LinkedHashMap<>();
+        targetJdbc.query("""
+                select tran_code,
+                       "528_service_code" as lookup_service_code,
                        ccbs_service_code as target_service_code
                 from ana_tran_code_service_mapping
-                where tran_code = :tranCode
-                order by mapping_id
-                """, new MapSqlParameterSource("tranCode", tranCode), (rs, rowNum) -> new ServiceCodeMapping(
-                rs.getString("lookup_service_code"),
-                rs.getString("target_service_code")
-        ));
-        if (!mappedServiceCodes.isEmpty()) {
-            return distinctServiceMappings(mappedServiceCodes);
-        }
-        List<ServiceCodeMapping> onlineServiceCodes = targetJdbc.query("""
-                select esf_service_code
-                from tp_online_service_in
-                where tran_code = :tranCode
-                """, new MapSqlParameterSource("tranCode", tranCode), (rs, rowNum) -> {
-            String serviceCode = rs.getString("esf_service_code");
-            return new ServiceCodeMapping(serviceCode, serviceCode);
+                where tran_code in (:tranCodes)
+                order by tran_code, mapping_id
+                """, new MapSqlParameterSource("tranCodes", distinctCodes), rs -> {
+            String tranCode = rs.getString("tran_code");
+            mappedByCode.computeIfAbsent(tranCode, key -> new ArrayList<>())
+                    .add(new ServiceCodeMapping(rs.getString("lookup_service_code"), rs.getString("target_service_code")));
         });
-        return distinctServiceMappings(onlineServiceCodes);
+        List<String> fallbackCodes = distinctCodes.stream()
+                .filter(code -> mappedByCode.getOrDefault(code, List.of()).isEmpty())
+                .toList();
+        if (!fallbackCodes.isEmpty()) {
+            targetJdbc.query("""
+                    select tran_code, esf_service_code
+                    from tp_online_service_in
+                    where tran_code in (:tranCodes)
+                    """, new MapSqlParameterSource("tranCodes", fallbackCodes), rs -> {
+                String tranCode = rs.getString("tran_code");
+                String serviceCode = rs.getString("esf_service_code");
+                mappedByCode.computeIfAbsent(tranCode, key -> new ArrayList<>())
+                        .add(new ServiceCodeMapping(serviceCode, serviceCode));
+            });
+        }
+        Map<String, List<ServiceCodeMapping>> result = new LinkedHashMap<>();
+        for (String code : distinctCodes) {
+            result.put(code, distinctServiceMappings(mappedByCode.getOrDefault(code, List.of())));
+        }
+        return result;
+    }
+
+    private List<ServiceCodeMapping> loadServiceCodeMappings(String tranCode) {
+        return loadTranCodeMappings(List.of(tranCode)).getOrDefault(tranCode, List.of());
     }
 
     private List<ServiceCodeMapping> distinctServiceMappings(List<ServiceCodeMapping> serviceMappings) {
@@ -263,34 +316,14 @@ public class MigrationShardRunner {
         return serviceCode == null ? "" : serviceCode.trim().replace(".", "");
     }
 
-    private MigrationSourceRow withTxnCode(MigrationSourceRow row, String txnCode) {
-        return new MigrationSourceRow(
-                row.sourceIp(),
-                row.transId(),
-                txnCode,
-                row.txnTime(),
-                row.requestMessageType(),
-                row.requestMessage(),
-                row.globalSeqNo(),
-                row.tranTellerNo(),
-                txnCode,
-                row.responseTime(),
-                row.responseMessageType(),
-                row.responseMessage(),
-                row.returnCode(),
-                row.returnMsg()
-        );
-    }
-
-    private int effectiveLookbackDays(List<String> txnCodes, int lookbackDays, LocalDate currentDate) {
+    private int effectiveLookbackDays(int lookbackDays, LocalDate currentDate) {
         if (lookbackDays != MigrationTranCodeCommandForm.ALL_LOOKBACK_DAYS) {
             return lookbackDays;
         }
-        Long earliestResponseTime = earliestResponseTime(txnCodes);
-        if (earliestResponseTime == null) {
+        LocalDate earliestDate = tranCodePartition.earliestPartitionDate();
+        if (earliestDate == null) {
             return 0;
         }
-        LocalDate earliestDate = Instant.ofEpochMilli(earliestResponseTime).atZone(SHANGHAI).toLocalDate();
         long days = ChronoUnit.DAYS.between(earliestDate, currentDate) + 1;
         if (days <= 0) {
             return 1;
@@ -298,22 +331,12 @@ public class MigrationShardRunner {
         return days > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) days;
     }
 
-    private Long earliestResponseTime(List<String> txnCodes) {
-        if (txnCodes.isEmpty()) {
-            return null;
-        }
-        return sourceJdbc.queryForObject("""
-                select min(response_time)
-                from msg_flow_log_response
-                where txn_code in (:txnCodes)
-                """, new MapSqlParameterSource("txnCodes", txnCodes), Long.class);
-    }
-
-    private List<MigrationSourceRow> loadTranCodeRows(List<String> txnCodes,
-                                                       long timeFrom,
-                                                       long timeTo,
-                                                       int limit,
-                                                       int offset) {
+    private List<TranCodeRequestRow> loadTranCodeRequestRows(LocalDate scanDate,
+                                                              List<String> txnCodes,
+                                                              long timeFrom,
+                                                              long timeTo,
+                                                              int limit,
+                                                              TranCodeKeyset keyset) {
         if (txnCodes.isEmpty() || limit <= 0) {
             return List.of();
         }
@@ -321,41 +344,121 @@ public class MigrationShardRunner {
                 .addValue("txnCodes", txnCodes)
                 .addValue("timeFrom", timeFrom)
                 .addValue("timeTo", timeTo)
-                .addValue("limit", limit)
-                .addValue("offset", offset);
+                .addValue("limit", limit);
+        StringBuilder keysetPredicate = new StringBuilder();
+        if (keyset != null) {
+            keysetPredicate.append("""
+                      and (
+                            txn_time < :lastTxnTime
+                         or (txn_time = :lastTxnTime and source_ip < :lastSourceIp)
+                         or (txn_time = :lastTxnTime and source_ip = :lastSourceIp and trans_id < :lastTransId)
+                      )
+                    """);
+            params.addValue("lastTxnTime", keyset.txnTime())
+                    .addValue("lastSourceIp", keyset.sourceIp())
+                    .addValue("lastTransId", keyset.transId());
+        }
         return sourceJdbc.query("""
-                with filtered_response as (
-                    select source_ip, trans_id, txn_code, response_time, message_type,
-                           response_message, return_code, return_msg
-                    from msg_flow_log_response
-                    where txn_code in (:txnCodes)
-                      and response_time >= :timeFrom
-                      and response_time < :timeTo
-                )
-                select req.source_ip,
-                       req.trans_id,
-                       req.txn_code as request_txn_code,
-                       req.txn_time,
-                       req.message_type as request_message_type,
-                       req.request_message,
-                       req.global_seq_no,
-                       req.tran_teller_no,
-                       resp.txn_code as response_txn_code,
-                       resp.response_time,
-                       resp.message_type as response_message_type,
-                       resp.response_message,
-                       resp.return_code,
-                       resp.return_msg
-                from filtered_response resp
-                join msg_flow_log_request req
-                  on req.trans_id = resp.trans_id
-                 and req.source_ip = resp.source_ip
-                 and req.txn_time >= :timeFrom
-                 and req.txn_time < :timeTo
-                order by resp.source_ip, resp.trans_id
+                select source_ip, trans_id, txn_code, txn_time, message_type,
+                       request_message, global_seq_no, tran_teller_no
+                from %s
+                where txn_code in (:txnCodes)
+                  and txn_time >= :timeFrom
+                  and txn_time < :timeTo
+                %s
+                order by txn_time desc, source_ip desc, trans_id desc
                 limit :limit
-                offset :offset
-                """, params, (rs, rowNum) -> mapSourceRow(rs));
+                """.formatted(tranCodePartition.requestTableRef(scanDate), keysetPredicate), params,
+                (rs, rowNum) -> mapTranCodeRequestRow(rs));
+    }
+
+    private BatchResult writeRequestBatch(List<TranCodeRequestRow> rows) {
+        BatchResult result = new BatchResult();
+        for (int start = 0; start < rows.size(); start += MAX_TARGET_CHUNK_SIZE) {
+            int end = Math.min(start + MAX_TARGET_CHUNK_SIZE, rows.size());
+            result.add(writeRequestChunk(rows.subList(start, end)));
+        }
+        return result;
+    }
+
+    private BatchResult writeRequestChunk(List<TranCodeRequestRow> rows) {
+        BatchResult result = new BatchResult();
+        Set<MigrationKey> existingKeys = loadExistingRequestKeys(rows);
+        List<TranCodeRequestRow> inserts = new ArrayList<>();
+        for (TranCodeRequestRow row : rows) {
+            MigrationKey key = MigrationKey.from(row);
+            if (existingKeys.contains(key)) {
+                result.skippedRows++;
+                continue;
+            }
+            inserts.add(row);
+            existingKeys.add(key);
+        }
+        batchInsertRequestRows(inserts);
+        result.migratedRows += inserts.size();
+        return result;
+    }
+
+    private Set<MigrationKey> loadExistingRequestKeys(List<TranCodeRequestRow> rows) {
+        if (rows.isEmpty()) {
+            return Set.of();
+        }
+        Set<MigrationKey> keys = new HashSet<>();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        String predicate = keyPredicateForKeys(rows.stream().map(MigrationKey::from).toList(), params);
+        collectExistingKeys(keys, "msg_flow_log_request", predicate, params);
+        return keys;
+    }
+
+    private void batchInsertRequestRows(List<TranCodeRequestRow> rows) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        targetJdbc.batchUpdate("""
+                insert into msg_flow_log_request (
+                    source_ip, trans_id, txn_code, txn_time, message_type,
+                    request_message, global_seq_no, tran_teller_no
+                ) values (
+                    :sourceIp, :transId, :txnCode, :txnTime, :messageType,
+                    :requestMessage, :globalSeqNo, :tranTellerNo
+                )
+                """, rows.stream()
+                .map(row -> new MapSqlParameterSource()
+                        .addValue("sourceIp", row.sourceIp())
+                        .addValue("transId", row.transId())
+                        .addValue("txnCode", row.txnCode())
+                        .addValue("txnTime", row.txnTime())
+                        .addValue("messageType", row.messageType())
+                        .addValue("requestMessage", row.requestMessage(), Types.BINARY)
+                        .addValue("globalSeqNo", row.globalSeqNo())
+                        .addValue("tranTellerNo", row.tranTellerNo()))
+                .toArray(SqlParameterSource[]::new));
+    }
+
+    private TranCodeRequestRow mapTranCodeRequestRow(ResultSet rs) throws SQLException {
+        return new TranCodeRequestRow(
+                rs.getString("source_ip"),
+                rs.getString("trans_id"),
+                rs.getString("txn_code"),
+                nullableLong(rs, "txn_time"),
+                rs.getString("message_type"),
+                rs.getBytes("request_message"),
+                rs.getString("global_seq_no"),
+                rs.getString("tran_teller_no")
+        );
+    }
+
+    private TranCodeRequestRow withTargetTxnCode(TranCodeRequestRow row, String txnCode) {
+        return new TranCodeRequestRow(
+                row.sourceIp(),
+                row.transId(),
+                txnCode,
+                row.txnTime(),
+                row.messageType(),
+                row.requestMessage(),
+                row.globalSeqNo(),
+                row.tranTellerNo()
+        );
     }
 
     private void streamPairedRows(long timeFrom,
@@ -753,12 +856,34 @@ public class MigrationShardRunner {
             return new MigrationKey(row.sourceIp(), row.transId());
         }
 
+        private static MigrationKey from(TranCodeRequestRow row) {
+            return new MigrationKey(row.sourceIp(), row.transId());
+        }
+
         private static MigrationKey from(SqlResponseRow row) {
             return new MigrationKey(row.sourceIp(), row.transId());
         }
 
         private static MigrationKey from(RequestLookupRow row) {
             return new MigrationKey(row.sourceIp(), row.transId());
+        }
+    }
+
+    private record TranCodeRequestRow(
+            String sourceIp,
+            String transId,
+            String txnCode,
+            Long txnTime,
+            String messageType,
+            byte[] requestMessage,
+            String globalSeqNo,
+            String tranTellerNo
+    ) {
+    }
+
+    private record TranCodeKeyset(long txnTime, String sourceIp, String transId) {
+        private static TranCodeKeyset after(TranCodeRequestRow row) {
+            return new TranCodeKeyset(row.txnTime(), row.sourceIp(), row.transId());
         }
     }
 
@@ -786,7 +911,7 @@ public class MigrationShardRunner {
     ) {
     }
 
-    private record ServiceCodeMapping(
+    public record ServiceCodeMapping(
             String lookupServiceCode,
             String targetServiceCode
     ) {
