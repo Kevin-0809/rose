@@ -26,6 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAdder;
 
 @Service
 public class AnaMessageSendService {
@@ -43,6 +44,11 @@ public class AnaMessageSendService {
     private final Map<String, String> configCache = new ConcurrentHashMap<>();
     private final Map<String, List<String>> addressCache = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Object>> authCache = new ConcurrentHashMap<>();
+    private final LongAdder successCount = new LongAdder();
+    private final LongAdder failedCount = new LongAdder();
+    private final AtomicInteger inFlight = new AtomicInteger();
+    private final TpsWindow tpsWindow = new TpsWindow();
+    private volatile long total;
     private volatile boolean running;
 
     public AnaMessageSendService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager txManager) {
@@ -54,6 +60,7 @@ public class AnaMessageSendService {
     public synchronized void start(String target, int concurrency, int rangeMinutes, int retries, int timeout) {
         if (running) return;
         running = true;
+        resetCounters();
         configCache.clear();
         addressCache.clear();
         authCache.clear();
@@ -71,6 +78,7 @@ public class AnaMessageSendService {
             running = false;
             return;
         }
+        total = countPending(retries);
         int window = Math.max(1, concurrency);
         LinkedBlockingQueue<Map<String, Object>> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
         ExecutorService pool = Executors.newFixedThreadPool(window);
@@ -194,12 +202,34 @@ public class AnaMessageSendService {
         return running;
     }
 
-    public Map<String, Object> stats() {
-        return jdbc.queryForMap("select count(case when send_status='PENDING' then 1 end) pending, " +
-                "count(case when send_status='SENDING' then 1 end) sending, " +
-                "count(case when send_status='SUCCESS' then 1 end) success, " +
-                "count(case when send_status='FAILED' then 1 end) failed from ana_msg_flow_log_request",
-                new MapSqlParameterSource());
+    public Map<String, Object> liveStats() {
+        long success = successCount.sum();
+        long failed = failedCount.sum();
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("running", running);
+        stats.put("tps", tpsWindow.tps());
+        stats.put("pending", Math.max(0L, total - success - failed));
+        stats.put("sending", inFlight.get());
+        stats.put("success", success);
+        stats.put("failed", failed);
+        return stats;
+    }
+
+    private long countPending(int retries) {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from ana_msg_flow_log_request " +
+                        "where send_status in ('PENDING','FAILED') and send_attempts <= :retries and txn_time is not null",
+                new MapSqlParameterSource("retries", retries),
+                Integer.class);
+        return count == null ? 0L : count.longValue();
+    }
+
+    private void resetCounters() {
+        successCount.reset();
+        failedCount.reset();
+        inFlight.set(0);
+        tpsWindow.reset();
+        total = 0L;
     }
 
     private long[] minMax(int retries) {
@@ -262,6 +292,7 @@ public class AnaMessageSendService {
     }
 
     private void sendOne(Map<String, Object> r, String target, int retries, int timeout) {
+        inFlight.incrementAndGet();
         String ip = (String) r.get("source_ip");
         String id = (String) r.get("trans_id");
         String type = (String) r.get("message_type");
@@ -306,6 +337,11 @@ public class AnaMessageSendService {
                             .addValue("h", response.statusCode())
                             .addValue("ip", ip)
                             .addValue("id", id));
+            if (response.statusCode() / 100 == 2) {
+                successCount.increment();
+            } else {
+                failedCount.increment();
+            }
             log.debug("报文发送成功: target={}, ip={}, transId={}, type={}, address={}, httpStatus={}, returnCode={}, 耗时={}ms",
                     target, ip, id, type, address, response.statusCode(), code, System.currentTimeMillis() - begin);
         } catch (Exception e) {
@@ -317,9 +353,12 @@ public class AnaMessageSendService {
                             .addValue("e", msg.substring(0, Math.min(1000, msg.length())))
                             .addValue("ip", ip)
                             .addValue("id", id));
+            failedCount.increment();
             log.warn("报文发送失败: target={}, ip={}, transId={}, type={}, 耗时={}ms, error={}",
                     target, ip, id, type, System.currentTimeMillis() - begin, msg);
         } finally {
+            inFlight.decrementAndGet();
+            tpsWindow.record();
             int n = sentCount.get() + 1;
             sentCount.set(n);
             if (n % 100 == 0) {
