@@ -425,6 +425,21 @@ class MigrationShardRunnerTest {
     }
 
     @Test
+    void tranCodeMigrationOrdersBaseDateByTxnTimeAscending() {
+        insertServiceCode("TRANBASE", "ABC.DEF");
+        insertRequest(sourceJdbc, "10.0.22.1", "BASE-EARLY", "ABCDEF&bzjson", dayStartMillis(-2) + 9 * 60 * 60 * 1000L);
+        insertRequest(sourceJdbc, "10.0.22.2", "BASE-LATE", "ABCDEF&bzjson", dayStartMillis(-2) + 11 * 60 * 60 * 1000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                32L, "TRANBASE", 1, 5, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY,
+                LocalDate.now(FIXED_CLOCK).minusDays(2));
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetExists("msg_flow_log_request", "10.0.22.1", "BASE-EARLY")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.22.2", "BASE-LATE")).isFalse();
+    }
+
+    @Test
     void tranCodeMigrationSkipsMissingPartition() {
         insertServiceCode("TRANMISS", "ABC.DEF");
         long today = dayStartMillis(0);

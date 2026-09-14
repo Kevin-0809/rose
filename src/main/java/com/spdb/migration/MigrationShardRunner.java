@@ -205,7 +205,7 @@ public class MigrationShardRunner {
                 log.debug("Transaction-code migration scanning partition, shardId={}, tranCode={}, messageType={}, scanDate={}, partition={}, migratedRows={}",
                         shardId, tranCode, messageType, scanDate, tranCodePartition.requestTableRef(scanDate), migratedRows);
                 int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
-                boolean ascending = baseDate != null && scanDate.isAfter(baseDate);
+                boolean ascending = baseDate != null && !scanDate.isBefore(baseDate);
                 List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, remainingRows, ascending);
                 if (rows.isEmpty()) {
                     continue;
