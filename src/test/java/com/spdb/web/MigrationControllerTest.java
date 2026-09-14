@@ -134,7 +134,7 @@ class MigrationControllerTest {
         MigrationCommandService service = mock(MigrationCommandService.class);
         MigrationSqlCommandForm form = new MigrationSqlCommandForm("", "");
         PagedResult<MigrationCommandRow> result = PagedResult.of(List.of(), 0, PageRequestParams.of(1, 20));
-        when(service.createSqlCommand(form)).thenThrow(new IllegalArgumentException("Response SQL不能为空"));
+        when(service.createSqlCommand(form)).thenThrow(new IllegalArgumentException("Request SQL不能为空"));
         when(service.searchSql(PageRequestParams.of(null, null))).thenReturn(result);
         when(service.sourceDataSource()).thenReturn("bxds");
         when(service.targetDataSource()).thenReturn("primary");
@@ -147,7 +147,7 @@ class MigrationControllerTest {
         assertThat(model.getAttribute("active")).isEqualTo("migration-sql");
         assertThat(model.getAttribute("result")).isSameAs(result);
         assertThat(model.getAttribute("form")).isSameAs(form);
-        assertThat(model.getAttribute("error")).isEqualTo("Response SQL不能为空");
+        assertThat(model.getAttribute("error")).isEqualTo("Request SQL不能为空");
         verify(service).createSqlCommand(form);
     }
 

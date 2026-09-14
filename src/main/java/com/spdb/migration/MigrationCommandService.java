@@ -80,10 +80,10 @@ public class MigrationCommandService {
             jdbc.update("""
                     insert into ana_migration_command (
                         source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
-                        status, total_shard_count, response_sql, remark, created_by
+                        status, total_shard_count, request_sql, remark, created_by
                     ) values (
                         :sourceDataSource, :targetDataSource, 'SQL', 0, 0, 0, 1,
-                        'CREATED', 1, :responseSql, :remark, '系统'
+                        'CREATED', 1, :requestSql, :remark, '系统'
                     )
                     """, sqlParams(form), keyHolder, new String[]{"command_id"});
             long commandId = generatedLongKey(keyHolder, "command_id");
@@ -427,7 +427,7 @@ public class MigrationCommandService {
         if (form == null) {
             throw new IllegalArgumentException("SQL迁移指令参数不能为空");
         }
-        validateQuerySql(form.responseSql(), "Response SQL");
+        validateQuerySql(form.requestSql(), "Request SQL");
     }
 
     private List<String> validateTranCode(MigrationTranCodeCommandForm form) {
@@ -515,7 +515,7 @@ public class MigrationCommandService {
         return new MapSqlParameterSource()
                 .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
                 .addValue("targetDataSource", runtimeProperties.targetDataSource())
-                .addValue("responseSql", form.responseSql().trim())
+                .addValue("requestSql", form.requestSql().trim())
                 .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
     }
 

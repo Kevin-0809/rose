@@ -90,14 +90,15 @@ class MigrationCommandsTemplateTest {
 
         assertThat(html).contains("SQL迁移");
         assertThat(html).contains("action=\"/migration/sql-commands\"");
-        assertThat(html).contains("name=\"responseSql\"");
-        assertThat(html).contains("msg_flow_log_response");
+        assertThat(html).contains("name=\"requestSql\"");
+        assertThat(html).contains("msg_flow_log_request");
         assertThat(html).contains("source_ip, trans_id");
-        assertThat(html).contains("后台按 source_ip + trans_id 回查请求报文");
+        assertThat(html).contains("后台按查询结果直接迁移请求报文");
         assertThat(html).contains("/migration/commands/");
+        assertThat(html).doesNotContain("msg_flow_log_response");
         assertThat(html).doesNotContain("/vendor/flatpickr");
         assertThat(html).doesNotContain("name=\"timeFrom\"");
         assertThat(html).doesNotContain("name=\"timeTo\"");
-        assertThat(html).doesNotContain("name=\"requestSql\"");
+        assertThat(html).doesNotContain("name=\"responseSql\"");
     }
 }

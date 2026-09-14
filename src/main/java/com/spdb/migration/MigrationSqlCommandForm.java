@@ -1,7 +1,7 @@
 package com.spdb.migration;
 
 public record MigrationSqlCommandForm(
-        String responseSql,
+        String requestSql,
         String remark
 ) {
     public static MigrationSqlCommandForm empty() {

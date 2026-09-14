@@ -119,9 +119,9 @@ class MigrationCommandServiceTest {
     }
 
     @Test
-    void createSqlCommandStoresSqlAndCreatesSingleShard() {
+    void createSqlCommandStoresRequestSqlAndCreatesSingleShard() {
         MigrationSqlCommandForm form = new MigrationSqlCommandForm(
-                "select source_ip, trans_id, txn_code, response_time, message_type, response_message, return_code, return_msg from msg_flow_log_response where txn_code = 'PAY001'",
+                "select source_ip, trans_id, txn_code, txn_time, message_type, request_message, global_seq_no, tran_teller_no from msg_flow_log_request where txn_code = 'PAY001'",
                 "sql migration"
         );
 
@@ -144,8 +144,8 @@ class MigrationCommandServiceTest {
                 rs.getString("remark")
         ), commandId);
         assertThat(row.commandType()).isEqualTo("SQL");
-        assertThat(row.requestSql()).isNull();
-        assertThat(row.responseSql()).contains("from msg_flow_log_response");
+        assertThat(row.requestSql()).contains("from msg_flow_log_request");
+        assertThat(row.responseSql()).isNull();
         assertThat(row.timeFrom()).isZero();
         assertThat(row.timeTo()).isZero();
         assertThat(row.windowSeconds()).isZero();
@@ -229,7 +229,7 @@ class MigrationCommandServiceTest {
             ));
         }
         service.createCommand(new MigrationCommandForm(100_000L, 160_000L, 60L, 2, "time range"));
-        service.createSqlCommand(new MigrationSqlCommandForm("select source_ip from msg_flow_log_response", "sql"));
+        service.createSqlCommand(new MigrationSqlCommandForm("select source_ip from msg_flow_log_request", "sql"));
 
         PagedResult<MigrationCommandRow> result = service.searchTranCode(PageRequestParams.of(2, 20));
 
@@ -248,14 +248,14 @@ class MigrationCommandServiceTest {
                 .hasMessageContaining("SQL迁移指令参数不能为空");
         assertThatThrownBy(() -> service.createSqlCommand(new MigrationSqlCommandForm("", "")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Response SQL不能为空");
+                .hasMessageContaining("Request SQL不能为空");
         assertThatThrownBy(() -> service.createSqlCommand(new MigrationSqlCommandForm(
-                "select * from msg_flow_log_response; delete from msg_flow_log_response",
+                "select * from msg_flow_log_request; delete from msg_flow_log_request",
                 "bad"
         ))).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("只允许单条查询SQL");
         assertThatThrownBy(() -> service.createSqlCommand(new MigrationSqlCommandForm(
-                "update msg_flow_log_response set txn_code = 'X'",
+                "update msg_flow_log_request set txn_code = 'X'",
                 "bad"
         ))).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("只允许select或with查询");

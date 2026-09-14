@@ -156,16 +156,13 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runSqlCommandUsesSqlShardExecutionPath() {
+        String requestSql = "select source_ip, trans_id, txn_code, txn_time, message_type, request_message, global_seq_no, tran_teller_no from msg_flow_log_request";
         long commandId = commandService.createSqlCommand(new MigrationSqlCommandForm(
-                "select source_ip, trans_id, txn_code, response_time, message_type, response_message, return_code, return_msg from msg_flow_log_response",
+                requestSql,
                 "sql command"
         ));
         Long shardId = shardIds(commandId).get(0);
-        when(shardRunner.runSql(
-                shardId,
-                "select source_ip, trans_id, txn_code, response_time, message_type, response_message, return_code, return_msg from msg_flow_log_response",
-                1000
-        )).thenReturn(new MigrationShardResult(7L, 2L, 1L));
+        when(shardRunner.runSql(shardId, requestSql, 1000)).thenReturn(new MigrationShardResult(7L, 2L, 0L));
 
         batchRunner.run(commandId);
 
@@ -173,12 +170,8 @@ class MigrationBatchRunnerTest {
         assertThat(progress.status()).isEqualTo("COMPLETED");
         assertThat(progress.migratedRows()).isEqualTo(7L);
         assertThat(progress.skippedRows()).isEqualTo(2L);
-        assertThat(progress.droppedRows()).isEqualTo(1L);
-        verify(shardRunner).runSql(
-                shardId,
-                "select source_ip, trans_id, txn_code, response_time, message_type, response_message, return_code, return_msg from msg_flow_log_response",
-                1000
-        );
+        assertThat(progress.droppedRows()).isZero();
+        verify(shardRunner).runSql(shardId, requestSql, 1000);
         verify(shardRunner, never()).run(shardId, 0L, 0L, 1000);
     }
 

@@ -148,7 +148,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void sqlMigrationStreamsResponsesAndLooksUpRequestsByTransactionKey() {
+    void sqlMigrationMigratesRequestsOnlyWithoutWritingResponses() {
         insertSourcePair("10.0.0.20", "TXN-SQL-PAIR", "PAY020", 1000L, 1100L);
         insertRequest(sourceJdbc, "10.0.0.21", "TXN-SQL-REQUEST-ONLY", "PAY021", 1001L);
         insertResponse(sourceJdbc, "10.0.0.22", "TXN-SQL-RESPONSE-ONLY", "PAY022", 1102L, "000000");
@@ -156,21 +156,44 @@ class MigrationShardRunnerTest {
         MigrationShardResult result = runner.runSql(
                 9L,
                 """
-                        select source_ip, trans_id, txn_code, response_time, message_type,
-                               response_message, return_code, return_msg
-                        from msg_flow_log_response
+                        select source_ip, trans_id, txn_code, txn_time, message_type,
+                               request_message, global_seq_no, tran_teller_no
+                        from msg_flow_log_request
                         where txn_code like 'PAY02%'
                         """,
                 100
         );
 
-        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(result.migratedRows()).isEqualTo(2L);
         assertThat(result.skippedRows()).isZero();
-        assertThat(result.droppedRows()).isEqualTo(1L);
+        assertThat(result.droppedRows()).isZero();
         assertThat(targetExists("msg_flow_log_request", "10.0.0.20", "TXN-SQL-PAIR")).isTrue();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.20", "TXN-SQL-PAIR")).isTrue();
-        assertThat(targetExists("msg_flow_log_request", "10.0.0.21", "TXN-SQL-REQUEST-ONLY")).isFalse();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.22", "TXN-SQL-RESPONSE-ONLY")).isFalse();
+        assertThat(targetExists("msg_flow_log_request", "10.0.0.21", "TXN-SQL-REQUEST-ONLY")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.0.22", "TXN-SQL-RESPONSE-ONLY")).isFalse();
+        assertThat(targetCount("msg_flow_log_response")).isZero();
+    }
+
+    @Test
+    void sqlMigrationSkipsRequestsAlreadyPresentInTarget() {
+        insertRequest(sourceJdbc, "10.0.0.30", "TXN-SQL-EXISTING", "PAY030", 1000L);
+        insertTargetRequest("10.0.0.30", "TXN-SQL-EXISTING", "PAY030", 1000L);
+
+        MigrationShardResult result = runner.runSql(
+                10L,
+                """
+                        select source_ip, trans_id, txn_code, txn_time, message_type,
+                               request_message, global_seq_no, tran_teller_no
+                        from msg_flow_log_request
+                        where txn_code = 'PAY030'
+                        """,
+                100
+        );
+
+        assertThat(result.migratedRows()).isZero();
+        assertThat(result.skippedRows()).isEqualTo(1L);
+        assertThat(result.droppedRows()).isZero();
+        assertThat(targetCount("msg_flow_log_request")).isEqualTo(1L);
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test

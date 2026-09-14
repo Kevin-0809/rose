@@ -100,7 +100,7 @@ public class MigrationBatchRunner {
         try {
             MigrationShardResult result;
             if ("SQL".equals(command.commandType())) {
-                result = shardRunner.runSql(shardId, command.responseSql(), FETCH_SIZE);
+                result = shardRunner.runSql(shardId, command.requestSql(), FETCH_SIZE);
             } else if ("TRAN_CODE".equals(command.commandType())) {
                 int lookbackDays = command.lookbackDays() == null
                         ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS

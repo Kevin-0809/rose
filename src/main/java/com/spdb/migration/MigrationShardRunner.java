@@ -103,21 +103,21 @@ public class MigrationShardRunner {
         return new MigrationShardResult(accumulator.migratedRows, accumulator.skippedRows, droppedRows);
     }
 
-    public MigrationShardResult runSql(long shardId, String responseSql, int fetchSize) {
+    public MigrationShardResult runSql(long shardId, String requestSql, int fetchSize) {
         int fetchAndBatchSize = Math.max(fetchSize, 1);
-        SqlResponseAccumulator accumulator = new SqlResponseAccumulator(fetchAndBatchSize);
+        SqlRequestAccumulator accumulator = new SqlRequestAccumulator(fetchAndBatchSize);
 
-        streamSqlResponseRows(responseSql, fetchAndBatchSize, row -> {
-            accumulator.responses.add(row);
-            if (accumulator.responses.size() >= fetchAndBatchSize) {
-                accumulator.add(flushSqlResponseBatch(accumulator));
+        streamSqlRequestRows(requestSql, fetchAndBatchSize, row -> {
+            accumulator.requests.add(row);
+            if (accumulator.requests.size() >= fetchAndBatchSize) {
+                accumulator.add(flushSqlRequestBatch(accumulator));
             }
         });
-        if (!accumulator.responses.isEmpty()) {
-            accumulator.add(flushSqlResponseBatch(accumulator));
+        if (!accumulator.requests.isEmpty()) {
+            accumulator.add(flushSqlRequestBatch(accumulator));
         }
 
-        return new MigrationShardResult(accumulator.migratedRows, accumulator.skippedRows, accumulator.droppedRows);
+        return new MigrationShardResult(accumulator.migratedRows, accumulator.skippedRows, 0L);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType) {
@@ -385,21 +385,21 @@ public class MigrationShardRunner {
         });
     }
 
-    private void streamSqlResponseRows(String responseSql,
-                                       int fetchSize,
-                                       SqlResponseRowConsumer consumer) {
+    private void streamSqlRequestRows(String requestSql,
+                                      int fetchSize,
+                                      MigrationSourceRowConsumer consumer) {
         sourceJdbc.getJdbcTemplate().execute((Connection connection) -> {
             boolean originalAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try (PreparedStatement statement = connection.prepareStatement(
-                    sqlResponseQuery(responseSql),
+                    sqlRequestQuery(requestSql),
                     ResultSet.TYPE_FORWARD_ONLY,
                     ResultSet.CONCUR_READ_ONLY
             )) {
                 statement.setFetchSize(fetchSize);
                 try (ResultSet rs = statement.executeQuery()) {
                     while (rs.next()) {
-                        consumer.accept(mapSqlResponseRow(rs));
+                        consumer.accept(mapSqlRequestRow(rs));
                     }
                 }
             } finally {
@@ -409,21 +409,21 @@ public class MigrationShardRunner {
         });
     }
 
-    private String sqlResponseQuery(String responseSql) {
+    private String sqlRequestQuery(String requestSql) {
         return """
-                select resp.source_ip,
-                       resp.trans_id,
-                       resp.txn_code,
-                       resp.response_time,
-                       resp.message_type,
-                       resp.response_message,
-                       resp.return_code,
-                       resp.return_msg
+                select req.source_ip,
+                       req.trans_id,
+                       req.txn_code,
+                       req.txn_time,
+                       req.message_type,
+                       req.request_message,
+                       req.global_seq_no,
+                       req.tran_teller_no
                 from (
                 %s
-                ) resp
-                order by resp.response_time, resp.source_ip, resp.trans_id
-                """.formatted(responseSql);
+                ) req
+                order by req.txn_time, req.source_ip, req.trans_id
+                """.formatted(requestSql);
     }
 
     private long countDroppedRows(long timeFrom, long timeTo) {
@@ -467,16 +467,22 @@ public class MigrationShardRunner {
         );
     }
 
-    private SqlResponseRow mapSqlResponseRow(ResultSet rs) throws SQLException {
-        return new SqlResponseRow(
+    private MigrationSourceRow mapSqlRequestRow(ResultSet rs) throws SQLException {
+        return new MigrationSourceRow(
                 rs.getString("source_ip"),
                 rs.getString("trans_id"),
                 rs.getString("txn_code"),
-                nullableLong(rs, "response_time"),
+                nullableLong(rs, "txn_time"),
                 rs.getString("message_type"),
-                rs.getBytes("response_message"),
-                rs.getString("return_code"),
-                rs.getString("return_msg")
+                rs.getBytes("request_message"),
+                rs.getString("global_seq_no"),
+                rs.getString("tran_teller_no"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         );
     }
 
@@ -491,78 +497,53 @@ public class MigrationShardRunner {
         return batchResult == null ? new BatchResult() : batchResult;
     }
 
-    private BatchResult flushSqlResponseBatch(SqlResponseAccumulator accumulator) {
-        List<MigrationSourceRow> rows = pairSqlResponsesWithRequests(accumulator.responses);
-        accumulator.droppedRows += accumulator.responses.size() - rows.size();
-        accumulator.responses.clear();
-        return rows.isEmpty() ? new BatchResult() : flushBatch(rows);
+    private BatchResult flushSqlRequestBatch(SqlRequestAccumulator accumulator) {
+        List<MigrationSourceRow> rows = List.copyOf(accumulator.requests);
+        accumulator.requests.clear();
+        return rows.isEmpty() ? new BatchResult() : flushRequestBatch(rows);
     }
 
-    private List<MigrationSourceRow> pairSqlResponsesWithRequests(List<SqlResponseRow> responses) {
-        if (responses.isEmpty()) {
-            return List.of();
+    private BatchResult flushRequestBatch(List<MigrationSourceRow> rows) {
+        BatchResult batchResult = transactionTemplate.execute(status -> writeRequestBatch(rows));
+        return batchResult == null ? new BatchResult() : batchResult;
+    }
+
+    private BatchResult writeRequestBatch(List<MigrationSourceRow> rows) {
+        BatchResult result = new BatchResult();
+        for (int start = 0; start < rows.size(); start += MAX_TARGET_CHUNK_SIZE) {
+            int end = Math.min(start + MAX_TARGET_CHUNK_SIZE, rows.size());
+            result.add(writeRequestChunk(rows.subList(start, end)));
         }
-        Map<MigrationKey, SqlResponseRow> responseByKey = new LinkedHashMap<>();
-        for (SqlResponseRow response : responses) {
-            responseByKey.putIfAbsent(MigrationKey.from(response), response);
-        }
-        Map<MigrationKey, RequestLookupRow> requests = loadSourceRequests(new ArrayList<>(responseByKey.keySet()));
-        List<MigrationSourceRow> rows = new ArrayList<>();
-        for (Map.Entry<MigrationKey, SqlResponseRow> entry : responseByKey.entrySet()) {
-            RequestLookupRow request = requests.get(entry.getKey());
-            if (request == null) {
+        return result;
+    }
+
+    private BatchResult writeRequestChunk(List<MigrationSourceRow> rows) {
+        BatchResult result = new BatchResult();
+        Set<MigrationKey> existingKeys = loadExistingRequestKeys(rows);
+        List<MigrationSourceRow> inserts = new ArrayList<>();
+        for (MigrationSourceRow row : rows) {
+            MigrationKey key = MigrationKey.from(row);
+            if (existingKeys.contains(key)) {
+                result.skippedRows++;
                 continue;
             }
-            rows.add(toMigrationSourceRow(request, entry.getValue()));
+            inserts.add(row);
+            existingKeys.add(key);
         }
-        return rows;
+        batchInsertRequests(inserts);
+        result.migratedRows += inserts.size();
+        return result;
     }
 
-    private MigrationSourceRow toMigrationSourceRow(RequestLookupRow request, SqlResponseRow response) {
-        return new MigrationSourceRow(
-                response.sourceIp(),
-                response.transId(),
-                request.txnCode(),
-                request.txnTime(),
-                request.messageType(),
-                request.requestMessage(),
-                request.globalSeqNo(),
-                request.tranTellerNo(),
-                response.txnCode(),
-                response.responseTime(),
-                response.messageType(),
-                response.responseMessage(),
-                response.returnCode(),
-                response.returnMsg()
-        );
-    }
-
-    private Map<MigrationKey, RequestLookupRow> loadSourceRequests(List<MigrationKey> keys) {
-        if (keys.isEmpty()) {
-            return Map.of();
+    private Set<MigrationKey> loadExistingRequestKeys(List<MigrationSourceRow> rows) {
+        if (rows.isEmpty()) {
+            return Set.of();
         }
+        Set<MigrationKey> keys = new HashSet<>();
         MapSqlParameterSource params = new MapSqlParameterSource();
-        String predicate = keyPredicateForKeys(keys, params);
-        Map<MigrationKey, RequestLookupRow> requests = new LinkedHashMap<>();
-        sourceJdbc.query("""
-                select source_ip, trans_id, txn_code, txn_time, message_type,
-                       request_message, global_seq_no, tran_teller_no
-                from msg_flow_log_request
-                where %s
-                """.formatted(predicate), params, rs -> {
-            RequestLookupRow row = new RequestLookupRow(
-                    rs.getString("source_ip"),
-                    rs.getString("trans_id"),
-                    rs.getString("txn_code"),
-                    nullableLong(rs, "txn_time"),
-                    rs.getString("message_type"),
-                    rs.getBytes("request_message"),
-                    rs.getString("global_seq_no"),
-                    rs.getString("tran_teller_no")
-            );
-            requests.putIfAbsent(MigrationKey.from(row), row);
-        });
-        return requests;
+        String predicate = keyPredicate(rows, params);
+        collectExistingKeys(keys, "msg_flow_log_request", predicate, params);
+        return keys;
     }
 
     private BatchResult writeBatch(List<MigrationSourceRow> rows) {
@@ -712,11 +693,6 @@ public class MigrationShardRunner {
         void accept(MigrationSourceRow row) throws SQLException;
     }
 
-    @FunctionalInterface
-    private interface SqlResponseRowConsumer {
-        void accept(SqlResponseRow row) throws SQLException;
-    }
-
     private static class StreamingAccumulator {
         private final List<MigrationSourceRow> rows;
         private long migratedRows;
@@ -732,14 +708,13 @@ public class MigrationShardRunner {
         }
     }
 
-    private static class SqlResponseAccumulator {
-        private final List<SqlResponseRow> responses;
+    private static class SqlRequestAccumulator {
+        private final List<MigrationSourceRow> requests;
         private long migratedRows;
         private long skippedRows;
-        private long droppedRows;
 
-        private SqlResponseAccumulator(int fetchAndBatchSize) {
-            this.responses = new ArrayList<>(fetchAndBatchSize);
+        private SqlRequestAccumulator(int fetchAndBatchSize) {
+            this.requests = new ArrayList<>(fetchAndBatchSize);
         }
 
         private void add(BatchResult result) {
@@ -752,38 +727,6 @@ public class MigrationShardRunner {
         private static MigrationKey from(MigrationSourceRow row) {
             return new MigrationKey(row.sourceIp(), row.transId());
         }
-
-        private static MigrationKey from(SqlResponseRow row) {
-            return new MigrationKey(row.sourceIp(), row.transId());
-        }
-
-        private static MigrationKey from(RequestLookupRow row) {
-            return new MigrationKey(row.sourceIp(), row.transId());
-        }
-    }
-
-    private record RequestLookupRow(
-            String sourceIp,
-            String transId,
-            String txnCode,
-            Long txnTime,
-            String messageType,
-            byte[] requestMessage,
-            String globalSeqNo,
-            String tranTellerNo
-    ) {
-    }
-
-    private record SqlResponseRow(
-            String sourceIp,
-            String transId,
-            String txnCode,
-            Long responseTime,
-            String messageType,
-            byte[] responseMessage,
-            String returnCode,
-            String returnMsg
-    ) {
     }
 
     private record ServiceCodeMapping(
