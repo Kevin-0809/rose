@@ -204,31 +204,21 @@ public class MigrationShardRunner {
                 }
                 log.debug("Transaction-code migration scanning partition, shardId={}, tranCode={}, messageType={}, scanDate={}, partition={}, migratedRows={}",
                         shardId, tranCode, messageType, scanDate, tranCodePartition.requestTableRef(scanDate), migratedRows);
-                TranCodeKeyset keyset = null;
-                while (migratedRows < maxRowsPerMessageType) {
-                    if (cancelRequested.getAsBoolean()) {
-                        break;
-                    }
-                    int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
-                    List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, remainingRows, keyset);
-                    if (rows.isEmpty()) {
-                        break;
-                    }
-                    List<TranCodeRequestRow> targetRows = rows.stream()
-                            .map(row -> withTargetTxnCode(row, targetTxnCodeBySourceTxnCode.getOrDefault(
-                                    row.txnCode(),
-                                    row.txnCode()
-                            )))
-                            .toList();
-                    BatchResult result = transactionTemplate.execute(status -> writeRequestBatch(targetRows));
-                    BatchResult batchResult = result == null ? new BatchResult() : result;
-                    total.add(batchResult);
-                    migratedRows += batchResult.migratedRows;
-                    keyset = TranCodeKeyset.after(rows.get(rows.size() - 1));
-                    if (rows.size() < remainingRows) {
-                        break;
-                    }
+                int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
+                List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, remainingRows);
+                if (rows.isEmpty()) {
+                    continue;
                 }
+                List<TranCodeRequestRow> targetRows = rows.stream()
+                        .map(row -> withTargetTxnCode(row, targetTxnCodeBySourceTxnCode.getOrDefault(
+                                row.txnCode(),
+                                row.txnCode()
+                        )))
+                        .toList();
+                BatchResult result = transactionTemplate.execute(status -> writeRequestBatch(targetRows));
+                BatchResult batchResult = result == null ? new BatchResult() : result;
+                total.add(batchResult);
+                migratedRows += batchResult.migratedRows;
             }
             log.info("Transaction-code migration message type completed, shardId={}, tranCode={}, messageType={}, migratedRows={}, targetRows={}",
                     shardId, tranCode, messageType, migratedRows, maxRowsPerMessageType);
@@ -377,36 +367,21 @@ public class MigrationShardRunner {
 
     private List<TranCodeRequestRow> loadTranCodeRequestRows(LocalDate scanDate,
                                                               List<String> txnCodes,
-                                                              int limit,
-                                                              TranCodeKeyset keyset) {
+                                                              int limit) {
         if (txnCodes.isEmpty() || limit <= 0) {
             return List.of();
         }
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("txnCodes", txnCodes)
                 .addValue("limit", limit);
-        StringBuilder keysetPredicate = new StringBuilder();
-        if (keyset != null) {
-            keysetPredicate.append("""
-                      and (
-                            txn_time < :lastTxnTime
-                         or (txn_time = :lastTxnTime and source_ip < :lastSourceIp)
-                         or (txn_time = :lastTxnTime and source_ip = :lastSourceIp and trans_id < :lastTransId)
-                      )
-                    """);
-            params.addValue("lastTxnTime", keyset.txnTime())
-                    .addValue("lastSourceIp", keyset.sourceIp())
-                    .addValue("lastTransId", keyset.transId());
-        }
         return sourceJdbc.query("""
                 select source_ip, trans_id, txn_code, txn_time, message_type,
                        request_message, global_seq_no, tran_teller_no
                 from %s
                 where txn_code in (:txnCodes)
-                %s
                 order by txn_time desc, source_ip desc, trans_id desc
                 limit :limit
-                """.formatted(tranCodePartition.requestTableRef(scanDate), keysetPredicate), params,
+                """.formatted(tranCodePartition.requestTableRef(scanDate)), params,
                 (rs, rowNum) -> mapTranCodeRequestRow(rs));
     }
 
@@ -844,12 +819,6 @@ public class MigrationShardRunner {
             String globalSeqNo,
             String tranTellerNo
     ) {
-    }
-
-    private record TranCodeKeyset(long txnTime, String sourceIp, String transId) {
-        private static TranCodeKeyset after(TranCodeRequestRow row) {
-            return new TranCodeKeyset(row.txnTime(), row.sourceIp(), row.transId());
-        }
     }
 
     public record ServiceCodeMapping(

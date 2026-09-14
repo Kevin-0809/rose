@@ -37,7 +37,7 @@ class MigrationShardRunnerTest {
         String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
 
         assertThat(source).contains("order by txn_time desc, source_ip desc, trans_id desc");
-        assertThat(source).contains("txn_time < :lastTxnTime");
+        assertThat(source).doesNotContain(":lastTxnTime");
         assertThat(source).contains("tranCodePartition.requestTableRef(scanDate)");
         assertThat(source).doesNotContain("order by resp.source_ip, resp.trans_id");
     }
@@ -410,7 +410,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void tranCodeMigrationKeysetPaginatesWhenLeadingCandidatesAreAlreadyMigrated() {
+    void tranCodeMigrationTakesSingleBatchPerPartitionWithoutKeysetBackfill() {
         insertServiceCode("TRANKEY", "ABC.DEF");
         long txnTime = dayStartMillis(0) + 5_000L;
         insertRequest(sourceJdbc, "10.0.13.1", "K1", "ABCDEF&bzjson", txnTime);
@@ -420,9 +420,9 @@ class MigrationShardRunnerTest {
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(22L, "TRANKEY", 1);
 
-        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(result.migratedRows()).isZero();
         assertThat(result.skippedRows()).isEqualTo(1L);
-        assertThat(targetExists("msg_flow_log_request", "10.0.13.1", "K2")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.13.1", "K2")).isFalse();
     }
 
     @Test
