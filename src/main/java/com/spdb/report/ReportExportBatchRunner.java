@@ -636,10 +636,10 @@ public class ReportExportBatchRunner {
                     cast(:service as varchar(200)) as service_code, cast(:origCode as varchar(64)) as orig_error_code,
                     cast(:destCode as varchar(64)) as dest_error_code, cast(:tranCode as varchar(32)) as tran_code,
                     cast(:tranName as varchar(200)) as tran_name, cast(:module as varchar(100)) as module_name,
-                    cast(:origDesc as varchar(500)) as orig_error_desc, cast(:destDesc as varchar(500)) as dest_error_desc,
+                    cast(:origDesc as text) as orig_error_desc, cast(:destDesc as text) as dest_error_desc,
                     cast(:owner as varchar(100)) as transaction_owner, cast(:seq as varchar(64)) as tran_seq_no,
                     '交易级' as problem_level, cast(:date as varchar(8)) as registration_date,
-                    cast(:field as varchar(500)) as field_name, cast(:description as varchar(2000)) as problem_description,
+                    cast(:field as text) as field_name, cast(:description as text) as problem_description,
                     cast(:issueKey as varchar(600)) as issue_key, cast(:affectedCount as bigint) as affected_tran_count
                 ) as source
                 on (target.source_batch_id = source.source_batch_id
@@ -708,8 +708,8 @@ public class ReportExportBatchRunner {
                     cast(:mappingStatus as varchar(32)) as mapping_status, cast(:orig as text) as orig_field_value,
                     cast(:dest as text) as dest_field_value, cast(:owner as varchar(100)) as transaction_owner,
                     cast(:seq as varchar(64)) as tran_seq_no, '字段级' as problem_level,
-                    cast(:date as varchar(8)) as registration_date, cast(:field as varchar(500)) as field_name,
-                    cast(:description as varchar(2000)) as problem_description, cast(:issueKey as varchar(600)) as issue_key,
+                    cast(:date as varchar(8)) as registration_date, cast(:field as text) as field_name,
+                    cast(:description as text) as problem_description, cast(:issueKey as varchar(600)) as issue_key,
                     cast(:affectedCount as bigint) as affected_tran_count
                 ) as source
                 on (target.source_batch_id = source.source_batch_id
