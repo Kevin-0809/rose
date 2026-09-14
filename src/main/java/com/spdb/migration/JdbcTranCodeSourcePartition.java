@@ -16,16 +16,16 @@ import java.util.Optional;
  *
  * <p>openGauss 的分区信息保存在 {@code pg_partition}（{@code parttype = 'p'}），
  * 不使用 PostgreSQL 的 {@code pg_inherits}/{@code pg_class} 子表继承模型，
- * 因此分区判断改为查询 {@code pg_partition}。源表固定使用 adp schema。
+ * 因此分区判断改为查询 {@code pg_partition}。源表 schema 由连接的当前有效 schema
+ * （{@code current_schema()}，通常等于登录用户名）实时解析，不再写死。
  */
 final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
     private static final Logger log = LoggerFactory.getLogger(JdbcTranCodeSourcePartition.class);
-    private static final String SCHEMA_NAME = "adp";
     private static final String REQUEST_TABLE = "msg_flow_log_request";
-    private static final String QUALIFIED_REQUEST_TABLE = SCHEMA_NAME + "." + REQUEST_TABLE;
     private static final DateTimeFormatter PARTITION_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final NamedParameterJdbcTemplate sourceJdbc;
+    private volatile String schemaName;
 
     JdbcTranCodeSourcePartition(NamedParameterJdbcTemplate sourceJdbc) {
         this.sourceJdbc = sourceJdbc;
@@ -33,7 +33,7 @@ final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
 
     @Override
     public String requestTableRef(LocalDate date) {
-        return QUALIFIED_REQUEST_TABLE + " partition(" + partitionName(date) + ")";
+        return schemaName() + "." + REQUEST_TABLE + " partition(" + partitionName(date) + ")";
     }
 
     @Override
@@ -48,7 +48,7 @@ final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
                   and part.relname = :partitionName
                   and part.parttype = 'p'
                 """, new MapSqlParameterSource()
-                .addValue("schemaName", SCHEMA_NAME)
+                .addValue("schemaName", schemaName())
                 .addValue("tableName", REQUEST_TABLE)
                 .addValue("partitionName", partitionName(date)), Long.class);
         return count != null && count > 0L;
@@ -66,7 +66,7 @@ final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
                   and part.parttype = 'p'
                   and part.relname ~ '^p[0-9]{8}$'
                 """, new MapSqlParameterSource()
-                .addValue("schemaName", SCHEMA_NAME)
+                .addValue("schemaName", schemaName())
                 .addValue("tableName", REQUEST_TABLE), String.class);
         LocalDate earliest = partitionNames.stream()
                 .map(JdbcTranCodeSourcePartition::parsePartitionDate)
@@ -74,9 +74,22 @@ final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
                 .min(Comparator.naturalOrder())
                 .orElse(null);
         if (earliest == null) {
-            log.warn("No dated partition found for table {}, full-lookback migration may be skipped", QUALIFIED_REQUEST_TABLE);
+            log.warn("No dated partition found for table {}, full-lookback migration may be skipped",
+                    schemaName() + "." + REQUEST_TABLE);
         }
         return earliest;
+    }
+
+    private String schemaName() {
+        String resolved = schemaName;
+        if (resolved == null) {
+            resolved = sourceJdbc.queryForObject("select current_schema()", new MapSqlParameterSource(), String.class);
+            if (resolved == null || resolved.isBlank()) {
+                resolved = sourceJdbc.queryForObject("select current_user", new MapSqlParameterSource(), String.class);
+            }
+            schemaName = resolved;
+        }
+        return resolved;
     }
 
     static String partitionName(LocalDate date) {
