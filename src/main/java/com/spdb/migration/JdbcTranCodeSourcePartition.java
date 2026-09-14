@@ -12,11 +12,17 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于系统表的分区访问实现。分区名规则为 p{业务日期 yyyyMMdd}。
+ * 基于 openGauss 分区系统表的分区访问实现。分区名规则为 p{业务日期 yyyyMMdd}。
+ *
+ * <p>openGauss 的分区信息保存在 {@code pg_partition}（{@code parttype = 'p'}），
+ * 不使用 PostgreSQL 的 {@code pg_inherits}/{@code pg_class} 子表继承模型，
+ * 因此分区判断改为查询 {@code pg_partition}。源表固定使用 tss schema。
  */
 final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
     private static final Logger log = LoggerFactory.getLogger(JdbcTranCodeSourcePartition.class);
+    private static final String SCHEMA_NAME = "tss";
     private static final String REQUEST_TABLE = "msg_flow_log_request";
+    private static final String QUALIFIED_REQUEST_TABLE = SCHEMA_NAME + "." + REQUEST_TABLE;
     private static final DateTimeFormatter PARTITION_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final NamedParameterJdbcTemplate sourceJdbc;
@@ -27,21 +33,22 @@ final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
 
     @Override
     public String requestTableRef(LocalDate date) {
-        return REQUEST_TABLE + " partition(" + partitionName(date) + ")";
+        return QUALIFIED_REQUEST_TABLE + " partition(" + partitionName(date) + ")";
     }
 
     @Override
     public boolean exists(LocalDate date) {
         Long count = sourceJdbc.queryForObject("""
                 select count(*)
-                from pg_inherits
-                join pg_class child on child.oid = pg_inherits.inhrelid
-                join pg_class parent on parent.oid = pg_inherits.inhparent
-                where parent.relname = :tableName
-                  and pg_table_is_visible(parent.oid)
-                  and child.relname = :partitionName
-                  and child.relkind in ('r', 'p')
+                from pg_partition part
+                join pg_class parent on parent.oid = part.parentid
+                join pg_namespace ns on ns.oid = parent.relnamespace
+                where ns.nspname = :schemaName
+                  and parent.relname = :tableName
+                  and part.relname = :partitionName
+                  and part.parttype = 'p'
                 """, new MapSqlParameterSource()
+                .addValue("schemaName", SCHEMA_NAME)
                 .addValue("tableName", REQUEST_TABLE)
                 .addValue("partitionName", partitionName(date)), Long.class);
         return count != null && count > 0L;
@@ -50,22 +57,24 @@ final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
     @Override
     public LocalDate earliestPartitionDate() {
         List<String> partitionNames = sourceJdbc.queryForList("""
-                select child.relname
-                from pg_inherits
-                join pg_class child on child.oid = pg_inherits.inhrelid
-                join pg_class parent on parent.oid = pg_inherits.inhparent
-                where parent.relname = :tableName
-                  and pg_table_is_visible(parent.oid)
-                  and child.relkind in ('r', 'p')
-                  and child.relname ~ '^p[0-9]{8}$'
-                """, new MapSqlParameterSource("tableName", REQUEST_TABLE), String.class);
+                select part.relname
+                from pg_partition part
+                join pg_class parent on parent.oid = part.parentid
+                join pg_namespace ns on ns.oid = parent.relnamespace
+                where ns.nspname = :schemaName
+                  and parent.relname = :tableName
+                  and part.parttype = 'p'
+                  and part.relname ~ '^p[0-9]{8}$'
+                """, new MapSqlParameterSource()
+                .addValue("schemaName", SCHEMA_NAME)
+                .addValue("tableName", REQUEST_TABLE), String.class);
         LocalDate earliest = partitionNames.stream()
                 .map(JdbcTranCodeSourcePartition::parsePartitionDate)
                 .flatMap(Optional::stream)
                 .min(Comparator.naturalOrder())
                 .orElse(null);
         if (earliest == null) {
-            log.warn("No dated partition found for table {}, full-lookback migration may be skipped", REQUEST_TABLE);
+            log.warn("No dated partition found for table {}, full-lookback migration may be skipped", QUALIFIED_REQUEST_TABLE);
         }
         return earliest;
     }

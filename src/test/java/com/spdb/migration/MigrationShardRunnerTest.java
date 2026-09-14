@@ -430,7 +430,18 @@ class MigrationShardRunnerTest {
         JdbcTranCodeSourcePartition partition = new JdbcTranCodeSourcePartition(new NamedParameterJdbcTemplate(sourceJdbc));
 
         assertThat(partition.requestTableRef(LocalDate.of(2026, 9, 11)))
-                .isEqualTo("msg_flow_log_request partition(p20260911)");
+                .isEqualTo("tss.msg_flow_log_request partition(p20260911)");
+    }
+
+    @Test
+    void partitionLookupUsesOpenGaussPartitionCatalog() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/spdb/migration/JdbcTranCodeSourcePartition.java"));
+
+        assertThat(source).contains("pg_partition");
+        assertThat(source).contains("part.parttype = 'p'");
+        assertThat(source).contains("SCHEMA_NAME = \"tss\"");
+        assertThat(source).contains("REQUEST_TABLE = \"msg_flow_log_request\"");
+        assertThat(source).doesNotContain("from pg_inherits");
     }
 
     @Test
