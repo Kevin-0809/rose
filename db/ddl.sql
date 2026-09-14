@@ -58,6 +58,7 @@ create table if not exists ana_replay_volume_check_batch (
     sample_size integer not null default 100,
     lookback_days integer not null default 30,
     base_date date,
+    collection_type varchar(16),
     catalog_count bigint not null default 0,
     has_volume_count bigint not null default 0,
     no_volume_count bigint not null default 0,
@@ -74,12 +75,20 @@ create table if not exists ana_replay_volume_check_batch (
     constraint ck_ana_replay_volume_check_batch_sample_size
         check (sample_size > 0),
     constraint ck_ana_replay_volume_check_batch_lookback_days
-        check (lookback_days > 0)
+        check (lookback_days > 0),
+    constraint ck_ana_replay_volume_check_batch_collection_type
+        check (collection_type in ('QUERY','ACCOUNT'))
 );
 
 alter table ana_replay_volume_check_batch add column if not exists has_volume_count bigint not null default 0;
 
 alter table ana_replay_volume_check_batch add column if not exists base_date date;
+
+alter table ana_replay_volume_check_batch add column if not exists collection_type varchar(16);
+
+alter table ana_replay_volume_check_batch drop constraint if exists ck_ana_replay_volume_check_batch_collection_type;
+alter table ana_replay_volume_check_batch add constraint ck_ana_replay_volume_check_batch_collection_type
+check (collection_type in ('QUERY','ACCOUNT'));
 
 create table if not exists ana_replay_volume_check_detail (
     detail_id bigserial primary key,
@@ -139,6 +148,7 @@ create table if not exists ana_replay_volume_cleanup_detail (
 );
 
 comment on table ana_replay_volume_check_batch is '回放交易量检查批次';
+comment on column ana_replay_volume_check_batch.collection_type is '确认执行时写入交易码迁移的采集方式，QUERY为查询、ACCOUNT为账务';
 comment on table ana_replay_volume_check_detail is '回放交易量检查交易明细';
 comment on table ana_replay_volume_cleanup_detail is '回放交易量清理明细';
 

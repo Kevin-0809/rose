@@ -1,5 +1,6 @@
 package com.spdb.web;
 
+import com.spdb.migration.MigrationTranCodeCommandForm;
 import com.spdb.replay.ReplayVolumeCheckBatch;
 import com.spdb.replay.ReplayVolumeCheckResult;
 import com.spdb.replay.ReplayVolumeCheckService;
@@ -52,6 +53,7 @@ public class ReplayVolumeCheckController {
         model.addAttribute("sampleSize", current == null ? 100 : current.sampleSize());
         model.addAttribute("lookbackDays", current == null ? 30 : current.lookbackDays());
         model.addAttribute("baseDate", current == null ? null : current.baseDate());
+        model.addAttribute("collectionType", current == null ? null : current.collectionType());
         if (current != null) {
             model.addAttribute("noVolumeDetails", service.details(current.checkId(), com.spdb.replay.ReplayVolumeCheckDetailStatus.NO_VOLUME, PageRequestParams.of(noVolumePage, noVolumeSize == null ? size : noVolumeSize)));
             model.addAttribute("noMappingDetails", service.details(current.checkId(), com.spdb.replay.ReplayVolumeCheckDetailStatus.NO_MAPPING, PageRequestParams.of(noMappingPage, noMappingSize == null ? size : noMappingSize)));
@@ -62,21 +64,23 @@ public class ReplayVolumeCheckController {
     }
 
     public String start(int sampleSize, Model model) {
-        return start(sampleSize, 30, null, model);
+        return start(sampleSize, 30, null, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY, model);
     }
 
     @PostMapping("/config/replay-volume-check")
     public String start(@RequestParam(required = false, defaultValue = "100") int sampleSize,
                         @RequestParam(required = false, defaultValue = "30") int lookbackDays,
-                        @RequestParam(required = false) String baseDate, Model model) {
+                        @RequestParam(required = false) String baseDate,
+                        @RequestParam(required = false) String collectionType, Model model) {
         try {
-            ReplayVolumeCheckResult result = service.check(sampleSize, lookbackDays, parseBaseDate(baseDate));
+            ReplayVolumeCheckResult result = service.check(sampleSize, lookbackDays, parseBaseDate(baseDate), parseCollectionType(collectionType));
             return "redirect:/config/replay-volume-check/" + result.batch().checkId();
         } catch (IllegalArgumentException ex) {
             model.addAttribute("active", "replay-volume-check");
             model.addAttribute("sampleSize", sampleSize);
             model.addAttribute("lookbackDays", lookbackDays);
             model.addAttribute("baseDate", baseDate);
+            model.addAttribute("collectionType", collectionType);
             model.addAttribute("error", ex.getMessage());
             model.addAttribute("history", PagedResult.of(List.of(), 0, PageRequestParams.of(null, null)));
             return "config/replay-volume-check";
@@ -92,6 +96,14 @@ public class ReplayVolumeCheckController {
         } catch (DateTimeParseException ex) {
             throw new IllegalArgumentException("日期格式不正确，请使用 yyyy-MM-dd");
         }
+    }
+
+    static String parseCollectionType(String value) {
+        String collectionType = ReplayVolumeCheckService.normalizeCollectionType(value);
+        if (collectionType == null) {
+            throw new IllegalArgumentException("请选择采集方式（查询或账务）");
+        }
+        return collectionType;
     }
 
     @PostMapping("/config/replay-volume-check/{checkId}/confirm")

@@ -162,6 +162,10 @@ class DatabaseScriptLayoutTest {
         assertThat(ddl).contains("check (status in ('checking','waiting_confirm','executing','completed','failed'))");
         assertThat(ddl).contains("sample_size integer not null default 100");
         assertThat(ddl).contains("lookback_days integer not null default 30");
+        assertThat(ddl).contains("collection_type varchar(16)");
+        assertThat(ddl).contains("add column if not exists collection_type varchar(16)");
+        assertThat(ddl).contains("ck_ana_replay_volume_check_batch_collection_type");
+        assertThat(ddl).contains("check (collection_type in ('query','account'))");
         List.of("catalog_snapshot_time", "catalog_count", "no_volume_count", "cleanup_service_count",
                 "cleanup_row_count", "actual_cleanup_row_count", "migration_command_id", "created_time",
                 "started_time", "ended_time", "error_message").forEach(column -> assertThat(ddl).contains(column));

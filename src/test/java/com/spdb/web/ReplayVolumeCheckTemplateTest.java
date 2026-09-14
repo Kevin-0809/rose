@@ -15,6 +15,9 @@ class ReplayVolumeCheckTemplateTest {
                 .contains("确认执行").contains("history.rows()").contains("fragments/layout :: pager");
         assertThat(html).contains("createdTime").contains("cleanupServiceCount").contains("详情链接").contains("pendingCleanupRowCount");
         assertThat(html).contains("name=\"baseDate\"");
+        assertThat(html).contains("name=\"collectionType\"");
+        assertThat(html).contains("id=\"collection-type\"");
+        assertThat(html).contains("账务").contains("查询");
         assertThat(html).contains("id=\"base-date\"");
         assertThat(html).contains("placeholder=\"yyyy-MM-dd\"");
         assertThat(html).contains("base-date-error");
@@ -28,6 +31,7 @@ class ReplayVolumeCheckTemplateTest {
         String html = new String(getClass().getResourceAsStream("/templates/config/replay-volume-check-detail.html").readAllBytes(), StandardCharsets.UTF_8);
         assertThat(html).contains("无交易量").contains("待清理").contains("未映射")
                 .contains("migrationCommandId").contains("tranName").contains("mappedTranCodes")
-                .contains("actualCleanupRowCount").contains("fragments/layout :: pager");
+                .contains("actualCleanupRowCount").contains("fragments/layout :: pager")
+                .contains("collectionType");
     }
 }
