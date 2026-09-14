@@ -431,7 +431,7 @@ public class MigrationCommandService {
             throw new IllegalArgumentException("迁移指令参数不能为空");
         }
         if (form.timeFrom() < 0 || form.timeTo() <= form.timeFrom()) {
-            throw new IllegalArgumentException("响应时间终点必须大于响应时间起点");
+            throw new IllegalArgumentException("请求时间终点必须大于请求时间起点");
         }
         if (form.windowSeconds() <= 0) {
             throw new IllegalArgumentException("分片窗口大小必须大于0");

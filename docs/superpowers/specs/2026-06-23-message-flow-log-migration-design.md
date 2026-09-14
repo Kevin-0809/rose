@@ -1,5 +1,7 @@
 # 报文日志跨库迁移设计
 
+> 更新记录：2026-09-14 起，三种迁移（`TIME_RANGE`、`SQL`、`TRAN_CODE`）统一为**只迁移请求报文**，不再读取或写入 `msg_flow_log_response`，也不再做请求/响应配对检查。`TIME_RANGE` 改为按 `msg_flow_log_request.txn_time` 落在 `[time_from, time_to)` 直接流式读取并写入请求表，`dropped`（丢弃）始终为 0。下文的“配对迁移/单边丢弃/响应时间范围”描述为最初方案，当前实现以本更新记录为准。
+
 ## 背景与目标
 
 本项目主数据源（tss schema，PostgreSQL/openGauss）需要从同实例的 bxds schema 迁移

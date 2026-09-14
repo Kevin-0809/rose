@@ -68,7 +68,7 @@
       <table class="command-table">
         <thead>
         <tr>
-          <th>序号</th><th th:if="${progress.commandType == 'TRAN_CODE'}">交易码</th><th th:unless="${progress.commandType == 'TRAN_CODE'}">响应时间窗口</th><th>状态</th><th>迁移笔数</th>
+          <th>序号</th><th th:if="${progress.commandType == 'TRAN_CODE'}">交易码</th><th th:unless="${progress.commandType == 'TRAN_CODE'}">请求时间窗口</th><th>状态</th><th>迁移笔数</th>
           <th>丢弃数</th><th>跳过数</th><th th:if="${progress.commandType == 'TRAN_CODE'}">实际回溯天数</th><th>尝试次数</th><th>耗时(秒)</th><th>错误信息</th>
         </tr>
         </thead>

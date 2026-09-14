@@ -45,11 +45,14 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void migrationQueriesFilterResponsesBeforeJoiningRequests() throws Exception {
+    void timeRangeQueryReadsRequestsOnlyWithinTxnTimeWindow() throws Exception {
         String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
 
-        assertThat(source).contains("with filtered_response as (");
-        assertThat(source).contains("from filtered_response resp");
+        assertThat(source).doesNotContain("msg_flow_log_response");
+        assertThat(source).doesNotContain("filtered_response");
+        assertThat(source).contains("from msg_flow_log_request");
+        assertThat(source).contains("where txn_time >= ?");
+        assertThat(source).contains("and txn_time < ?");
     }
 
     @Test
@@ -75,7 +78,7 @@ class MigrationShardRunnerTest {
         String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
 
         assertThat(source).contains("addValue(\"requestMessage\", row.requestMessage(), Types.BINARY)");
-        assertThat(source).contains("addValue(\"responseMessage\", row.responseMessage(), Types.BINARY)");
+        assertThat(source).doesNotContain("responseMessage");
         assertThat(source).doesNotContain("BeanPropertySqlParameterSource");
     }
 
@@ -107,7 +110,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void pairedRowMigrates() {
+    void requestRowWithinTimeWindowMigratesRequestOnly() {
         insertSourcePair("10.0.0.1", "TXN-1", "PAY001", 1000L, 1010L);
 
         MigrationShardResult result = runner.run(4L, 1000L, 2000L, 100);
@@ -127,27 +130,18 @@ class MigrationShardRunnerTest {
         assertThat((byte[]) request.get("request_message"))
                 .containsExactly("request-TXN-1".getBytes(StandardCharsets.UTF_8));
 
-        Map<String, Object> response = targetJdbc.queryForMap("""
-                select *
-                from msg_flow_log_response
-                where source_ip = '10.0.0.1'
-                  and trans_id = 'TXN-1'
-                """);
-        assertThat(response.get("txn_code")).isEqualTo("PAY001");
-        assertThat(response.get("response_time")).isEqualTo(1010L);
-        assertThat((byte[]) response.get("response_message"))
-                .containsExactly("response-TXN-1".getBytes(StandardCharsets.UTF_8));
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test
-    void sourceResponseOnlyRowIsDropped() {
+    void sourceResponseOnlyRowIsIgnored() {
         insertSourceResponseOnly("10.0.0.2", "TXN-DROPPED", "PAY002", 1500L);
 
         MigrationShardResult result = runner.run(4L, 1000L, 2000L, 100);
 
         assertThat(result.migratedRows()).isZero();
         assertThat(result.skippedRows()).isZero();
-        assertThat(result.droppedRows()).isEqualTo(1L);
+        assertThat(result.droppedRows()).isZero();
         assertThat(targetCount("msg_flow_log_request")).isZero();
         assertThat(targetCount("msg_flow_log_response")).isZero();
     }
@@ -537,9 +531,9 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void responseTimeWindowIsHalfOpen() {
-        insertSourcePair("10.0.0.7", "TXN-AT-FROM", "PAY007", 900L, 1000L);
-        insertSourcePair("10.0.0.8", "TXN-AT-TO", "PAY008", 900L, 2000L);
+    void requestTimeWindowIsHalfOpen() {
+        insertRequest(sourceJdbc, "10.0.0.7", "TXN-AT-FROM", "PAY007", 1000L);
+        insertRequest(sourceJdbc, "10.0.0.8", "TXN-AT-TO", "PAY008", 2000L);
 
         MigrationShardResult result = runner.run(4L, 1000L, 2000L, 100);
 
@@ -547,13 +541,12 @@ class MigrationShardRunnerTest {
         assertThat(result.skippedRows()).isZero();
         assertThat(result.droppedRows()).isZero();
         assertThat(targetExists("msg_flow_log_request", "10.0.0.7", "TXN-AT-FROM")).isTrue();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.7", "TXN-AT-FROM")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.0.8", "TXN-AT-TO")).isFalse();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.8", "TXN-AT-TO")).isFalse();
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test
-    void pairedRowIsSkippedIfTargetRequestAlreadyContainsKey() {
+    void requestRowIsSkippedIfTargetRequestAlreadyContainsKey() {
         insertSourcePair("10.0.0.3", "TXN-SKIP-REQUEST", "PAY003", 1000L, 1100L);
         insertTargetRequest("10.0.0.3", "TXN-SKIP-REQUEST", "EXISTING", 900L);
 
@@ -567,43 +560,43 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void pairedRowIsSkippedIfTargetResponseAlreadyContainsKey() {
+    void requestRowMigratesEvenIfTargetResponseAlreadyContainsKey() {
         insertSourcePair("10.0.0.4", "TXN-SKIP-RESPONSE", "PAY004", 1000L, 1100L);
         insertTargetResponse("10.0.0.4", "TXN-SKIP-RESPONSE", "EXISTING", 900L);
 
         MigrationShardResult result = runner.run(4L, 1000L, 2000L, 100);
 
-        assertThat(result.migratedRows()).isZero();
-        assertThat(result.skippedRows()).isEqualTo(1L);
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(result.skippedRows()).isZero();
         assertThat(result.droppedRows()).isZero();
-        assertThat(targetCount("msg_flow_log_request")).isZero();
+        assertThat(targetExists("msg_flow_log_request", "10.0.0.4", "TXN-SKIP-RESPONSE")).isTrue();
         assertThat(targetCount("msg_flow_log_response")).isEqualTo(1L);
     }
 
     @Test
     void duplicateSourceKeyInSameBatchIsSkippedAfterFirstInsert() {
-        insertSourcePair("10.0.0.13", "TXN-DUPLICATE", "PAY013", 1000L, 1100L);
-        insertResponse(sourceJdbc, "10.0.0.13", "TXN-DUPLICATE", "PAY013", 1101L, "000000");
+        insertRequest(sourceJdbc, "10.0.0.13", "TXN-DUPLICATE", "PAY013", 1000L);
+        insertRequest(sourceJdbc, "10.0.0.13", "TXN-DUPLICATE", "PAY013", 1100L);
 
         MigrationShardResult result = runner.run(4L, 1000L, 2000L, 10);
 
         assertThat(result.migratedRows()).isEqualTo(1L);
         assertThat(result.skippedRows()).isEqualTo(1L);
         assertThat(targetCount("msg_flow_log_request")).isEqualTo(1L);
-        assertThat(targetCount("msg_flow_log_response")).isEqualTo(1L);
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test
     void duplicateSourceKeyAcrossFlushesIsSkippedAfterFirstCommit() {
-        insertSourcePair("10.0.0.14", "TXN-DUPLICATE-FLUSH", "PAY014", 1000L, 1100L);
-        insertResponse(sourceJdbc, "10.0.0.14", "TXN-DUPLICATE-FLUSH", "PAY014", 1101L, "000000");
+        insertRequest(sourceJdbc, "10.0.0.14", "TXN-DUPLICATE-FLUSH", "PAY014", 1000L);
+        insertRequest(sourceJdbc, "10.0.0.14", "TXN-DUPLICATE-FLUSH", "PAY014", 1100L);
 
         MigrationShardResult result = runner.run(4L, 1000L, 2000L, 1);
 
         assertThat(result.migratedRows()).isEqualTo(1L);
         assertThat(result.skippedRows()).isEqualTo(1L);
         assertThat(targetCount("msg_flow_log_request")).isEqualTo(1L);
-        assertThat(targetCount("msg_flow_log_response")).isEqualTo(1L);
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test
@@ -665,21 +658,19 @@ class MigrationShardRunnerTest {
 
         runner.run(4L, 1000L, 2000L, 100);
 
-        assertThat(boundValues).contains(
-                "request-TXN-BLOB".getBytes(StandardCharsets.UTF_8),
-                "response-TXN-BLOB".getBytes(StandardCharsets.UTF_8)
-        );
+        assertThat(boundValues).contains("request-TXN-BLOB".getBytes(StandardCharsets.UTF_8));
+        assertThat(boundValues).doesNotContain("response-TXN-BLOB".getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
     void committedBatchesAreRetriedAsSkipsWhenLaterBatchFails() {
-        insertSourcePair("10.0.0.10", "TXN-BATCH-1A", "PAY010", 1000L, 1100L);
-        insertSourcePair("10.0.0.11", "TXN-BATCH-1B", "PAY011", 1001L, 1101L);
-        insertSourcePair("10.0.0.12", "TXN-BATCH-2-FAIL", "PAY012", 1002L, 1102L);
-        targetJdbc.execute("alter table msg_flow_log_response add constraint fail_late_response_code check (return_code <> 'FAIL')");
+        insertRequest(sourceJdbc, "10.0.0.10", "TXN-BATCH-1A", "PAY010", 1000L);
+        insertRequest(sourceJdbc, "10.0.0.11", "TXN-BATCH-1B", "PAY011", 1001L);
+        insertRequest(sourceJdbc, "10.0.0.12", "TXN-BATCH-2-FAIL", "PAY012", 1002L);
+        targetJdbc.execute("alter table msg_flow_log_request add constraint fail_late_request_seq check (global_seq_no <> 'FAIL')");
         sourceJdbc.update("""
-                update msg_flow_log_response
-                set return_code = 'FAIL'
+                update msg_flow_log_request
+                set global_seq_no = 'FAIL'
                 where source_ip = ?
                   and trans_id = ?
                 """, "10.0.0.12", "TXN-BATCH-2-FAIL");
@@ -688,15 +679,12 @@ class MigrationShardRunnerTest {
                 .isInstanceOf(DataAccessException.class);
 
         assertThat(targetExists("msg_flow_log_request", "10.0.0.10", "TXN-BATCH-1A")).isTrue();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.10", "TXN-BATCH-1A")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.0.11", "TXN-BATCH-1B")).isTrue();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.11", "TXN-BATCH-1B")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.0.12", "TXN-BATCH-2-FAIL")).isFalse();
-        assertThat(targetExists("msg_flow_log_response", "10.0.0.12", "TXN-BATCH-2-FAIL")).isFalse();
 
         sourceJdbc.update("""
-                update msg_flow_log_response
-                set return_code = '000000'
+                update msg_flow_log_request
+                set global_seq_no = 'GLOBAL-TXN-BATCH-2-FAIL'
                 where source_ip = ?
                   and trans_id = ?
                 """, "10.0.0.12", "TXN-BATCH-2-FAIL");
@@ -705,17 +693,17 @@ class MigrationShardRunnerTest {
         assertThat(retryResult.migratedRows()).isEqualTo(1L);
         assertThat(retryResult.skippedRows()).isEqualTo(2L);
         assertThat(targetCount("msg_flow_log_request")).isEqualTo(3L);
-        assertThat(targetCount("msg_flow_log_response")).isEqualTo(3L);
+        assertThat(targetCount("msg_flow_log_response")).isZero();
     }
 
     @Test
     void targetWritesRollbackWholeBatchWhenInsertFails() {
-        insertSourcePair("10.0.0.5", "TXN-OK-IN-FAILED-BATCH", "PAY005", 1000L, 1100L);
-        insertSourcePair("10.0.0.6", "TXN-FAIL-IN-BATCH", "PAY006", 1001L, 1101L);
-        targetJdbc.execute("alter table msg_flow_log_response add constraint fail_response_code check (return_code <> 'FAIL')");
+        insertRequest(sourceJdbc, "10.0.0.5", "TXN-OK-IN-FAILED-BATCH", "PAY005", 1000L);
+        insertRequest(sourceJdbc, "10.0.0.6", "TXN-FAIL-IN-BATCH", "PAY006", 1001L);
+        targetJdbc.execute("alter table msg_flow_log_request add constraint fail_request_seq check (global_seq_no <> 'FAIL')");
         sourceJdbc.update("""
-                update msg_flow_log_response
-                set return_code = 'FAIL'
+                update msg_flow_log_request
+                set global_seq_no = 'FAIL'
                 where source_ip = ?
                   and trans_id = ?
                 """, "10.0.0.6", "TXN-FAIL-IN-BATCH");
