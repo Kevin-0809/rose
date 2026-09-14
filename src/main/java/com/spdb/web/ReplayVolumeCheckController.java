@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Controller
@@ -67,9 +68,9 @@ public class ReplayVolumeCheckController {
     @PostMapping("/config/replay-volume-check")
     public String start(@RequestParam(required = false, defaultValue = "100") int sampleSize,
                         @RequestParam(required = false, defaultValue = "30") int lookbackDays,
-                        @RequestParam(required = false) LocalDate baseDate, Model model) {
+                        @RequestParam(required = false) String baseDate, Model model) {
         try {
-            ReplayVolumeCheckResult result = service.check(sampleSize, lookbackDays, baseDate);
+            ReplayVolumeCheckResult result = service.check(sampleSize, lookbackDays, parseBaseDate(baseDate));
             return "redirect:/config/replay-volume-check/" + result.batch().checkId();
         } catch (IllegalArgumentException ex) {
             model.addAttribute("active", "replay-volume-check");
@@ -79,6 +80,17 @@ public class ReplayVolumeCheckController {
             model.addAttribute("error", ex.getMessage());
             model.addAttribute("history", PagedResult.of(List.of(), 0, PageRequestParams.of(null, null)));
             return "config/replay-volume-check";
+        }
+    }
+
+    static LocalDate parseBaseDate(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("请填写铺底日期");
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException("日期格式不正确，请使用 yyyy-MM-dd");
         }
     }
 

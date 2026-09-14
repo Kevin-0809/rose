@@ -57,10 +57,33 @@ class ReplayVolumeCheckControllerTest {
         var controller = new ReplayVolumeCheckController(service);
         var model = new ExtendedModelMap();
 
-        assertThat(controller.start(100, 30, baseDate, model)).isEqualTo("redirect:/config/replay-volume-check/7");
+        assertThat(controller.start(100, 30, "2026-09-01", model)).isEqualTo("redirect:/config/replay-volume-check/7");
         assertThat(controller.confirm(7L)).isEqualTo("redirect:/config/replay-volume-check/7");
         verify(service).check(100, 30, baseDate);
         verify(service).confirm(7L);
+    }
+
+    @Test
+    void startRejectsInvalidBaseDateWithoutCallingService() {
+        ReplayVolumeCheckService service = mock(ReplayVolumeCheckService.class);
+        var controller = new ReplayVolumeCheckController(service);
+        var model = new ExtendedModelMap();
+
+        assertThat(controller.start(100, 30, "2026-13-40", model)).isEqualTo("config/replay-volume-check");
+        assertThat(model.getAttribute("error")).isEqualTo("日期格式不正确，请使用 yyyy-MM-dd");
+        assertThat(model.getAttribute("baseDate")).isEqualTo("2026-13-40");
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void startRejectsBlankBaseDateWithoutCallingService() {
+        ReplayVolumeCheckService service = mock(ReplayVolumeCheckService.class);
+        var controller = new ReplayVolumeCheckController(service);
+        var model = new ExtendedModelMap();
+
+        assertThat(controller.start(100, 30, "  ", model)).isEqualTo("config/replay-volume-check");
+        assertThat(model.getAttribute("error")).isEqualTo("请填写铺底日期");
+        verifyNoInteractions(service);
     }
 
     @Test

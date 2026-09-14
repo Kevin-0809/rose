@@ -15,6 +15,12 @@ class ReplayVolumeCheckTemplateTest {
                 .contains("确认执行").contains("history.rows()").contains("fragments/layout :: pager");
         assertThat(html).contains("createdTime").contains("cleanupServiceCount").contains("详情链接").contains("pendingCleanupRowCount");
         assertThat(html).contains("name=\"baseDate\"");
+        assertThat(html).contains("id=\"base-date\"");
+        assertThat(html).contains("placeholder=\"yyyy-MM-dd\"");
+        assertThat(html).contains("base-date-error");
+        assertThat(html).contains("isValidDate");
+        assertThat(html).contains("请填写铺底日期");
+        assertThat(html).doesNotContain("type=\"date\"");
     }
 
     @Test
