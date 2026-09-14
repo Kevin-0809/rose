@@ -1663,12 +1663,12 @@ tbody tr:hover {
 .replay-check-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; margin-bottom: 26px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
 .replay-check-header h1 { font-size: 30px; }
 .replay-check-header p { margin: 8px 0 0; max-width: 560px; }
-.replay-check-start { width: min(360px, 100%); }
-.replay-check-start label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 12px; }
-.replay-check-start-row { display: flex; gap: 8px; }
-.replay-check-start-row input { min-width: 0; flex: 1; }
-.replay-check-start-row > div { min-width: 0; flex: 1; }
-.replay-check-start-row > div input { width: 100%; }
+.replay-check-start { width: min(780px, 100%); min-width: 0; }
+.replay-check-start label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.replay-check-start-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; align-items: end; }
+.replay-check-start-row > div { min-width: 0; }
+.replay-check-start-row input, .replay-check-start-row select { width: 100%; min-width: 0; }
+.replay-check-start-row button { justify-self: start; min-width: 96px; }
 .field-hint { display: block; margin-top: 7px; color: var(--text-muted); font-size: 12px; }
 .replay-check-start .field-error { display: block; margin-top: 7px; color: var(--red); font-size: 12px; line-height: 1.5; }
 .replay-check-start .field-error:empty { display: none; }
@@ -1725,7 +1725,7 @@ tbody tr:hover {
 .replay-explanation p { margin: 0; color: var(--text-body); font-size: 12px; line-height: 1.65; }
 .replay-explanation span { display: block; margin-top: 7px; color: var(--yellow); font-size: 12px; }
 .replay-explanation code { color: var(--primary-hover); font-family: Consolas, monospace; }
-@media (max-width: 900px) { .replay-check-header { align-items: flex-start; flex-direction: column; gap: 18px; } .replay-check-start { width: 100%; max-width: 460px; } .replay-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } .replay-summary-metrics > div:nth-child(3) { border-right: 0; } .replay-summary-metrics > div:nth-child(-n+3) { border-bottom: 1px solid var(--border); } }
+@media (max-width: 900px) { .replay-check-header { align-items: flex-start; flex-direction: column; gap: 18px; } .replay-check-start { width: 100%; max-width: none; } .replay-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } .replay-summary-metrics > div:nth-child(3) { border-right: 0; } .replay-summary-metrics > div:nth-child(-n+3) { border-bottom: 1px solid var(--border); } }
 @media (max-width: 560px) { .replay-check-card { padding: 16px 14px; } .replay-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .replay-summary-metrics > div { border-right: 0; border-bottom: 1px solid var(--border); } .replay-summary-metrics > div:nth-child(odd) { border-right: 1px solid var(--border); } .replay-summary-metrics > div:nth-last-child(-n+2) { border-bottom: 0; } .replay-card-heading, .replay-summary-footer { align-items: flex-start; flex-direction: column; } }
 .report-stage-list{display:grid;gap:8px;margin:16px 0 0;padding:0;list-style:none;max-width:420px}.report-stage-list li{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;color:var(--text-muted)}.report-stage-icon{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;border:1px solid #bac5d0;border-radius:50%;font-size:12px;font-weight:700}.report-stage-name{font-size:13px}.report-stage-state{font-size:12px}.report-stage-list .is-completed{color:#23734b}.report-stage-list .is-completed .report-stage-icon{background:#23734b;border-color:#23734b;color:#fff}.report-stage-list .is-running{color:#176ea6;font-weight:700}.report-stage-list .is-running .report-stage-icon{background:#176ea6;border-color:#176ea6;color:#fff}.report-stage-list .is-failed{color:#b4443c;font-weight:700}.report-stage-list .is-failed .report-stage-icon{background:#b4443c;border-color:#b4443c;color:#fff}.report-stage-list .is-not-executed{color:#7b8794}.report-stage-list .is-pending{color:#7b8794}
 
