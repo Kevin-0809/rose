@@ -2,7 +2,7 @@
 
 ## 背景
 
-交易码迁移功能需要通过用户输入的 `tran_code` 找到对应 ESF 服务码，再派生 response 表中的 `txn_code`。现有仓库中 `ana_tran_catalog` 已维护 `tran_code` 与不带报文类型的 `service_code`，而 `tss_tran_comp.dest_trcd` 记录了实际出现过的带报文类型服务码，例如：
+交易码迁移功能需要通过用户输入的 `tran_code` 找到对应 ESF 服务码，再派生请求表中的 `txn_code`。现有仓库中 `ana_tran_catalog` 已维护 `tran_code` 与不带报文类型的 `service_code`，而 `tss_tran_comp.dest_trcd` 记录了实际出现过的带报文类型服务码，例如：
 
 ```text
 S030030014FcyCollCrspBnkLkgQry&bzjson

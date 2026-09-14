@@ -114,7 +114,7 @@ public class MigrationCommandService {
                         status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, remark, created_by
                     ) values (
                         :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
-                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :remark, '绯荤粺'
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :remark, '系统'
                     )
                     """ : """
                     insert into ana_migration_command (source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism, status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by)

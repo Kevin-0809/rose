@@ -76,7 +76,7 @@ class MigrationTranCodeLookbackDaysTest {
                 "select parallelism from ana_migration_command where command_id = ?", Integer.class, commandId
         )).isEqualTo(16);
         assertThat(MigrationTranCodeCommandForm.empty().sampleSize()).isEqualTo(100);
-        assertThat(MigrationTranCodeCommandForm.empty().lookbackDays()).isEqualTo(5);
+        assertThat(MigrationTranCodeCommandForm.empty().lookbackDays()).isEqualTo(30);
         assertThat(MigrationTranCodeCommandForm.empty().parallelism()).isEqualTo(16);
     }
 

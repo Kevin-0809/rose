@@ -14,6 +14,7 @@ class ReplayVolumeCheckTemplateTest {
                 .contains("有交易量").contains("待清理").contains("未映射").contains("状态").contains("migrationCommandId")
                 .contains("确认执行").contains("history.rows()").contains("fragments/layout :: pager");
         assertThat(html).contains("createdTime").contains("cleanupServiceCount").contains("详情链接").contains("pendingCleanupRowCount");
+        assertThat(html).contains("name=\"baseDate\"");
     }
 
     @Test
