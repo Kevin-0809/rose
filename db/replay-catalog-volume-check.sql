@@ -22,6 +22,7 @@ create table if not exists ana_replay_volume_check_batch (
     catalog_snapshot_time timestamp not null,
     sample_size integer not null default 100,
     lookback_days integer not null default 30,
+    base_date date,
     catalog_count bigint not null default 0,
     has_volume_count bigint not null default 0,
     no_volume_count bigint not null default 0,
@@ -43,6 +44,9 @@ create table if not exists ana_replay_volume_check_batch (
 
 alter table ana_replay_volume_check_batch
     add column if not exists has_volume_count bigint not null default 0;
+
+alter table ana_replay_volume_check_batch
+    add column if not exists base_date date;
 
 create table if not exists ana_replay_volume_check_detail (
     detail_id bigserial primary key,
