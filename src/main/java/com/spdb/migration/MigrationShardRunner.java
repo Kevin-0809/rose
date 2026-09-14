@@ -181,7 +181,6 @@ public class MigrationShardRunner {
 
         BatchResult total = new BatchResult();
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
-        long currentTime = clock.instant().toEpochMilli();
         int effectiveLookbackDays = effectiveLookbackDays(lookbackDays, currentDate);
         Map<LocalDate, Boolean> partitionExists = new LinkedHashMap<>();
         log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
@@ -203,17 +202,15 @@ public class MigrationShardRunner {
                             shardId, tranCode, messageType, scanDate);
                     continue;
                 }
-                long dayFrom = scanDate.atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                long dayTo = scanDate.equals(currentDate) ? currentTime : scanDate.plusDays(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                log.debug("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, scanDate={}, timeFrom={}, timeTo={}, migratedRows={}",
-                        shardId, tranCode, messageType, scanDate, dayFrom, dayTo, migratedRows);
+                log.debug("Transaction-code migration scanning partition, shardId={}, tranCode={}, messageType={}, scanDate={}, partition={}, migratedRows={}",
+                        shardId, tranCode, messageType, scanDate, tranCodePartition.requestTableRef(scanDate), migratedRows);
                 TranCodeKeyset keyset = null;
                 while (migratedRows < maxRowsPerMessageType) {
                     if (cancelRequested.getAsBoolean()) {
                         break;
                     }
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
-                    List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, dayFrom, dayTo, remainingRows, keyset);
+                    List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, remainingRows, keyset);
                     if (rows.isEmpty()) {
                         break;
                     }
@@ -380,8 +377,6 @@ public class MigrationShardRunner {
 
     private List<TranCodeRequestRow> loadTranCodeRequestRows(LocalDate scanDate,
                                                               List<String> txnCodes,
-                                                              long timeFrom,
-                                                              long timeTo,
                                                               int limit,
                                                               TranCodeKeyset keyset) {
         if (txnCodes.isEmpty() || limit <= 0) {
@@ -389,8 +384,6 @@ public class MigrationShardRunner {
         }
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("txnCodes", txnCodes)
-                .addValue("timeFrom", timeFrom)
-                .addValue("timeTo", timeTo)
                 .addValue("limit", limit);
         StringBuilder keysetPredicate = new StringBuilder();
         if (keyset != null) {
@@ -410,8 +403,6 @@ public class MigrationShardRunner {
                        request_message, global_seq_no, tran_teller_no
                 from %s
                 where txn_code in (:txnCodes)
-                  and txn_time >= :timeFrom
-                  and txn_time < :timeTo
                 %s
                 order by txn_time desc, source_ip desc, trans_id desc
                 limit :limit

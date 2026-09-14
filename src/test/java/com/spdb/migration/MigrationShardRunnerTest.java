@@ -60,11 +60,12 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void tranCodeQueryFiltersRequestByTxnTimeWindow() throws Exception {
+    void tranCodeQueryReadsPartitionWithoutTxnTimeWindow() throws Exception {
         String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
 
-        assertThat(source).contains("and txn_time >= :timeFrom");
-        assertThat(source).contains("and txn_time < :timeTo");
+        assertThat(source).doesNotContain("txn_time >= :timeFrom");
+        assertThat(source).doesNotContain("txn_time < :timeTo");
+        assertThat(source).contains("tranCodePartition.requestTableRef(scanDate)");
     }
 
     @Test
@@ -341,7 +342,7 @@ class MigrationShardRunnerTest {
     }
 
     @Test
-    void tranCodeMigrationLimitsCurrentDayToTheCurrentTime() {
+    void tranCodeMigrationReadsWholeCurrentDayPartition() {
         insertServiceCode("TRAN005", "ABC.DEF");
         long today = dayStartMillis(0);
         insertRequest(sourceJdbc, "10.0.7.1", "FUTURE", "ABCDEF&bzjson", today + 13 * 60 * 60 * 1000L);
@@ -351,8 +352,8 @@ class MigrationShardRunnerTest {
 
         assertThat(result.migratedRows()).isEqualTo(1L);
         assertThat(result.actualLookbackDays()).isEqualTo(30);
-        assertThat(targetExists("msg_flow_log_request", "10.0.7.1", "FUTURE")).isFalse();
-        assertThat(targetExists("msg_flow_log_request", "10.0.7.2", "CURRENT")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.7.1", "FUTURE")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.7.2", "CURRENT")).isFalse();
     }
 
     @Test
@@ -742,7 +743,9 @@ class MigrationShardRunnerTest {
 
         @Override
         public String requestTableRef(LocalDate date) {
-            return "msg_flow_log_request";
+            long dayFrom = date.atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+            long dayTo = date.plusDays(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
+            return "(select * from msg_flow_log_request where txn_time >= " + dayFrom + " and txn_time < " + dayTo + ") part";
         }
 
         @Override
