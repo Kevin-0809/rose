@@ -16,11 +16,11 @@ import java.util.Optional;
  *
  * <p>openGauss 的分区信息保存在 {@code pg_partition}（{@code parttype = 'p'}），
  * 不使用 PostgreSQL 的 {@code pg_inherits}/{@code pg_class} 子表继承模型，
- * 因此分区判断改为查询 {@code pg_partition}。源表固定使用 tss schema。
+ * 因此分区判断改为查询 {@code pg_partition}。源表固定使用 adp schema。
  */
 final class JdbcTranCodeSourcePartition implements TranCodeSourcePartition {
     private static final Logger log = LoggerFactory.getLogger(JdbcTranCodeSourcePartition.class);
-    private static final String SCHEMA_NAME = "tss";
+    private static final String SCHEMA_NAME = "adp";
     private static final String REQUEST_TABLE = "msg_flow_log_request";
     private static final String QUALIFIED_REQUEST_TABLE = SCHEMA_NAME + "." + REQUEST_TABLE;
     private static final DateTimeFormatter PARTITION_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd");

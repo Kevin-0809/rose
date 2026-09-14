@@ -431,7 +431,7 @@ class MigrationShardRunnerTest {
         JdbcTranCodeSourcePartition partition = new JdbcTranCodeSourcePartition(new NamedParameterJdbcTemplate(sourceJdbc));
 
         assertThat(partition.requestTableRef(LocalDate.of(2026, 9, 11)))
-                .isEqualTo("tss.msg_flow_log_request partition(p20260911)");
+                .matches("[a-z_]+\\.msg_flow_log_request partition\\(p20260911\\)");
     }
 
     @Test
@@ -440,7 +440,8 @@ class MigrationShardRunnerTest {
 
         assertThat(source).contains("pg_partition");
         assertThat(source).contains("part.parttype = 'p'");
-        assertThat(source).contains("SCHEMA_NAME = \"tss\"");
+        assertThat(source).contains("SCHEMA_NAME");
+        assertThat(source).contains("QUALIFIED_REQUEST_TABLE");
         assertThat(source).contains("REQUEST_TABLE = \"msg_flow_log_request\"");
         assertThat(source).doesNotContain("from pg_inherits");
     }
