@@ -4,6 +4,7 @@ import com.spdb.replay.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ExtendedModelMap;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -14,7 +15,7 @@ import static org.mockito.Mockito.*;
 
 class ReplayVolumeCheckControllerTest {
     private final ReplayVolumeCheckBatch batch = new ReplayVolumeCheckBatch(
-            7L, ReplayVolumeCheckBatchStatus.WAITING_CONFIRM, LocalDateTime.now(), 100, 30,
+            7L, ReplayVolumeCheckBatchStatus.WAITING_CONFIRM, LocalDateTime.now(), 100, 30, LocalDate.of(2026, 9, 1),
             2, 1, 1, 3, 0, null, LocalDateTime.now(), null, LocalDateTime.now(), null);
 
     @Test
@@ -50,14 +51,15 @@ class ReplayVolumeCheckControllerTest {
     @Test
     void startAndConfirmRedirectToDetail() {
         ReplayVolumeCheckService service = mock(ReplayVolumeCheckService.class);
-        when(service.check(100)).thenReturn(new ReplayVolumeCheckResult(batch, List.of(), List.of()));
+        LocalDate baseDate = LocalDate.of(2026, 9, 1);
+        when(service.check(100, 30, baseDate)).thenReturn(new ReplayVolumeCheckResult(batch, List.of(), List.of()));
         when(service.confirm(7L)).thenReturn(new ReplayVolumeCheckResult(batch, List.of(), List.of()));
         var controller = new ReplayVolumeCheckController(service);
         var model = new ExtendedModelMap();
 
-        assertThat(controller.start(100, model)).isEqualTo("redirect:/config/replay-volume-check/7");
+        assertThat(controller.start(100, 30, baseDate, model)).isEqualTo("redirect:/config/replay-volume-check/7");
         assertThat(controller.confirm(7L)).isEqualTo("redirect:/config/replay-volume-check/7");
-        verify(service).check(100);
+        verify(service).check(100, 30, baseDate);
         verify(service).confirm(7L);
     }
 

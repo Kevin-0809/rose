@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 @Component
 public class MigrationShardRunner {
@@ -145,12 +146,20 @@ public class MigrationShardRunner {
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
                                              int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, nearbyCollection, baseDate, null);
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, nearbyCollection, baseDate, null, () -> false);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
                                              int lookbackDays, boolean nearbyCollection, LocalDate baseDate,
                                              List<ServiceCodeMapping> preloadedMappings) {
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, nearbyCollection, baseDate,
+                preloadedMappings, () -> false);
+    }
+
+    public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
+                                             int lookbackDays, boolean nearbyCollection, LocalDate baseDate,
+                                             List<ServiceCodeMapping> preloadedMappings,
+                                             BooleanSupplier cancelRequested) {
         if (maxRowsPerMessageType <= 0) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=sample size is not positive",
                     shardId, tranCode);
@@ -174,26 +183,35 @@ public class MigrationShardRunner {
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
         long currentTime = clock.instant().toEpochMilli();
         int effectiveLookbackDays = effectiveLookbackDays(lookbackDays, currentDate);
+        Map<LocalDate, Boolean> partitionExists = new LinkedHashMap<>();
         log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
                 shardId, tranCode, serviceMappings.size(), maxRowsPerMessageType, lookbackDays, currentDate);
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
+            if (cancelRequested.getAsBoolean()) {
+                break;
+            }
             Map<String, String> targetTxnCodeBySourceTxnCode = txnCodeMappings(serviceMappings, messageType);
             List<String> sourceTxnCodes = new ArrayList<>(targetTxnCodeBySourceTxnCode.keySet());
             long migratedRows = 0L;
             List<LocalDate> scanDates = scanDates(currentDate, effectiveLookbackDays, nearbyCollection, baseDate);
             for (LocalDate scanDate : scanDates) {
-                if (migratedRows >= maxRowsPerMessageType) break;
-                if (!tranCodePartition.exists(scanDate)) {
-                    log.info("Transaction-code migration skipped missing partition, shardId={}, tranCode={}, messageType={}, scanDate={}",
+                if (migratedRows >= maxRowsPerMessageType || cancelRequested.getAsBoolean()) {
+                    break;
+                }
+                if (!partitionExists.computeIfAbsent(scanDate, tranCodePartition::exists)) {
+                    log.debug("Transaction-code migration skipped missing partition, shardId={}, tranCode={}, messageType={}, scanDate={}",
                             shardId, tranCode, messageType, scanDate);
                     continue;
                 }
                 long dayFrom = scanDate.atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
                 long dayTo = scanDate.equals(currentDate) ? currentTime : scanDate.plusDays(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli();
-                log.info("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, scanDate={}, timeFrom={}, timeTo={}, migratedRows={}",
+                log.debug("Transaction-code migration scanning window, shardId={}, tranCode={}, messageType={}, scanDate={}, timeFrom={}, timeTo={}, migratedRows={}",
                         shardId, tranCode, messageType, scanDate, dayFrom, dayTo, migratedRows);
                 TranCodeKeyset keyset = null;
                 while (migratedRows < maxRowsPerMessageType) {
+                    if (cancelRequested.getAsBoolean()) {
+                        break;
+                    }
                     int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
                     List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, dayFrom, dayTo, remainingRows, keyset);
                     if (rows.isEmpty()) {
@@ -218,8 +236,8 @@ public class MigrationShardRunner {
             log.info("Transaction-code migration message type completed, shardId={}, tranCode={}, messageType={}, migratedRows={}, targetRows={}",
                     shardId, tranCode, messageType, migratedRows, maxRowsPerMessageType);
         }
-        log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}",
-                shardId, tranCode, total.migratedRows, total.skippedRows);
+        log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}, cancelled={}",
+                shardId, tranCode, total.migratedRows, total.skippedRows, cancelRequested.getAsBoolean());
         return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, effectiveLookbackDays);
     }
 
@@ -261,10 +279,17 @@ public class MigrationShardRunner {
             mappedByCode.computeIfAbsent(tranCode, key -> new ArrayList<>())
                     .add(new ServiceCodeMapping(rs.getString("lookup_service_code"), rs.getString("target_service_code")));
         });
-        List<String> fallbackCodes = distinctCodes.stream()
-                .filter(code -> mappedByCode.getOrDefault(code, List.of()).isEmpty())
-                .toList();
+        Map<String, List<ServiceCodeMapping>> result = new LinkedHashMap<>();
+        List<String> fallbackCodes = new ArrayList<>();
+        for (String code : distinctCodes) {
+            List<ServiceCodeMapping> effective = distinctServiceMappings(mappedByCode.getOrDefault(code, List.of()));
+            result.put(code, effective);
+            if (effective.isEmpty()) {
+                fallbackCodes.add(code);
+            }
+        }
         if (!fallbackCodes.isEmpty()) {
+            Map<String, List<ServiceCodeMapping>> onlineByCode = new LinkedHashMap<>();
             targetJdbc.query("""
                     select tran_code, esf_service_code
                     from tp_online_service_in
@@ -272,13 +297,15 @@ public class MigrationShardRunner {
                     """, new MapSqlParameterSource("tranCodes", fallbackCodes), rs -> {
                 String tranCode = rs.getString("tran_code");
                 String serviceCode = rs.getString("esf_service_code");
-                mappedByCode.computeIfAbsent(tranCode, key -> new ArrayList<>())
+                onlineByCode.computeIfAbsent(tranCode, key -> new ArrayList<>())
                         .add(new ServiceCodeMapping(serviceCode, serviceCode));
             });
-        }
-        Map<String, List<ServiceCodeMapping>> result = new LinkedHashMap<>();
-        for (String code : distinctCodes) {
-            result.put(code, distinctServiceMappings(mappedByCode.getOrDefault(code, List.of())));
+            for (String code : fallbackCodes) {
+                List<ServiceCodeMapping> effective = distinctServiceMappings(onlineByCode.getOrDefault(code, List.of()));
+                if (!effective.isEmpty()) {
+                    result.put(code, effective);
+                }
+            }
         }
         return result;
     }

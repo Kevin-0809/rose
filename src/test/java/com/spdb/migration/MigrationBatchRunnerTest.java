@@ -190,7 +190,15 @@ class MigrationBatchRunnerTest {
         Long shardId = shardIds(commandId).get(0);
         when(shardRunner.loadTranCodeMappings(org.mockito.ArgumentMatchers.anyList()))
                 .thenReturn(java.util.Map.of());
-        when(shardRunner.runTranCode(shardId, "TRAN001", 3, 5, false, null, null))
+        when(shardRunner.runTranCode(
+                org.mockito.ArgumentMatchers.eq(shardId),
+                org.mockito.ArgumentMatchers.eq("TRAN001"),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq(5),
+                org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any(java.util.function.BooleanSupplier.class)))
                 .thenReturn(new MigrationShardResult(0L, 0L, 0L, 5));
 
         batchRunner.run(commandId);
@@ -200,9 +208,43 @@ class MigrationBatchRunnerTest {
         assertThat(progress.completedShardCount()).isEqualTo(1L);
         assertThat(progress.shards()).extracting(MigrationShardRow::status).containsExactly("SKIPPED");
         assertThat(progress.shards()).extracting(MigrationShardRow::actualLookbackDays).containsExactly(5);
-        verify(shardRunner).runTranCode(shardId, "TRAN001", 3, 5, false, null, null);
+        verify(shardRunner).runTranCode(
+                org.mockito.ArgumentMatchers.eq(shardId),
+                org.mockito.ArgumentMatchers.eq("TRAN001"),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq(5),
+                org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any(java.util.function.BooleanSupplier.class));
         verify(shardRunner, never()).run(anyLong(), anyLong(), anyLong(), anyInt());
         verify(shardRunner, never()).runSql(anyLong(), org.mockito.ArgumentMatchers.anyString(), anyInt());
+    }
+
+    @Test
+    void runTranCodeCommandFallsBackWhenCommandLevelMappingLoadFails() {
+        long commandId = commandService.createTranCodeCommand(new MigrationTranCodeCommandForm(
+                "TRAN001", 3, 5, 1, "mapping fallback"
+        ));
+        Long shardId = shardIds(commandId).get(0);
+        when(shardRunner.loadTranCodeMappings(org.mockito.ArgumentMatchers.anyList()))
+                .thenThrow(new IllegalStateException("mapping unavailable"));
+        when(shardRunner.runTranCode(
+                org.mockito.ArgumentMatchers.eq(shardId),
+                org.mockito.ArgumentMatchers.eq("TRAN001"),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq(5),
+                org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any(java.util.function.BooleanSupplier.class)))
+                .thenReturn(new MigrationShardResult(2L, 0L, 0L, 5));
+
+        batchRunner.run(commandId);
+
+        MigrationProgressRow progress = commandService.progress(commandId);
+        assertThat(progress.status()).isEqualTo("COMPLETED");
+        assertThat(progress.migratedRows()).isEqualTo(2L);
     }
 
     @Test

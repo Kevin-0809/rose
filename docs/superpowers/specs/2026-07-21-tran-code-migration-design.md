@@ -18,7 +18,7 @@
 - 就近模式（`nearbyCollection=true` 且填写铺底日期 `B`）：先按 `B, B-1, …, B-(L-1)` 向前（更早）取满 L 天，再从 `B+1` 向后扫到当前日 `T`。该顺序同时修正了旧实现“铺底日 + 前 L 天”比回溯天数多一天的问题。
 - 全量回溯（`lookbackDays = ALL_LOOKBACK_DAYS = 10000`）：实际回溯天数 = 请求表最早分区日期到当前日 + 1。最早分区通过系统表读取，不做 `min()` 全表聚合；取不到分区时返回 0。
 - 源表按自然日分区，分区名规则为 `p{yyyyMMdd}`，`txn_time = D` 的记录落在 `partition(p{D})`。分区不存在时跳过该日，不计入迁移、跳过或丢弃。
-- 服务码来源：优先查询 `ana_tran_code_service_mapping`（`"528_service_code"` → `ccbs_service_code`）；该交易码在映射表中没有记录时，回退到 `tp_online_service_in.esf_service_code`（lookup 与 target 同为该服务码）。
+- 服务码来源：优先查询 `ana_tran_code_service_mapping`（`"528_service_code"` → `ccbs_service_code`）；该交易码在该表中没有有效映射时，回退到 `tp_online_service_in.esf_service_code`（lookup 与 target 同为该服务码）。
 - 服务码去除点号后分别拼接 `&bzjson`、`&sop`、`&soap` 作为源库 `txn_code`；命中后写入目标库的 `txn_code` 使用目标服务码。
 - 每个自然日内按 `txn_time` 倒序（由近到远）取数；每类报文最多迁移 N 条。
 - 目标库已存在相同 `(source_ip, trans_id)` 的记录计为跳过，不占用 N，继续向后取更早记录。

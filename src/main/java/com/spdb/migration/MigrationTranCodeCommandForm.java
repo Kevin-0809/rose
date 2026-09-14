@@ -2,7 +2,7 @@ package com.spdb.migration;
 import java.time.LocalDate;
 import java.util.Objects;
 public class MigrationTranCodeCommandForm {
- public static final int DEFAULT_LOOKBACK_DAYS=5, DEFAULT_SAMPLE_SIZE=100, DEFAULT_PARALLELISM=16, ALL_LOOKBACK_DAYS=10_000;
+ public static final int DEFAULT_LOOKBACK_DAYS=30, DEFAULT_SAMPLE_SIZE=100, DEFAULT_PARALLELISM=16, ALL_LOOKBACK_DAYS=10_000;
  private String tranCodes, remark; private int sampleSize, lookbackDays, parallelism; private boolean nearbyCollection; private LocalDate baseDate;
  public MigrationTranCodeCommandForm(String tranCodes,int sampleSize,int lookbackDays,int parallelism,String remark){this.tranCodes=tranCodes;this.sampleSize=sampleSize;this.lookbackDays=lookbackDays;this.parallelism=parallelism;this.remark=remark;}
  public static MigrationTranCodeCommandForm empty(){return new MigrationTranCodeCommandForm("",DEFAULT_SAMPLE_SIZE,DEFAULT_LOOKBACK_DAYS,DEFAULT_PARALLELISM,"");}

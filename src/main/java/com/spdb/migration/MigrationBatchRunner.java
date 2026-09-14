@@ -82,7 +82,13 @@ public class MigrationBatchRunner {
                 tranCodes.add(tranCode);
             }
         }
-        return shardRunner.loadTranCodeMappings(tranCodes);
+        try {
+            return shardRunner.loadTranCodeMappings(tranCodes);
+        } catch (RuntimeException ex) {
+            log.warn("Command-level service code mapping load failed, falling back to per-shard load, commandId={}",
+                    command.commandId(), ex);
+            return Map.of();
+        }
     }
 
     private void joinAnyCompletedAtCapacity(List<CompletableFuture<Void>> inFlight, int parallelism) {
@@ -123,9 +129,13 @@ public class MigrationBatchRunner {
                 int lookbackDays = command.lookbackDays() == null
                         ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS
                         : command.lookbackDays();
+                int sampleSize = command.sampleSize() == null
+                        ? MigrationTranCodeCommandForm.DEFAULT_SAMPLE_SIZE
+                        : command.sampleSize();
                 List<MigrationShardRunner.ServiceCodeMapping> serviceMappings = tranCodeMappings.get(shard.tranCode());
-                result = shardRunner.runTranCode(shardId, shard.tranCode(), command.sampleSize(), lookbackDays,
-                        Boolean.TRUE.equals(command.nearbyCollection()), command.baseDate(), serviceMappings);
+                result = shardRunner.runTranCode(shardId, shard.tranCode(), sampleSize, lookbackDays,
+                        Boolean.TRUE.equals(command.nearbyCollection()), command.baseDate(), serviceMappings,
+                        () -> commandService.isCancelRequested(commandId));
             } else {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);
             }

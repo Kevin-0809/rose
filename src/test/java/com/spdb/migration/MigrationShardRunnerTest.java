@@ -197,7 +197,7 @@ class MigrationShardRunnerTest {
         assertThat(result.migratedRows()).isEqualTo(6L);
         assertThat(result.skippedRows()).isZero();
         assertThat(result.droppedRows()).isZero();
-        assertThat(result.actualLookbackDays()).isEqualTo(5);
+        assertThat(result.actualLookbackDays()).isEqualTo(30);
         assertThat(targetExists("msg_flow_log_request", "10.0.1.1", "BZ-TODAY")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.1.2", "BZ-YESTERDAY-NEW")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.1.3", "BZ-YESTERDAY-OLD")).isFalse();
@@ -258,7 +258,7 @@ class MigrationShardRunnerTest {
         MigrationShardResult requestOnly = runnerWithFixedClock().runTranCode(12L, "TRAN002", 3);
 
         assertThat(missingService).isEqualTo(new MigrationShardResult(0L, 0L, 0L, 0));
-        assertThat(requestOnly).isEqualTo(new MigrationShardResult(1L, 0L, 0L, 5));
+        assertThat(requestOnly).isEqualTo(new MigrationShardResult(1L, 0L, 0L, 30));
         assertThat(targetCount("msg_flow_log_request")).isEqualTo(1L);
         assertThat(targetCount("msg_flow_log_response")).isZero();
     }
@@ -277,7 +277,7 @@ class MigrationShardRunnerTest {
 
         assertThat(result.migratedRows()).isEqualTo(2L);
         assertThat(result.skippedRows()).isEqualTo(1L);
-        assertThat(result.actualLookbackDays()).isEqualTo(5);
+        assertThat(result.actualLookbackDays()).isEqualTo(30);
         assertThat(targetExists("msg_flow_log_request", "10.0.5.2", "BZ-TODAY-NEW")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.5.3", "BZ-YESTERDAY-NEW")).isTrue();
     }
@@ -290,7 +290,7 @@ class MigrationShardRunnerTest {
         insertRequest(sourceJdbc, "10.0.6.2", "SOP-HISTORICAL", "ABCDEF&sop", latestDay + 2_000L);
         insertRequest(sourceJdbc, "10.0.6.3", "SOAP-HISTORICAL", "ABCDEF&soap", latestDay + 4_000L);
 
-        MigrationShardResult result = runnerWithFixedClock().runTranCode(14L, "TRAN004", 1);
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(14L, "TRAN004", 1, 5);
 
         assertThat(result).isEqualTo(new MigrationShardResult(0L, 0L, 0L, 5));
         assertThat(targetCount("msg_flow_log_request")).isZero();
@@ -327,7 +327,7 @@ class MigrationShardRunnerTest {
         MigrationShardResult result = runnerWithFixedClock().runTranCode(15L, "TRAN005", 1);
 
         assertThat(result.migratedRows()).isEqualTo(1L);
-        assertThat(result.actualLookbackDays()).isEqualTo(5);
+        assertThat(result.actualLookbackDays()).isEqualTo(30);
         assertThat(targetExists("msg_flow_log_request", "10.0.7.1", "FUTURE")).isFalse();
         assertThat(targetExists("msg_flow_log_request", "10.0.7.2", "CURRENT")).isTrue();
     }
@@ -408,6 +408,30 @@ class MigrationShardRunnerTest {
                         MigrationShardRunner.ServiceCodeMapping::targetServiceCode)
                 .containsExactly("CATALOGSVC", "CATALOGSVC");
         assertThat(mappings.get("UNKNOWN")).isEmpty();
+    }
+
+    @Test
+    void mappingWithBlankServiceCodeFallsBackToOnlineServiceCode() {
+        insertServiceMapping("TRANBLANK", "   ", "   ");
+        insertServiceCode("TRANBLANK", "CATALOG.SVC");
+        insertRequest(sourceJdbc, "10.0.15.1", "BZ-BLANK", "CATALOGSVC&bzjson", dayStartMillis(0));
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(24L, "TRANBLANK", 1);
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetTxnCode("msg_flow_log_request", "10.0.15.1", "BZ-BLANK")).isEqualTo("CATALOGSVC&bzjson");
+    }
+
+    @Test
+    void tranCodeMigrationStopsWhenCancellationRequested() {
+        insertServiceCode("TRANCANCEL", "ABC.DEF");
+        insertRequest(sourceJdbc, "10.0.16.1", "CANCEL", "ABCDEF&bzjson", dayStartMillis(0) + 1_000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                25L, "TRANCANCEL", 5, 5, false, null, null, () -> true);
+
+        assertThat(result.migratedRows()).isZero();
+        assertThat(targetCount("msg_flow_log_request")).isZero();
     }
 
     @Test
