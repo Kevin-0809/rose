@@ -205,7 +205,8 @@ public class MigrationShardRunner {
                 log.debug("Transaction-code migration scanning partition, shardId={}, tranCode={}, messageType={}, scanDate={}, partition={}, migratedRows={}",
                         shardId, tranCode, messageType, scanDate, tranCodePartition.requestTableRef(scanDate), migratedRows);
                 int remainingRows = (int) (maxRowsPerMessageType - migratedRows);
-                List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, remainingRows);
+                boolean ascending = baseDate != null && scanDate.isAfter(baseDate);
+                List<TranCodeRequestRow> rows = loadTranCodeRequestRows(scanDate, sourceTxnCodes, remainingRows, ascending);
                 if (rows.isEmpty()) {
                     continue;
                 }
@@ -367,21 +368,23 @@ public class MigrationShardRunner {
 
     private List<TranCodeRequestRow> loadTranCodeRequestRows(LocalDate scanDate,
                                                               List<String> txnCodes,
-                                                              int limit) {
+                                                              int limit,
+                                                              boolean ascending) {
         if (txnCodes.isEmpty() || limit <= 0) {
             return List.of();
         }
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("txnCodes", txnCodes)
                 .addValue("limit", limit);
+        String orderDirection = ascending ? "asc" : "desc";
         return sourceJdbc.query("""
                 select source_ip, trans_id, txn_code, txn_time, message_type,
                        request_message, global_seq_no, tran_teller_no
                 from %s
                 where txn_code in (:txnCodes)
-                order by txn_time desc, source_ip desc, trans_id desc
+                order by txn_time %s
                 limit :limit
-                """.formatted(tranCodePartition.requestTableRef(scanDate)), params,
+                """.formatted(tranCodePartition.requestTableRef(scanDate), orderDirection), params,
                 (rs, rowNum) -> mapTranCodeRequestRow(rs));
     }
 

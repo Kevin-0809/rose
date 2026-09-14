@@ -36,7 +36,9 @@ class MigrationShardRunnerTest {
     void tranCodeQueryStreamsRequestsFromPartitionOrderedByTxnTime() throws Exception {
         String source = Files.readString(Path.of("src/main/java/com/spdb/migration/MigrationShardRunner.java"));
 
-        assertThat(source).contains("order by txn_time desc, source_ip desc, trans_id desc");
+        assertThat(source).contains("order by txn_time %s");
+        assertThat(source).contains("ascending ? \"asc\" : \"desc\"");
+        assertThat(source).doesNotContain("source_ip desc");
         assertThat(source).doesNotContain(":lastTxnTime");
         assertThat(source).contains("tranCodePartition.requestTableRef(scanDate)");
         assertThat(source).doesNotContain("order by resp.source_ip, resp.trans_id");
@@ -393,6 +395,36 @@ class MigrationShardRunnerTest {
     }
 
     @Test
+    void tranCodeMigrationOrdersPastDatesByTxnTimeDescending() {
+        insertServiceCode("TRANPAST", "ABC.DEF");
+        insertRequest(sourceJdbc, "10.0.20.1", "PAST-EARLY", "ABCDEF&bzjson", dayStartMillis(-3) + 9 * 60 * 60 * 1000L);
+        insertRequest(sourceJdbc, "10.0.20.2", "PAST-LATE", "ABCDEF&bzjson", dayStartMillis(-3) + 11 * 60 * 60 * 1000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                30L, "TRANPAST", 1, 5, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY,
+                LocalDate.now(FIXED_CLOCK).minusDays(2));
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetExists("msg_flow_log_request", "10.0.20.2", "PAST-LATE")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.20.1", "PAST-EARLY")).isFalse();
+    }
+
+    @Test
+    void tranCodeMigrationOrdersFutureDatesByTxnTimeAscending() {
+        insertServiceCode("TRANFUTR", "ABC.DEF");
+        insertRequest(sourceJdbc, "10.0.21.1", "FUTURE-EARLY", "ABCDEF&bzjson", dayStartMillis(-1) + 9 * 60 * 60 * 1000L);
+        insertRequest(sourceJdbc, "10.0.21.2", "FUTURE-LATE", "ABCDEF&bzjson", dayStartMillis(-1) + 11 * 60 * 60 * 1000L);
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                31L, "TRANFUTR", 1, 5, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY,
+                LocalDate.now(FIXED_CLOCK).minusDays(2));
+
+        assertThat(result.migratedRows()).isEqualTo(1L);
+        assertThat(targetExists("msg_flow_log_request", "10.0.21.1", "FUTURE-EARLY")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.21.2", "FUTURE-LATE")).isFalse();
+    }
+
+    @Test
     void tranCodeMigrationSkipsMissingPartition() {
         insertServiceCode("TRANMISS", "ABC.DEF");
         long today = dayStartMillis(0);
@@ -414,9 +446,9 @@ class MigrationShardRunnerTest {
         insertServiceCode("TRANKEY", "ABC.DEF");
         long txnTime = dayStartMillis(0) + 5_000L;
         insertRequest(sourceJdbc, "10.0.13.1", "K1", "ABCDEF&bzjson", txnTime);
-        insertRequest(sourceJdbc, "10.0.13.1", "K2", "ABCDEF&bzjson", txnTime);
-        insertRequest(sourceJdbc, "10.0.13.1", "K3", "ABCDEF&bzjson", txnTime);
-        insertTargetRequest("10.0.13.1", "K3", "ABCDEF&bzjson", txnTime);
+        insertRequest(sourceJdbc, "10.0.13.1", "K2", "ABCDEF&bzjson", txnTime + 1_000L);
+        insertRequest(sourceJdbc, "10.0.13.1", "K3", "ABCDEF&bzjson", txnTime + 2_000L);
+        insertTargetRequest("10.0.13.1", "K3", "ABCDEF&bzjson", txnTime + 2_000L);
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(22L, "TRANKEY", 1);
 
