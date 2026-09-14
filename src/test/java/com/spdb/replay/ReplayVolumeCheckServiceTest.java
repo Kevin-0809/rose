@@ -163,7 +163,7 @@ class ReplayVolumeCheckServiceTest {
         assertThat(executed.batch().migrationCommandId()).isEqualTo(41L);
         MigrationTranCodeCommandForm expectedMigration = new MigrationTranCodeCommandForm(
                 "EMPTY", 100, 30, MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
-        expectedMigration.setNearbyCollection(true);
+        expectedMigration.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
         expectedMigration.setBaseDate(baseDate);
         verify(migrationService).createTranCodeCommand(expectedMigration);
 

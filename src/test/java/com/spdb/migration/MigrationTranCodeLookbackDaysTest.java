@@ -65,9 +65,10 @@ class MigrationTranCodeLookbackDaysTest {
                 new MigrationRuntimeProperties("bxds", "primary")
         );
 
-        long commandId = service.createTranCodeCommand(
-                new MigrationTranCodeCommandForm("A001", 10, 9, 16, "lookback test")
-        );
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm("A001", 10, 9, 16, "lookback test");
+        form.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
+        form.setBaseDate(java.time.LocalDate.of(2026, 9, 1));
+        long commandId = service.createTranCodeCommand(form);
 
         assertThat(jdbc.queryForObject(
                 "select lookback_days from ana_migration_command where command_id = ?", Integer.class, commandId

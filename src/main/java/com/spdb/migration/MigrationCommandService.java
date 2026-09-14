@@ -108,19 +108,7 @@ public class MigrationCommandService {
         List<String> tranCodes = validateTranCode(form);
         Long createdCommandId = transactionTemplate.execute(status -> {
             KeyHolder keyHolder = new GeneratedKeyHolder();
-            String sql = hasNearbyCollectionColumns() ? """
-                    insert into ana_migration_command (
-                        source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
-                        status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, remark, created_by
-                    ) values (
-                        :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
-                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :remark, '系统'
-                    )
-                    """ : """
-                    insert into ana_migration_command (source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism, status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by)
-                    values (:sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism, 'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :remark, '系统')
-                    """;
-            jdbc.update(sql, tranCodeParams(form, tranCodes), keyHolder, new String[]{"command_id"});
+            jdbc.update(tranCodeInsertSql(), tranCodeParams(form, tranCodes), keyHolder, new String[]{"command_id"});
             long commandId = generatedLongKey(keyHolder, "command_id");
             insertTranCodeShards(commandId, tranCodes);
             return commandId;
@@ -133,8 +121,42 @@ public class MigrationCommandService {
         return commandId;
     }
 
+    private String tranCodeInsertSql() {
+        if (hasCollectionTypeColumn()) {
+            return """
+                    insert into ana_migration_command (
+                        source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
+                        status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, collection_type, remark, created_by
+                    ) values (
+                        :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :collectionType, :remark, '系统'
+                    )
+                    """;
+        }
+        if (hasNearbyCollectionColumns()) {
+            return """
+                    insert into ana_migration_command (
+                        source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
+                        status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, remark, created_by
+                    ) values (
+                        :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :remark, '系统'
+                    )
+                    """;
+        }
+        return """
+                insert into ana_migration_command (source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism, status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by)
+                values (:sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism, 'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :remark, '系统')
+                """;
+    }
+
     private boolean hasNearbyCollectionColumns() {
         Integer count = jdbc.getJdbcTemplate().queryForObject("select count(*) from information_schema.columns where upper(table_name) = 'ANA_MIGRATION_COMMAND' and upper(column_name) = 'NEARBY_COLLECTION'", Integer.class);
+        return count != null && count > 0;
+    }
+
+    private boolean hasCollectionTypeColumn() {
+        Integer count = jdbc.getJdbcTemplate().queryForObject("select count(*) from information_schema.columns where upper(table_name) = 'ANA_MIGRATION_COMMAND' and upper(column_name) = 'COLLECTION_TYPE'", Integer.class);
         return count != null && count > 0;
     }
 
@@ -200,7 +222,7 @@ public class MigrationCommandService {
                         Timestamp.valueOf(command.startedTime()),
                         command.endedTime() == null ? null : Timestamp.valueOf(command.endedTime())),
                 command.startedTime(), command.endedTime(), command.errorMessage(), shards,
-                command.commandType(), command.tranCodes(), command.sampleSize()
+                command.commandType(), command.tranCodes(), command.sampleSize(), command.collectionType()
         );
     }
 
@@ -450,8 +472,11 @@ public class MigrationCommandService {
         if (form.lookbackDays() <= 0) {
             throw new IllegalArgumentException("Lookback days must be greater than 0");
         }
-        if (form.nearbyCollection() && form.baseDate() == null) {
-            throw new IllegalArgumentException("启用就近原则采集时必须填写铺底日期");
+        if (!isSupportedCollectionType(form.collectionType())) {
+            throw new IllegalArgumentException("请选择采集方式（查询或账务）");
+        }
+        if (form.baseDate() == null) {
+            throw new IllegalArgumentException("必须填写铺底日期");
         }
         if (form.parallelism() <= 0) {
             throw new IllegalArgumentException("Parallelism must be greater than 0");
@@ -460,6 +485,15 @@ public class MigrationCommandService {
             throw new IllegalArgumentException("Parallelism must not exceed " + MAX_PARALLELISM);
         }
         return tranCodes;
+    }
+
+    private boolean isSupportedCollectionType(String collectionType) {
+        if (!StringUtils.hasText(collectionType)) {
+            return false;
+        }
+        String normalized = collectionType.trim().toUpperCase(Locale.ROOT);
+        return MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY.equals(normalized)
+                || MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT.equals(normalized);
     }
 
     private List<String> parseTranCodes(String value) {
@@ -520,6 +554,7 @@ public class MigrationCommandService {
     }
 
     private MapSqlParameterSource tranCodeParams(MigrationTranCodeCommandForm form, List<String> tranCodes) {
+        String collectionType = form.collectionType() == null ? null : form.collectionType().trim().toUpperCase(Locale.ROOT);
         return new MapSqlParameterSource()
                 .addValue("sourceDataSource", runtimeProperties.sourceDataSource())
                 .addValue("targetDataSource", runtimeProperties.targetDataSource())
@@ -528,7 +563,8 @@ public class MigrationCommandService {
                 .addValue("tranCodes", String.join(",", tranCodes))
                 .addValue("sampleSize", form.sampleSize())
                 .addValue("lookbackDays", form.lookbackDays())
-                .addValue("nearbyCollection", form.nearbyCollection())
+                .addValue("collectionType", collectionType)
+                .addValue("nearbyCollection", MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY.equals(collectionType))
                 .addValue("baseDate", form.baseDate())
                 .addValue("remark", StringUtils.hasText(form.remark()) ? form.remark().trim() : null);
     }
@@ -640,9 +676,23 @@ public class MigrationCommandService {
                 rs.getObject("sample_size", Integer.class),
                 rs.getString("remark"),
                 rs.getObject("lookback_days", Integer.class),
-                optionalBoolean(rs, "nearby_collection"),
+                resolveCollectionType(rs),
                 optionalDate(rs, "base_date")
         );
+    }
+
+    private String resolveCollectionType(ResultSet rs) {
+        String collectionType = optionalString(rs, "collection_type");
+        if (StringUtils.hasText(collectionType)) {
+            return collectionType.trim().toUpperCase(Locale.ROOT);
+        }
+        return Boolean.TRUE.equals(optionalBoolean(rs, "nearby_collection"))
+                ? MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY
+                : null;
+    }
+
+    private String optionalString(ResultSet rs, String column) {
+        try { return rs.getString(column); } catch (SQLException ex) { return null; }
     }
 
     private Boolean optionalBoolean(ResultSet rs, String column) {

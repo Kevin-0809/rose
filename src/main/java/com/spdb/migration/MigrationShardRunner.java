@@ -141,23 +141,23 @@ public class MigrationShardRunner {
                                              String tranCode,
                                              int maxRowsPerMessageType,
                                              int lookbackDays) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, false, null, null);
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, null, null, null);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
-                                             int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, nearbyCollection, baseDate, null, () -> false);
+                                             int lookbackDays, String collectionType, LocalDate baseDate) {
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, collectionType, baseDate, null, () -> false);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
-                                             int lookbackDays, boolean nearbyCollection, LocalDate baseDate,
+                                             int lookbackDays, String collectionType, LocalDate baseDate,
                                              List<ServiceCodeMapping> preloadedMappings) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, nearbyCollection, baseDate,
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, collectionType, baseDate,
                 preloadedMappings, () -> false);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
-                                             int lookbackDays, boolean nearbyCollection, LocalDate baseDate,
+                                             int lookbackDays, String collectionType, LocalDate baseDate,
                                              List<ServiceCodeMapping> preloadedMappings,
                                              BooleanSupplier cancelRequested) {
         if (maxRowsPerMessageType <= 0) {
@@ -193,7 +193,7 @@ public class MigrationShardRunner {
             Map<String, String> targetTxnCodeBySourceTxnCode = txnCodeMappings(serviceMappings, messageType);
             List<String> sourceTxnCodes = new ArrayList<>(targetTxnCodeBySourceTxnCode.keySet());
             long migratedRows = 0L;
-            List<LocalDate> scanDates = scanDates(currentDate, effectiveLookbackDays, nearbyCollection, baseDate);
+            List<LocalDate> scanDates = scanDates(currentDate, effectiveLookbackDays, collectionType, baseDate);
             for (LocalDate scanDate : scanDates) {
                 if (migratedRows >= maxRowsPerMessageType || cancelRequested.getAsBoolean()) {
                     break;
@@ -241,17 +241,37 @@ public class MigrationShardRunner {
         return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, effectiveLookbackDays);
     }
 
-    private List<LocalDate> scanDates(LocalDate currentDate, int lookbackDays, boolean nearbyCollection, LocalDate baseDate) {
-        if (!nearbyCollection || baseDate == null) {
+    private List<LocalDate> scanDates(LocalDate currentDate, int lookbackDays, String collectionType, LocalDate baseDate) {
+        if (baseDate == null) {
             return java.util.stream.IntStream.range(0, lookbackDays).mapToObj(currentDate::minusDays).toList();
         }
-        List<LocalDate> dates = new ArrayList<>();
         LocalDate base = baseDate.isAfter(currentDate) ? currentDate : baseDate;
+        List<LocalDate> dates = new ArrayList<>();
+        Set<LocalDate> seen = new LinkedHashSet<>();
+        if (MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT.equals(collectionType)) {
+            for (LocalDate date = base; !date.isAfter(currentDate); date = date.plusDays(1)) {
+                if (seen.add(date)) {
+                    dates.add(date);
+                }
+            }
+            for (int dayOffset = 1; dayOffset <= lookbackDays; dayOffset++) {
+                LocalDate date = base.minusDays(dayOffset);
+                if (seen.add(date)) {
+                    dates.add(date);
+                }
+            }
+            return dates;
+        }
         for (int dayOffset = 0; dayOffset < lookbackDays; dayOffset++) {
-            dates.add(base.minusDays(dayOffset));
+            LocalDate date = base.minusDays(dayOffset);
+            if (seen.add(date)) {
+                dates.add(date);
+            }
         }
         for (LocalDate date = base.plusDays(1); !date.isAfter(currentDate); date = date.plusDays(1)) {
-            dates.add(date);
+            if (seen.add(date)) {
+                dates.add(date);
+            }
         }
         return dates;
     }

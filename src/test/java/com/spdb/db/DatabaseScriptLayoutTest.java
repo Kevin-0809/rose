@@ -108,6 +108,16 @@ class DatabaseScriptLayoutTest {
     }
 
     @Test
+    void ddlSupportsTranCodeCollectionType() throws Exception {
+        String ddl = Files.readString(Path.of("db/ddl.sql")).toLowerCase();
+
+        assertThat(ddl).contains("collection_type varchar(16)");
+        assertThat(ddl).contains("add column if not exists collection_type varchar(16)");
+        assertThat(ddl).contains("constraint ck_ana_migration_command_collection_type");
+        assertThat(ddl).contains("check (collection_type in ('query','account'))");
+    }
+
+    @Test
     void ddlContainsTranCodeServiceMappingTable() throws Exception {
         String ddl = Files.readString(Path.of("db/ddl.sql")).toLowerCase();
 

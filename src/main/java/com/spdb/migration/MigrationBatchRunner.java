@@ -134,7 +134,7 @@ public class MigrationBatchRunner {
                         : command.sampleSize();
                 List<MigrationShardRunner.ServiceCodeMapping> serviceMappings = tranCodeMappings.get(shard.tranCode());
                 result = shardRunner.runTranCode(shardId, shard.tranCode(), sampleSize, lookbackDays,
-                        Boolean.TRUE.equals(command.nearbyCollection()), command.baseDate(), serviceMappings,
+                        command.collectionType(), command.baseDate(), serviceMappings,
                         () -> commandService.isCancelRequested(commandId));
             } else {
                 result = shardRunner.run(shardId, shard.timeFrom(), shard.timeTo(), FETCH_SIZE);

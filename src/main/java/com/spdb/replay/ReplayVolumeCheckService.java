@@ -113,8 +113,8 @@ public class ReplayVolumeCheckService {
                     MigrationTranCodeCommandForm migrationForm = new MigrationTranCodeCommandForm(
                             String.join(",", noVolumeCodes), current.sampleSize(), current.lookbackDays(),
                             MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
+                    migrationForm.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
                     if (current.baseDate() != null) {
-                        migrationForm.setNearbyCollection(true);
                         migrationForm.setBaseDate(current.baseDate());
                     }
                     migrationCommandId = migrationCommandService.createTranCodeCommand(migrationForm);

@@ -25,7 +25,8 @@ public record MigrationProgressRow(
         List<MigrationShardRow> shards,
         String commandType,
         String tranCodes,
-        Integer sampleSize
+        Integer sampleSize,
+        String collectionType
 ) {
     public MigrationProgressRow(
             long commandId,
@@ -50,7 +51,7 @@ public record MigrationProgressRow(
     ) {
         this(commandId, sourceDataSource, targetDataSource, status, timeFrom, timeTo, windowSeconds, parallelism,
                 totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows, droppedRows,
-                durationSeconds, startedTime, endedTime, errorMessage, shards, null, null, null);
+                durationSeconds, startedTime, endedTime, errorMessage, shards, null, null, null, null);
     }
 
     public int completionPercent() {

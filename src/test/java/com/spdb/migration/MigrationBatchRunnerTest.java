@@ -13,6 +13,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.lang.reflect.Constructor;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -73,6 +74,9 @@ class MigrationBatchRunnerTest {
                     tran_codes clob,
                     sample_size integer,
                     lookback_days integer,
+                    nearby_collection boolean not null default false,
+                    base_date date,
+                    collection_type varchar(16),
                     error_message varchar(2000),
                     remark varchar(1000),
                     created_by varchar(100),
@@ -177,7 +181,7 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runTranCodeCommandUsesTranCodeExecutionPathAndSkipsEmptyResult() {
-        long commandId = commandService.createTranCodeCommand(new MigrationTranCodeCommandForm(
+        long commandId = commandService.createTranCodeCommand(tranCodeForm(
                 "TRAN001", 3, 5, 1, "tran code command"
         ));
         Long shardId = shardIds(commandId).get(0);
@@ -188,8 +192,8 @@ class MigrationBatchRunnerTest {
                 org.mockito.ArgumentMatchers.eq("TRAN001"),
                 org.mockito.ArgumentMatchers.eq(3),
                 org.mockito.ArgumentMatchers.eq(5),
-                org.mockito.ArgumentMatchers.eq(false),
-                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY),
+                org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 9, 1)),
                 org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.any(java.util.function.BooleanSupplier.class)))
                 .thenReturn(new MigrationShardResult(0L, 0L, 0L, 5));
@@ -206,8 +210,8 @@ class MigrationBatchRunnerTest {
                 org.mockito.ArgumentMatchers.eq("TRAN001"),
                 org.mockito.ArgumentMatchers.eq(3),
                 org.mockito.ArgumentMatchers.eq(5),
-                org.mockito.ArgumentMatchers.eq(false),
-                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY),
+                org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 9, 1)),
                 org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.any(java.util.function.BooleanSupplier.class));
         verify(shardRunner, never()).run(anyLong(), anyLong(), anyLong(), anyInt());
@@ -216,7 +220,7 @@ class MigrationBatchRunnerTest {
 
     @Test
     void runTranCodeCommandFallsBackWhenCommandLevelMappingLoadFails() {
-        long commandId = commandService.createTranCodeCommand(new MigrationTranCodeCommandForm(
+        long commandId = commandService.createTranCodeCommand(tranCodeForm(
                 "TRAN001", 3, 5, 1, "mapping fallback"
         ));
         Long shardId = shardIds(commandId).get(0);
@@ -227,8 +231,8 @@ class MigrationBatchRunnerTest {
                 org.mockito.ArgumentMatchers.eq("TRAN001"),
                 org.mockito.ArgumentMatchers.eq(3),
                 org.mockito.ArgumentMatchers.eq(5),
-                org.mockito.ArgumentMatchers.eq(false),
-                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY),
+                org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 9, 1)),
                 org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.any(java.util.function.BooleanSupplier.class)))
                 .thenReturn(new MigrationShardResult(2L, 0L, 0L, 5));
@@ -554,5 +558,12 @@ class MigrationBatchRunnerTest {
                 where command_id = ?
                 order by shard_seq
                 """, Long.class, commandId);
+    }
+
+    private static MigrationTranCodeCommandForm tranCodeForm(String tranCodes, int sampleSize, int lookbackDays, int parallelism, String remark) {
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm(tranCodes, sampleSize, lookbackDays, parallelism, remark);
+        form.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
+        form.setBaseDate(LocalDate.of(2026, 9, 1));
+        return form;
     }
 }

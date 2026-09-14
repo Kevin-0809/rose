@@ -51,6 +51,7 @@
       <div class="cards">
         <div class="card migration-tran-codes"><div class="label">交易码</div><div class="value" th:text="${#strings.replace(progress.tranCodes, ',', ', ')}"></div></div>
         <div class="card"><div class="label">每类报文迁移笔数</div><div class="value" th:text="${progress.sampleSize}"></div></div>
+        <div class="card"><div class="label">采集方式</div><div class="value" th:text="${progress.collectionType == 'ACCOUNT' ? '账务' : (progress.collectionType == 'QUERY' ? '查询' : '-')}"></div></div>
       </div>
     </div>
 

@@ -45,16 +45,16 @@
           <input name="lookbackDays" type="number" th:value="*{lookbackDays}" min="1" required>
         </div>
         <div class="span-2 migration-nearby-field">
-          <label for="nearbyCollection">采集策略</label>
+          <label for="collectionType">采集方式</label>
           <div class="migration-nearby-controls">
-            <label class="switch-control">
-              <input id="nearbyCollection" name="nearbyCollection" type="checkbox" th:checked="*{nearbyCollection}">
-              <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-              <span>就近原则采集</span>
-            </label>
+            <select id="collectionType" name="collectionType" required>
+              <option value="" th:selected="*{collectionType == null or collectionType == ''}" disabled>请选择采集方式</option>
+              <option value="ACCOUNT" th:selected="*{collectionType == 'ACCOUNT'}">账务</option>
+              <option value="QUERY" th:selected="*{collectionType == 'QUERY'}">查询</option>
+            </select>
             <div class="migration-base-date">
               <label for="baseDate">铺底日期</label>
-              <input id="baseDate" name="baseDate" type="date" th:value="*{baseDate}">
+              <input id="baseDate" name="baseDate" type="date" th:value="*{baseDate}" required>
             </div>
           </div>
         </div>
@@ -67,7 +67,7 @@
           <input name="remark" th:value="*{remark}" placeholder="可选，记录本次迁移用途">
         </div>
         <div class="span-2">
-          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 条请求报文；请求按 txn_time 分区读取，分区缺失会跳过该日。开启“就近原则采集”后，先从铺底日期向前（更早）回溯 N 天，再向铺底日期之后扫到当前日。</p>
+          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 条请求报文；请求按 txn_time 分区读取，分区缺失会跳过该日。采集方式为“查询”时，先从铺底日期向前（更早）回溯 N 天，再向铺底日期之后扫到当前日；采集方式为“账务”时，先从铺底日期向后扫到当前日，再向前（更早）回溯 N 天。</p>
         </div>
         <div class="span-2 actions">
           <button class="btn primary" type="submit">创建交易码迁移</button>
@@ -80,7 +80,7 @@
         <table class="command-table">
           <thead>
           <tr>
-            <th>指令ID</th><th>状态</th><th>备注</th><th>每类笔数</th><th>并行度</th><th>进度</th>
+            <th>指令ID</th><th>状态</th><th>采集方式</th><th>备注</th><th>每类笔数</th><th>并行度</th><th>进度</th>
             <th>已迁移交易笔数</th><th>丢弃数</th><th>跳过数</th><th>耗时</th><th>创建时间</th><th>操作</th>
           </tr>
           </thead>
@@ -88,6 +88,7 @@
           <tr th:each="row : ${result.rows()}">
             <td th:text="${row.commandId}"></td>
             <td><span class="tag" th:classappend="${row.status == 'COMPLETED' or row.status == 'CANCELLED'} ? 'green' : (${row.status == 'FAILED' or row.status == 'RUNNING'} ? 'yellow' : '')" th:text="${row.status}"></span></td>
+            <td th:text="${row.collectionType == 'ACCOUNT' ? '账务' : (row.collectionType == 'QUERY' ? '查询' : '-')}"></td>
             <td th:text="${row.remark}"></td>
             <td th:text="${row.sampleSize}"></td>
             <td th:text="${row.parallelism}"></td>

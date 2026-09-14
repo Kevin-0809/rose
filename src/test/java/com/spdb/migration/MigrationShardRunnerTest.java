@@ -56,7 +56,7 @@ class MigrationShardRunnerTest {
 
         assertThat(source).contains("int lookbackDays");
         assertThat(source).contains("effectiveLookbackDays(lookbackDays, currentDate)");
-        assertThat(source).contains("scanDates(currentDate, effectiveLookbackDays, nearbyCollection, baseDate)");
+        assertThat(source).contains("scanDates(currentDate, effectiveLookbackDays, collectionType, baseDate)");
     }
 
     @Test
@@ -364,12 +364,31 @@ class MigrationShardRunnerTest {
         insertRequest(sourceJdbc, "10.0.11.3", "BEFORE", "ABCDEF&bzjson", dayStartMillis(-3));
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(
-                20L, "TRANNEAR", 2, 5, true, LocalDate.now(FIXED_CLOCK).minusDays(2));
+                20L, "TRANNEAR", 2, 5, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY,
+                LocalDate.now(FIXED_CLOCK).minusDays(2));
 
         assertThat(result.migratedRows()).isEqualTo(2L);
         assertThat(targetExists("msg_flow_log_request", "10.0.11.1", "BASE")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.11.3", "BEFORE")).isTrue();
         assertThat(targetExists("msg_flow_log_request", "10.0.11.2", "AFTER")).isFalse();
+    }
+
+    @Test
+    void accountCollectionScansFutureFromBaseDateThenPast() {
+        insertServiceCode("TRANACCT", "ABC.DEF");
+        long base = dayStartMillis(-2);
+        insertRequest(sourceJdbc, "10.0.13.1", "BASE", "ABCDEF&bzjson", base);
+        insertRequest(sourceJdbc, "10.0.13.2", "AFTER", "ABCDEF&bzjson", dayStartMillis(-1));
+        insertRequest(sourceJdbc, "10.0.13.3", "BEFORE", "ABCDEF&bzjson", dayStartMillis(-3));
+
+        MigrationShardResult result = runnerWithFixedClock().runTranCode(
+                23L, "TRANACCT", 2, 5, MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT,
+                LocalDate.now(FIXED_CLOCK).minusDays(2));
+
+        assertThat(result.migratedRows()).isEqualTo(2L);
+        assertThat(targetExists("msg_flow_log_request", "10.0.13.1", "BASE")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.13.2", "AFTER")).isTrue();
+        assertThat(targetExists("msg_flow_log_request", "10.0.13.3", "BEFORE")).isFalse();
     }
 
     @Test
@@ -451,7 +470,7 @@ class MigrationShardRunnerTest {
         insertRequest(sourceJdbc, "10.0.16.1", "CANCEL", "ABCDEF&bzjson", dayStartMillis(0) + 1_000L);
 
         MigrationShardResult result = runnerWithFixedClock().runTranCode(
-                25L, "TRANCANCEL", 5, 5, false, null, null, () -> true);
+                25L, "TRANCANCEL", 5, 5, null, null, null, () -> true);
 
         assertThat(result.migratedRows()).isZero();
         assertThat(targetCount("msg_flow_log_request")).isZero();

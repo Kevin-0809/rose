@@ -17,6 +17,22 @@ alter table tss.ana_migration_command
 alter table tss.ana_migration_command
     add column if not exists base_date date;
 
+alter table tss.ana_migration_command
+    add column if not exists collection_type varchar(16);
+
+update tss.ana_migration_command
+set collection_type = 'QUERY'
+where command_type = 'TRAN_CODE'
+  and collection_type is null
+  and nearby_collection;
+
+alter table tss.ana_migration_command
+    drop constraint if exists ck_ana_migration_command_collection_type;
+
+alter table tss.ana_migration_command
+    add constraint ck_ana_migration_command_collection_type
+    check (collection_type in ('QUERY', 'ACCOUNT'));
+
 update tss.ana_migration_command
 set lookback_days = 5
 where command_type = 'TRAN_CODE'

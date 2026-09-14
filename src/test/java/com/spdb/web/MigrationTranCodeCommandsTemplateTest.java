@@ -19,6 +19,13 @@ class MigrationTranCodeCommandsTemplateTest {
         assertThat(html).contains("name=\"tranCodes\"");
         assertThat(html).contains("name=\"sampleSize\"");
         assertThat(html).contains("name=\"parallelism\"");
+        assertThat(html).contains("name=\"collectionType\"");
+        assertThat(html).contains("<select id=\"collectionType\"");
+        assertThat(html).contains("required");
+        assertThat(html).contains("账务");
+        assertThat(html).contains("查询");
+        assertThat(html).contains("name=\"baseDate\"");
+        assertThat(html).doesNotContain("name=\"nearbyCollection\"");
         assertThat(html).contains("name=\"lookbackDays\"");
         assertThat(html).contains("name=\"lookbackDays\" type=\"number\"");
         assertThat(html).doesNotContain("<select name=\"lookbackDays\"");

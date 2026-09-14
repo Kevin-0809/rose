@@ -30,7 +30,7 @@ public record MigrationCommandRow(
         Integer sampleSize,
         String remark,
         Integer lookbackDays,
-        Boolean nearbyCollection,
+        String collectionType,
         LocalDate baseDate
 ) {
     public MigrationCommandRow(
@@ -61,7 +61,7 @@ public record MigrationCommandRow(
         this(commandId, sourceDataSource, targetDataSource, commandType, status, timeFrom, timeTo, windowSeconds,
                 parallelism, totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows,
                 droppedRows, durationText, createdTime, startedTime, endedTime, errorMessage, requestSql, responseSql,
-                null, null, remark, null, false, null);
+                null, null, remark, null, null, null);
     }
 
     public MigrationCommandRow(
@@ -75,7 +75,7 @@ public record MigrationCommandRow(
         this(commandId, sourceDataSource, targetDataSource, commandType, status, timeFrom, timeTo, windowSeconds,
                 parallelism, totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows,
                 droppedRows, durationText, createdTime, startedTime, endedTime, errorMessage, requestSql, responseSql,
-                tranCodes, sampleSize, remark, null, false, null);
+                tranCodes, sampleSize, remark, null, null, null);
     }
 
     public int completionPercent() {

@@ -717,6 +717,7 @@ create table if not exists ana_migration_command (
     lookback_days integer,
     nearby_collection boolean not null default false,
     base_date date,
+    collection_type varchar(16),
     error_message varchar(2000),
     remark varchar(1000),
     created_by varchar(100),
@@ -744,6 +745,7 @@ alter table ana_migration_command
 add column if not exists lookback_days integer;
 alter table ana_migration_command add column if not exists nearby_collection boolean not null default false;
 alter table ana_migration_command add column if not exists base_date date;
+alter table ana_migration_command add column if not exists collection_type varchar(16);
 update ana_migration_command
 set lookback_days = 5
 where command_type = 'TRAN_CODE'
@@ -757,6 +759,9 @@ check (command_type in ('TIME_RANGE','SQL','TRAN_CODE'));
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_tran_code_parameters;
 alter table ana_migration_command add constraint ck_ana_migration_command_tran_code_parameters
 check (command_type <> 'TRAN_CODE' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0 and lookback_days is not null and lookback_days > 0));
+alter table ana_migration_command drop constraint if exists ck_ana_migration_command_collection_type;
+alter table ana_migration_command add constraint ck_ana_migration_command_collection_type
+check (collection_type in ('QUERY','ACCOUNT'));
 
 create table if not exists ana_migration_shard (
     shard_id bigserial primary key,
@@ -798,6 +803,7 @@ comment on column ana_migration_command.response_sql is '历史兼容字段，SQ
 comment on column ana_migration_command.tran_codes is '交易码迁移模式的逗号分隔交易码';
 comment on column ana_migration_command.sample_size is '交易码迁移模式下每类报文的迁移笔数';
 comment on column ana_migration_command.lookback_days is '交易码迁移模式下从当天起向前回溯的自然日数';
+comment on column ana_migration_command.collection_type is '交易码迁移模式下的采集方式，QUERY为查询、ACCOUNT为账务';
 comment on table ana_migration_shard is '报文日志迁移分片表';
 
 create index if not exists idx_ana_migration_command_status
