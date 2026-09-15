@@ -165,26 +165,25 @@ class MigrationCommandServiceTest {
     @Test
     void createTranCodeCommandDeduplicatesCodesCreatesShardsAndLaunches() {
         long commandId = service.createTranCodeCommand(tranCodeForm(
-                "A001, B002, A001", 3, 7, 2, "tran code migration"
+                "A001, B002, A001", 3, 2, "tran code migration"
         ));
 
         assertThat(commandId).isPositive();
         TranCodeCommandRow command = plainJdbc.queryForObject("""
-                select command_type, tran_codes, sample_size, lookback_days, parallelism, total_shard_count, remark, collection_type
+                select command_type, tran_codes, sample_size, parallelism, total_shard_count, remark, collection_type
                 from ana_migration_command
                 where command_id = ?
                 """, (rs, i) -> new TranCodeCommandRow(
                 rs.getString("command_type"),
                 rs.getString("tran_codes"),
                 rs.getInt("sample_size"),
-                rs.getInt("lookback_days"),
                 rs.getInt("parallelism"),
                 rs.getLong("total_shard_count"),
                 rs.getString("remark"),
                 rs.getString("collection_type")
         ), commandId);
         assertThat(command).isEqualTo(new TranCodeCommandRow(
-                "TRAN_CODE", "A001,B002", 3, 7, 2, 2L, "tran code migration", "QUERY"
+                "TRAN_CODE", "A001,B002", 3, 2, 2L, "tran code migration", "QUERY"
         ));
         assertThat(plainJdbc.queryForList("""
                 select tran_code
@@ -197,17 +196,17 @@ class MigrationCommandServiceTest {
 
     @Test
     void createTranCodeCommandRejectsInvalidForms() {
-        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("", 3, 5, 2, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("", 3, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm(" ,  ", 3, 5, 2, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm(" ,  ", 3, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A001", 0, 5, 2, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A001", 0, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A001", -1, 5, 2, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A001", -1, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A001", 3, 5, 17, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A001", 3, 17, "")))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A".repeat(33), 3, 5, 2, "")))
+        assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm("A".repeat(33), 3, 2, "")))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_command", Long.class)).isZero();
@@ -216,13 +215,13 @@ class MigrationCommandServiceTest {
 
     @Test
     void createTranCodeCommandRejectsBlankCollectionTypeAndMissingBaseDate() {
-        MigrationTranCodeCommandForm blankCollectionType = tranCodeForm("A001", 3, 5, 2, "");
+        MigrationTranCodeCommandForm blankCollectionType = tranCodeForm("A001", 3, 2, "");
         blankCollectionType.setCollectionType("");
         assertThatThrownBy(() -> service.createTranCodeCommand(blankCollectionType))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("采集方式");
 
-        MigrationTranCodeCommandForm missingBaseDate = tranCodeForm("A001", 3, 5, 2, "");
+        MigrationTranCodeCommandForm missingBaseDate = tranCodeForm("A001", 3, 2, "");
         missingBaseDate.setBaseDate(null);
         assertThatThrownBy(() -> service.createTranCodeCommand(missingBaseDate))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -237,7 +236,7 @@ class MigrationCommandServiceTest {
         plainJdbc.execute("alter table ana_migration_shard add constraint ck_test_tran_code check (tran_code <> 'B002')");
 
         assertThatThrownBy(() -> service.createTranCodeCommand(tranCodeForm(
-                "A001,B002", 3, 5, 2, "rollback"
+                "A001,B002", 3, 2, "rollback"
         ))).isInstanceOf(RuntimeException.class);
 
         assertThat(plainJdbc.queryForObject("select count(*) from ana_migration_command", Long.class)).isZero();
@@ -249,7 +248,7 @@ class MigrationCommandServiceTest {
     void searchTranCodeReturnsOnlyTranCodeCommandsWithPageMetadata() {
         for (int index = 0; index < 21; index++) {
             service.createTranCodeCommand(tranCodeForm(
-                    "T%03d".formatted(index), 3, 5, 2, "transaction code " + index
+                    "T%03d".formatted(index), 3, 2, "transaction code " + index
             ));
         }
         service.createCommand(new MigrationCommandForm(100_000L, 160_000L, 60L, 2, "time range"));
@@ -310,7 +309,6 @@ class MigrationCommandServiceTest {
             String commandType,
             String tranCodes,
             int sampleSize,
-            int lookbackDays,
             int parallelism,
             long totalShardCount,
             String remark,
@@ -318,8 +316,8 @@ class MigrationCommandServiceTest {
     ) {
     }
 
-    private static MigrationTranCodeCommandForm tranCodeForm(String tranCodes, int sampleSize, int lookbackDays, int parallelism, String remark) {
-        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm(tranCodes, sampleSize, lookbackDays, parallelism, remark);
+    private static MigrationTranCodeCommandForm tranCodeForm(String tranCodes, int sampleSize, int parallelism, String remark) {
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm(tranCodes, sampleSize, parallelism, remark);
         form.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
         form.setBaseDate(LocalDate.of(2026, 9, 1));
         return form;
@@ -510,7 +508,7 @@ class MigrationCommandServiceTest {
         assertThat(completedShard.migratedRows()).isEqualTo(10L);
         assertThat(completedShard.skippedRows()).isEqualTo(2L);
         assertThat(completedShard.droppedRows()).isEqualTo(1L);
-        assertThat(completedShard.actualLookbackDays()).isEqualTo(7);
+        assertThat(completedShard.actualScanDays()).isEqualTo(7);
 
         assertThat(service.tryStartShard(secondShardId)).isTrue();
         service.markShardFailed(secondShardId, "boom");

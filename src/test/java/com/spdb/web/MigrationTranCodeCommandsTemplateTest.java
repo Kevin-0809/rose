@@ -26,9 +26,8 @@ class MigrationTranCodeCommandsTemplateTest {
         assertThat(html).contains("查询");
         assertThat(html).contains("name=\"baseDate\"");
         assertThat(html).doesNotContain("name=\"nearbyCollection\"");
-        assertThat(html).contains("name=\"lookbackDays\"");
-        assertThat(html).contains("name=\"lookbackDays\" type=\"number\"");
-        assertThat(html).doesNotContain("<select name=\"lookbackDays\"");
+        assertThat(html).doesNotContain("name=\"lookbackDays\"");
+        assertThat(html).doesNotContain("回溯自然日数");
         assertThat(html).doesNotContain("value=\"10000\"");
         assertThat(html).contains("max=\"16\"");
         assertThat(html).contains("min=\"1\"");

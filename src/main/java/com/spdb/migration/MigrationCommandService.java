@@ -126,10 +126,10 @@ public class MigrationCommandService {
             return """
                     insert into ana_migration_command (
                         source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
-                        status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, collection_type, remark, created_by
+                        status, total_shard_count, tran_codes, sample_size, nearby_collection, base_date, collection_type, remark, created_by
                     ) values (
                         :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
-                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :collectionType, :remark, '系统'
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :nearbyCollection, :baseDate, :collectionType, :remark, '系统'
                     )
                     """;
         }
@@ -137,16 +137,16 @@ public class MigrationCommandService {
             return """
                     insert into ana_migration_command (
                         source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism,
-                        status, total_shard_count, tran_codes, sample_size, lookback_days, nearby_collection, base_date, remark, created_by
+                        status, total_shard_count, tran_codes, sample_size, nearby_collection, base_date, remark, created_by
                     ) values (
                         :sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism,
-                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :nearbyCollection, :baseDate, :remark, '系统'
+                        'CREATED', :totalShardCount, :tranCodes, :sampleSize, :nearbyCollection, :baseDate, :remark, '系统'
                     )
                     """;
         }
         return """
-                insert into ana_migration_command (source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism, status, total_shard_count, tran_codes, sample_size, lookback_days, remark, created_by)
-                values (:sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism, 'CREATED', :totalShardCount, :tranCodes, :sampleSize, :lookbackDays, :remark, '系统')
+                insert into ana_migration_command (source_data_source, target_data_source, command_type, time_from, time_to, window_seconds, parallelism, status, total_shard_count, tran_codes, sample_size, remark, created_by)
+                values (:sourceDataSource, :targetDataSource, 'TRAN_CODE', 0, 0, 0, :parallelism, 'CREATED', :totalShardCount, :tranCodes, :sampleSize, :remark, '系统')
                 """;
     }
 
@@ -312,7 +312,7 @@ public class MigrationCommandService {
                 .addValue("migratedRows", result.migratedRows())
                 .addValue("skippedRows", result.skippedRows())
                 .addValue("droppedRows", result.droppedRows())
-                .addValue("actualLookbackDays", result.actualLookbackDays()));
+                .addValue("actualLookbackDays", result.actualScanDays()));
     }
 
     void markShardSkipped(long shardId) {
@@ -332,7 +332,7 @@ public class MigrationCommandService {
                        updated_at = current_timestamp
                  where shard_id = :shardId
                 """, new MapSqlParameterSource("shardId", shardId)
-                .addValue("actualLookbackDays", result == null ? null : result.actualLookbackDays()));
+                .addValue("actualLookbackDays", result == null ? null : result.actualScanDays()));
     }
 
     void markShardFailed(long shardId, String errorMessage) {
@@ -469,9 +469,6 @@ public class MigrationCommandService {
         if (form.sampleSize() <= 0) {
             throw new IllegalArgumentException("Sample size must be greater than 0");
         }
-        if (form.lookbackDays() <= 0) {
-            throw new IllegalArgumentException("Lookback days must be greater than 0");
-        }
         if (!isSupportedCollectionType(form.collectionType())) {
             throw new IllegalArgumentException("请选择采集方式（查询或账务）");
         }
@@ -562,7 +559,6 @@ public class MigrationCommandService {
                 .addValue("totalShardCount", tranCodes.size())
                 .addValue("tranCodes", String.join(",", tranCodes))
                 .addValue("sampleSize", form.sampleSize())
-                .addValue("lookbackDays", form.lookbackDays())
                 .addValue("collectionType", collectionType)
                 .addValue("nearbyCollection", MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY.equals(collectionType))
                 .addValue("baseDate", form.baseDate())
@@ -675,7 +671,6 @@ public class MigrationCommandService {
                 rs.getString("tran_codes"),
                 rs.getObject("sample_size", Integer.class),
                 rs.getString("remark"),
-                rs.getObject("lookback_days", Integer.class),
                 resolveCollectionType(rs),
                 optionalDate(rs, "base_date")
         );

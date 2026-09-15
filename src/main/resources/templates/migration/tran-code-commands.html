@@ -40,10 +40,6 @@
           <label>每类报文迁移笔数</label>
           <input name="sampleSize" type="number" th:value="*{sampleSize}" min="1" required>
         </div>
-        <div>
-          <label>回溯自然日数</label>
-          <input name="lookbackDays" type="number" th:value="*{lookbackDays}" min="1" required>
-        </div>
         <div class="span-2 migration-nearby-field">
           <label for="collectionType">采集方式</label>
           <div class="migration-nearby-controls">
@@ -67,7 +63,7 @@
           <input name="remark" th:value="*{remark}" placeholder="可选，记录本次迁移用途">
         </div>
         <div class="span-2">
-          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 条请求报文；请求按 txn_time 分区读取，分区缺失会跳过该日。采集方式为“查询”时，先从铺底日期向前（更早）回溯 N 天，再向铺底日期之后扫到当前日；采集方式为“账务”时，先从铺底日期向后扫到当前日，再向前（更早）回溯 N 天。</p>
+          <p class="muted">每个交易码分别处理 bzjson、sop、soap 三类报文，每类最多迁移 N 条请求报文；请求按 txn_time 分区读取，分区缺失会跳过该日。采集方式为“账务”时，只从铺底日期向后扫到当前日；采集方式为“查询”时，只从铺底日期向前（更早）扫到最早分区。</p>
         </div>
         <div class="span-2 actions">
           <button class="btn primary" type="submit">创建交易码迁移</button>

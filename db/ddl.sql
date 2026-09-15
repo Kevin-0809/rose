@@ -768,7 +768,7 @@ alter table ana_migration_command add constraint ck_ana_migration_command_type
 check (command_type in ('TIME_RANGE','SQL','TRAN_CODE'));
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_tran_code_parameters;
 alter table ana_migration_command add constraint ck_ana_migration_command_tran_code_parameters
-check (command_type <> 'TRAN_CODE' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0 and lookback_days is not null and lookback_days > 0));
+check (command_type <> 'TRAN_CODE' or (tran_codes is not null and btrim(tran_codes) <> '' and sample_size is not null and sample_size > 0 and collection_type in ('QUERY','ACCOUNT') and base_date is not null));
 alter table ana_migration_command drop constraint if exists ck_ana_migration_command_collection_type;
 alter table ana_migration_command add constraint ck_ana_migration_command_collection_type
 check (collection_type in ('QUERY','ACCOUNT'));
@@ -812,7 +812,7 @@ comment on column ana_migration_command.request_sql is 'SQL迁移模式的请求
 comment on column ana_migration_command.response_sql is '历史兼容字段，SQL迁移已改为只迁移请求报文，不再使用';
 comment on column ana_migration_command.tran_codes is '交易码迁移模式的逗号分隔交易码';
 comment on column ana_migration_command.sample_size is '交易码迁移模式下每类报文的迁移笔数';
-comment on column ana_migration_command.lookback_days is '交易码迁移模式下从当天起向前回溯的自然日数';
+comment on column ana_migration_command.lookback_days is '历史字段，交易码迁移已不再使用回溯自然日数';
 comment on column ana_migration_command.collection_type is '交易码迁移模式下的采集方式，QUERY为查询、ACCOUNT为账务';
 comment on table ana_migration_shard is '报文日志迁移分片表';
 

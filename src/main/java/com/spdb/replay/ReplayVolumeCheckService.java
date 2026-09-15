@@ -34,7 +34,6 @@ import java.util.TreeSet;
 @Service
 public class ReplayVolumeCheckService {
     private static final int DEFAULT_SAMPLE_SIZE = 100;
-    private static final int LOOKBACK_DAYS = 30;
     private static final Set<String> MESSAGE_TYPES = Set.of("bzjson", "sop", "soap");
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -117,7 +116,7 @@ public class ReplayVolumeCheckService {
                         new MapSqlParameterSource("checkId", checkId));
                 try {
                     MigrationTranCodeCommandForm migrationForm = new MigrationTranCodeCommandForm(
-                            String.join(",", noVolumeCodes), current.sampleSize(), current.lookbackDays(),
+                            String.join(",", noVolumeCodes), current.sampleSize(),
                             MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
                     migrationForm.setCollectionType(collectionType);
                     if (current.baseDate() != null) {
@@ -196,7 +195,7 @@ public class ReplayVolumeCheckService {
         long total = totalValue == null ? 0 : totalValue;
         page = pageForTotal(total, page);
         List<ReplayVolumeCheckBatch> rows = jdbc.query("select * from ana_replay_volume_check_batch order by check_id desc limit :limit offset :offset",
-                new MapSqlParameterSource().addValue("limit", page.size()).addValue("offset", offset(total, page)), (rs, n) -> new ReplayVolumeCheckBatch(rs.getLong("check_id"), ReplayVolumeCheckBatchStatus.valueOf(rs.getString("status")), localDateTime(rs.getTimestamp("catalog_snapshot_time")), rs.getInt("sample_size"), rs.getInt("lookback_days"), localDate(rs.getDate("base_date")), rs.getLong("catalog_count"), getLong(rs, "has_volume_count"), rs.getLong("no_volume_count"), rs.getLong("cleanup_service_count"), rs.getLong("cleanup_row_count"), rs.getLong("actual_cleanup_row_count"), rs.getObject("migration_command_id", Long.class), localDateTime(rs.getTimestamp("created_time")), localDateTime(rs.getTimestamp("started_time")), localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message"), getString(rs, "collection_type")));
+                new MapSqlParameterSource().addValue("limit", page.size()).addValue("offset", offset(total, page)), (rs, n) -> new ReplayVolumeCheckBatch(rs.getLong("check_id"), ReplayVolumeCheckBatchStatus.valueOf(rs.getString("status")), localDateTime(rs.getTimestamp("catalog_snapshot_time")), rs.getInt("sample_size"), localDate(rs.getDate("base_date")), rs.getLong("catalog_count"), getLong(rs, "has_volume_count"), rs.getLong("no_volume_count"), rs.getLong("cleanup_service_count"), rs.getLong("cleanup_row_count"), rs.getLong("actual_cleanup_row_count"), rs.getObject("migration_command_id", Long.class), localDateTime(rs.getTimestamp("created_time")), localDateTime(rs.getTimestamp("started_time")), localDateTime(rs.getTimestamp("ended_time")), rs.getString("error_message"), getString(rs, "collection_type")));
         return PagedResult.of(rows, total, page);
     }
 
@@ -243,35 +242,30 @@ public class ReplayVolumeCheckService {
     }
 
     public ReplayVolumeCheckResult check(int sampleSize) {
-        return check(sampleSize, LOOKBACK_DAYS);
+        return check(sampleSize, null);
     }
 
-    public ReplayVolumeCheckResult check(int sampleSize, int lookbackDays) {
-        return check(sampleSize, lookbackDays, null);
+    public ReplayVolumeCheckResult check(int sampleSize, LocalDate baseDate) {
+        return check(sampleSize, baseDate, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
     }
 
-    public ReplayVolumeCheckResult check(int sampleSize, int lookbackDays, LocalDate baseDate) {
-        return check(sampleSize, lookbackDays, baseDate, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
-    }
-
-    public ReplayVolumeCheckResult check(int sampleSize, int lookbackDays, LocalDate baseDate, String collectionType) {
+    public ReplayVolumeCheckResult check(int sampleSize, LocalDate baseDate, String collectionType) {
         if (sampleSize <= 0) {
             throw new IllegalArgumentException("sampleSize must be positive");
         }
-        if (lookbackDays <= 0) throw new IllegalArgumentException("lookbackDays must be positive");
         String normalizedCollectionType = normalizeCollectionType(collectionType);
         if (normalizedCollectionType == null) {
             throw new IllegalArgumentException("请选择采集方式（查询或账务）");
         }
         if (transactionTemplate != null) {
-            ReplayVolumeCheckResult result = transactionTemplate.execute(status -> checkInTransaction(sampleSize, lookbackDays, baseDate, normalizedCollectionType));
+            ReplayVolumeCheckResult result = transactionTemplate.execute(status -> checkInTransaction(sampleSize, baseDate, normalizedCollectionType));
             if (result == null) throw new IllegalStateException("volume check transaction returned no result");
             return result;
         }
-        return checkInTransaction(sampleSize, lookbackDays, baseDate, normalizedCollectionType);
+        return checkInTransaction(sampleSize, baseDate, normalizedCollectionType);
     }
 
-    private ReplayVolumeCheckResult checkInTransaction(int sampleSize, int lookbackDays, LocalDate baseDate, String collectionType) {
+    private ReplayVolumeCheckResult checkInTransaction(int sampleSize, LocalDate baseDate, String collectionType) {
         LocalDateTime now = LocalDateTime.now();
         List<Catalog> catalogs = readCatalog();
         Map<String, Set<String>> flowsByService = readRequestFlows();
@@ -299,7 +293,7 @@ public class ReplayVolumeCheckService {
             }
         }
 
-        long checkId = insertBatch(now, sampleSize, lookbackDays, baseDate, collectionType, catalogs.size());
+        long checkId = insertBatch(now, sampleSize, baseDate, collectionType, catalogs.size());
         List<ReplayVolumeCheckDetail> details = new ArrayList<>();
         for (Catalog c : catalogs) {
             long volume = volumeByTran.getOrDefault(c.tranCode(), 0L);
@@ -329,7 +323,7 @@ public class ReplayVolumeCheckService {
             jdbc.update("update ana_replay_volume_check_batch set status='WAITING_CONFIRM', no_volume_count=:noVolume, cleanup_service_count=:cleanupServices, cleanup_row_count=:cleanupRows, ended_time=:ended where check_id=:checkId",
                     new MapSqlParameterSource().addValue("noVolume", noVolume).addValue("cleanupServices", cleanupDetails.size()).addValue("cleanupRows", cleanupRows).addValue("ended", Timestamp.valueOf(now)).addValue("checkId", checkId));
         }
-        ReplayVolumeCheckBatch batch = new ReplayVolumeCheckBatch(checkId, ReplayVolumeCheckBatchStatus.WAITING_CONFIRM, now, sampleSize, lookbackDays, baseDate,
+        ReplayVolumeCheckBatch batch = new ReplayVolumeCheckBatch(checkId, ReplayVolumeCheckBatchStatus.WAITING_CONFIRM, now, sampleSize, baseDate,
                 catalogs.size(), hasVolume, noVolume, cleanupDetails.size(), cleanupRows, 0L, null, now, now, now, null, collectionType);
         return new ReplayVolumeCheckResult(batch, details, cleanupDetails);
     }
@@ -374,7 +368,7 @@ public class ReplayVolumeCheckService {
         List<ReplayVolumeCheckBatch> rows = jdbc.query("select * from ana_replay_volume_check_batch where check_id=:checkId",
                 new MapSqlParameterSource("checkId", checkId), (rs, n) -> new ReplayVolumeCheckBatch(
                         rs.getLong("check_id"), ReplayVolumeCheckBatchStatus.valueOf(rs.getString("status")),
-                        localDateTime(rs.getTimestamp("catalog_snapshot_time")), rs.getInt("sample_size"), rs.getInt("lookback_days"), localDate(rs.getDate("base_date")),
+                        localDateTime(rs.getTimestamp("catalog_snapshot_time")), rs.getInt("sample_size"), localDate(rs.getDate("base_date")),
                         rs.getLong("catalog_count"), getLong(rs, "has_volume_count"), rs.getLong("no_volume_count"), rs.getLong("cleanup_service_count"),
                         rs.getLong("cleanup_row_count"), rs.getLong("actual_cleanup_row_count"),
                         rs.getObject("migration_command_id", Long.class), localDateTime(rs.getTimestamp("created_time")),
@@ -554,10 +548,10 @@ public class ReplayVolumeCheckService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private long insertBatch(LocalDateTime now, int sampleSize, int lookbackDays, LocalDate baseDate, String collectionType, int catalogCount) {
+    private long insertBatch(LocalDateTime now, int sampleSize, LocalDate baseDate, String collectionType, int catalogCount) {
         KeyHolder holder = new GeneratedKeyHolder();
-        jdbc.update("insert into ana_replay_volume_check_batch(status,catalog_snapshot_time,sample_size,lookback_days,base_date,collection_type,catalog_count,created_time,started_time) values ('CHECKING',:snapshot,:sampleSize,:lookback,:baseDate,:collectionType,:catalogCount,:created,:started)",
-                new MapSqlParameterSource().addValue("snapshot", Timestamp.valueOf(now)).addValue("sampleSize", sampleSize).addValue("lookback", lookbackDays)
+        jdbc.update("insert into ana_replay_volume_check_batch(status,catalog_snapshot_time,sample_size,base_date,collection_type,catalog_count,created_time,started_time) values ('CHECKING',:snapshot,:sampleSize,:baseDate,:collectionType,:catalogCount,:created,:started)",
+                new MapSqlParameterSource().addValue("snapshot", Timestamp.valueOf(now)).addValue("sampleSize", sampleSize)
                         .addValue("baseDate", baseDate).addValue("collectionType", collectionType).addValue("catalogCount", catalogCount).addValue("created", Timestamp.valueOf(now)).addValue("started", Timestamp.valueOf(now)), holder, new String[]{"check_id"});
         Number key = holder.getKey();
         if (key == null) throw new IllegalStateException("check batch key was not generated");

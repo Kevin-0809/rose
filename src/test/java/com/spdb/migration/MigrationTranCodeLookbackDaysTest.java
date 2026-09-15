@@ -15,11 +15,11 @@ class MigrationTranCodeLookbackDaysTest {
     @Test
     void formHasSingleResolvableConstructorForSpringMvcBinding() {
         assertThat(BeanUtils.getResolvableConstructor(MigrationTranCodeCommandForm.class).getParameterCount())
-                .isEqualTo(5);
+                .isEqualTo(4);
     }
 
     @Test
-    void persistsConfiguredLookbackDaysAndUsesRequestedParallelism() {
+    void persistsConfiguredSampleSizeAndUsesRequestedParallelism() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:migration_tran_code_lookback;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
                 "sa", ""
@@ -40,6 +40,9 @@ class MigrationTranCodeLookbackDaysTest {
                     tran_codes clob,
                     sample_size integer,
                     lookback_days integer,
+                    nearby_collection boolean not null default false,
+                    base_date date,
+                    collection_type varchar(16),
                     remark varchar(1000),
                     created_by varchar(100),
                     created_time timestamp default current_timestamp,
@@ -65,19 +68,24 @@ class MigrationTranCodeLookbackDaysTest {
                 new MigrationRuntimeProperties("bxds", "primary")
         );
 
-        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm("A001", 10, 9, 16, "lookback test");
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm("A001", 10, 16, "sample test");
         form.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
         form.setBaseDate(java.time.LocalDate.of(2026, 9, 1));
         long commandId = service.createTranCodeCommand(form);
 
         assertThat(jdbc.queryForObject(
-                "select lookback_days from ana_migration_command where command_id = ?", Integer.class, commandId
-        )).isEqualTo(9);
+                "select sample_size from ana_migration_command where command_id = ?", Integer.class, commandId
+        )).isEqualTo(10);
         assertThat(jdbc.queryForObject(
                 "select parallelism from ana_migration_command where command_id = ?", Integer.class, commandId
         )).isEqualTo(16);
+        assertThat(jdbc.queryForObject(
+                "select lookback_days from ana_migration_command where command_id = ?", Integer.class, commandId
+        )).isNull();
+        assertThat(jdbc.queryForObject(
+                "select collection_type from ana_migration_command where command_id = ?", String.class, commandId
+        )).isEqualTo("QUERY");
         assertThat(MigrationTranCodeCommandForm.empty().sampleSize()).isEqualTo(100);
-        assertThat(MigrationTranCodeCommandForm.empty().lookbackDays()).isEqualTo(30);
         assertThat(MigrationTranCodeCommandForm.empty().parallelism()).isEqualTo(16);
     }
 

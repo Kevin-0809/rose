@@ -182,7 +182,7 @@ class MigrationBatchRunnerTest {
     @Test
     void runTranCodeCommandUsesTranCodeExecutionPathAndSkipsEmptyResult() {
         long commandId = commandService.createTranCodeCommand(tranCodeForm(
-                "TRAN001", 3, 5, 1, "tran code command"
+                "TRAN001", 3, 1, "tran code command"
         ));
         Long shardId = shardIds(commandId).get(0);
         when(shardRunner.loadTranCodeMappings(org.mockito.ArgumentMatchers.anyList()))
@@ -191,7 +191,6 @@ class MigrationBatchRunnerTest {
                 org.mockito.ArgumentMatchers.eq(shardId),
                 org.mockito.ArgumentMatchers.eq("TRAN001"),
                 org.mockito.ArgumentMatchers.eq(3),
-                org.mockito.ArgumentMatchers.eq(5),
                 org.mockito.ArgumentMatchers.eq(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY),
                 org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 9, 1)),
                 org.mockito.ArgumentMatchers.isNull(),
@@ -204,12 +203,11 @@ class MigrationBatchRunnerTest {
         assertThat(progress.status()).isEqualTo("COMPLETED");
         assertThat(progress.completedShardCount()).isEqualTo(1L);
         assertThat(progress.shards()).extracting(MigrationShardRow::status).containsExactly("SKIPPED");
-        assertThat(progress.shards()).extracting(MigrationShardRow::actualLookbackDays).containsExactly(5);
+        assertThat(progress.shards()).extracting(MigrationShardRow::actualScanDays).containsExactly(5);
         verify(shardRunner).runTranCode(
                 org.mockito.ArgumentMatchers.eq(shardId),
                 org.mockito.ArgumentMatchers.eq("TRAN001"),
                 org.mockito.ArgumentMatchers.eq(3),
-                org.mockito.ArgumentMatchers.eq(5),
                 org.mockito.ArgumentMatchers.eq(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY),
                 org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 9, 1)),
                 org.mockito.ArgumentMatchers.isNull(),
@@ -221,7 +219,7 @@ class MigrationBatchRunnerTest {
     @Test
     void runTranCodeCommandFallsBackWhenCommandLevelMappingLoadFails() {
         long commandId = commandService.createTranCodeCommand(tranCodeForm(
-                "TRAN001", 3, 5, 1, "mapping fallback"
+                "TRAN001", 3, 1, "mapping fallback"
         ));
         Long shardId = shardIds(commandId).get(0);
         when(shardRunner.loadTranCodeMappings(org.mockito.ArgumentMatchers.anyList()))
@@ -230,7 +228,6 @@ class MigrationBatchRunnerTest {
                 org.mockito.ArgumentMatchers.eq(shardId),
                 org.mockito.ArgumentMatchers.eq("TRAN001"),
                 org.mockito.ArgumentMatchers.eq(3),
-                org.mockito.ArgumentMatchers.eq(5),
                 org.mockito.ArgumentMatchers.eq(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY),
                 org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 9, 1)),
                 org.mockito.ArgumentMatchers.isNull(),
@@ -560,8 +557,8 @@ class MigrationBatchRunnerTest {
                 """, Long.class, commandId);
     }
 
-    private static MigrationTranCodeCommandForm tranCodeForm(String tranCodes, int sampleSize, int lookbackDays, int parallelism, String remark) {
-        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm(tranCodes, sampleSize, lookbackDays, parallelism, remark);
+    private static MigrationTranCodeCommandForm tranCodeForm(String tranCodes, int sampleSize, int parallelism, String remark) {
+        MigrationTranCodeCommandForm form = new MigrationTranCodeCommandForm(tranCodes, sampleSize, parallelism, remark);
         form.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
         form.setBaseDate(LocalDate.of(2026, 9, 1));
         return form;

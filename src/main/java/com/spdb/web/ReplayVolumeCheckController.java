@@ -51,7 +51,6 @@ public class ReplayVolumeCheckController {
         model.addAttribute("history", history);
         model.addAttribute("currentBatch", current);
         model.addAttribute("sampleSize", current == null ? 100 : current.sampleSize());
-        model.addAttribute("lookbackDays", current == null ? 30 : current.lookbackDays());
         model.addAttribute("baseDate", current == null ? null : current.baseDate());
         model.addAttribute("collectionType", current == null ? null : current.collectionType());
         if (current != null) {
@@ -64,21 +63,19 @@ public class ReplayVolumeCheckController {
     }
 
     public String start(int sampleSize, Model model) {
-        return start(sampleSize, 30, null, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY, model);
+        return start(sampleSize, null, MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY, model);
     }
 
     @PostMapping("/config/replay-volume-check")
     public String start(@RequestParam(required = false, defaultValue = "100") int sampleSize,
-                        @RequestParam(required = false, defaultValue = "30") int lookbackDays,
                         @RequestParam(required = false) String baseDate,
                         @RequestParam(required = false) String collectionType, Model model) {
         try {
-            ReplayVolumeCheckResult result = service.check(sampleSize, lookbackDays, parseBaseDate(baseDate), parseCollectionType(collectionType));
+            ReplayVolumeCheckResult result = service.check(sampleSize, parseBaseDate(baseDate), parseCollectionType(collectionType));
             return "redirect:/config/replay-volume-check/" + result.batch().checkId();
         } catch (IllegalArgumentException ex) {
             model.addAttribute("active", "replay-volume-check");
             model.addAttribute("sampleSize", sampleSize);
-            model.addAttribute("lookbackDays", lookbackDays);
             model.addAttribute("baseDate", baseDate);
             model.addAttribute("collectionType", collectionType);
             model.addAttribute("error", ex.getMessage());

@@ -119,39 +119,27 @@ public class MigrationShardRunner {
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS);
-    }
-
-    public MigrationShardResult runTranCode(long shardId,
-                                             String tranCode,
-                                             int maxRowsPerMessageType,
-                                             int lookbackDays) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, null, null, null);
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, null, null, null, () -> false);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
-                                             int lookbackDays, String collectionType, LocalDate baseDate) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, collectionType, baseDate, null, () -> false);
+                                             String collectionType, LocalDate baseDate) {
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, collectionType, baseDate, null, () -> false);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
-                                             int lookbackDays, String collectionType, LocalDate baseDate,
+                                             String collectionType, LocalDate baseDate,
                                              List<ServiceCodeMapping> preloadedMappings) {
-        return runTranCode(shardId, tranCode, maxRowsPerMessageType, lookbackDays, collectionType, baseDate,
+        return runTranCode(shardId, tranCode, maxRowsPerMessageType, collectionType, baseDate,
                 preloadedMappings, () -> false);
     }
 
     public MigrationShardResult runTranCode(long shardId, String tranCode, int maxRowsPerMessageType,
-                                             int lookbackDays, String collectionType, LocalDate baseDate,
+                                             String collectionType, LocalDate baseDate,
                                              List<ServiceCodeMapping> preloadedMappings,
                                              BooleanSupplier cancelRequested) {
         if (maxRowsPerMessageType <= 0) {
             log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=sample size is not positive",
-                    shardId, tranCode);
-            return new MigrationShardResult(0L, 0L, 0L, 0);
-        }
-        if (lookbackDays <= 0) {
-            log.info("Transaction-code migration skipped, shardId={}, tranCode={}, reason=lookback days is not positive",
                     shardId, tranCode);
             return new MigrationShardResult(0L, 0L, 0L, 0);
         }
@@ -166,10 +154,10 @@ public class MigrationShardRunner {
 
         BatchResult total = new BatchResult();
         LocalDate currentDate = LocalDate.now(clock.withZone(SHANGHAI));
-        int effectiveLookbackDays = effectiveLookbackDays(lookbackDays, currentDate);
+        ScanWindow scanWindow = scanWindow(currentDate, collectionType, baseDate);
         Map<LocalDate, Boolean> partitionExists = new LinkedHashMap<>();
-        log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, lookbackDays={}, currentDate={}",
-                shardId, tranCode, serviceMappings.size(), maxRowsPerMessageType, lookbackDays, currentDate);
+        log.info("Transaction-code migration started, shardId={}, tranCode={}, serviceCodeCount={}, sampleSizePerMessageType={}, currentDate={}",
+                shardId, tranCode, serviceMappings.size(), maxRowsPerMessageType, currentDate);
         for (String messageType : TRAN_CODE_MESSAGE_TYPES) {
             if (cancelRequested.getAsBoolean()) {
                 break;
@@ -177,7 +165,7 @@ public class MigrationShardRunner {
             Map<String, String> targetTxnCodeBySourceTxnCode = txnCodeMappings(serviceMappings, messageType);
             List<String> sourceTxnCodes = new ArrayList<>(targetTxnCodeBySourceTxnCode.keySet());
             long migratedRows = 0L;
-            List<LocalDate> scanDates = scanDates(currentDate, effectiveLookbackDays, collectionType, baseDate);
+            List<LocalDate> scanDates = scanWindow.dates();
             for (LocalDate scanDate : scanDates) {
                 if (migratedRows >= maxRowsPerMessageType || cancelRequested.getAsBoolean()) {
                     break;
@@ -211,42 +199,50 @@ public class MigrationShardRunner {
         }
         log.info("Transaction-code migration completed, shardId={}, tranCode={}, migratedRows={}, skippedRows={}, cancelled={}",
                 shardId, tranCode, total.migratedRows, total.skippedRows, cancelRequested.getAsBoolean());
-        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, effectiveLookbackDays);
+        return new MigrationShardResult(total.migratedRows, total.skippedRows, 0L, scanWindow.scanDays());
     }
 
-    private List<LocalDate> scanDates(LocalDate currentDate, int lookbackDays, String collectionType, LocalDate baseDate) {
+    private ScanWindow scanWindow(LocalDate currentDate, String collectionType, LocalDate baseDate) {
         if (baseDate == null) {
-            return java.util.stream.IntStream.range(0, lookbackDays).mapToObj(currentDate::minusDays).toList();
+            LocalDate floor = tranCodePartition.earliestPartitionDate();
+            if (floor == null) {
+                return new ScanWindow(List.of(), 0);
+            }
+            return new ScanWindow(datesDescending(currentDate, floor), scanDaysBetween(floor, currentDate));
         }
         LocalDate base = baseDate.isAfter(currentDate) ? currentDate : baseDate;
-        List<LocalDate> dates = new ArrayList<>();
-        Set<LocalDate> seen = new LinkedHashSet<>();
         if (MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT.equals(collectionType)) {
-            for (LocalDate date = base; !date.isAfter(currentDate); date = date.plusDays(1)) {
-                if (seen.add(date)) {
-                    dates.add(date);
-                }
-            }
-            for (int dayOffset = 1; dayOffset <= lookbackDays; dayOffset++) {
-                LocalDate date = base.minusDays(dayOffset);
-                if (seen.add(date)) {
-                    dates.add(date);
-                }
-            }
-            return dates;
+            return new ScanWindow(datesAscending(base, currentDate), scanDaysBetween(base, currentDate));
         }
-        for (int dayOffset = 0; dayOffset < lookbackDays; dayOffset++) {
-            LocalDate date = base.minusDays(dayOffset);
-            if (seen.add(date)) {
-                dates.add(date);
-            }
+        LocalDate floor = tranCodePartition.earliestPartitionDate();
+        if (floor == null || floor.isAfter(base)) {
+            floor = base;
         }
-        for (LocalDate date = base.plusDays(1); !date.isAfter(currentDate); date = date.plusDays(1)) {
-            if (seen.add(date)) {
-                dates.add(date);
-            }
+        return new ScanWindow(datesDescending(base, floor), scanDaysBetween(floor, base));
+    }
+
+    private List<LocalDate> datesAscending(LocalDate from, LocalDate to) {
+        List<LocalDate> dates = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            dates.add(date);
         }
         return dates;
+    }
+
+    private List<LocalDate> datesDescending(LocalDate from, LocalDate to) {
+        List<LocalDate> dates = new ArrayList<>();
+        for (LocalDate date = from; !date.isBefore(to); date = date.minusDays(1)) {
+            dates.add(date);
+        }
+        return dates;
+    }
+
+    private int scanDaysBetween(LocalDate from, LocalDate to) {
+        long days = ChronoUnit.DAYS.between(from, to) + 1;
+        return days > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) days;
+    }
+
+    private record ScanWindow(List<LocalDate> dates, int scanDays) {
     }
 
     public Map<String, List<ServiceCodeMapping>> loadTranCodeMappings(List<String> tranCodes) {
@@ -334,21 +330,6 @@ public class MigrationShardRunner {
 
     private String normalizeServiceCode(String serviceCode) {
         return serviceCode == null ? "" : serviceCode.trim().replace(".", "");
-    }
-
-    private int effectiveLookbackDays(int lookbackDays, LocalDate currentDate) {
-        if (lookbackDays != MigrationTranCodeCommandForm.ALL_LOOKBACK_DAYS) {
-            return lookbackDays;
-        }
-        LocalDate earliestDate = tranCodePartition.earliestPartitionDate();
-        if (earliestDate == null) {
-            return 0;
-        }
-        long days = ChronoUnit.DAYS.between(earliestDate, currentDate) + 1;
-        if (days <= 0) {
-            return 1;
-        }
-        return days > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) days;
     }
 
     private List<TranCodeRequestRow> loadTranCodeRequestRows(LocalDate scanDate,

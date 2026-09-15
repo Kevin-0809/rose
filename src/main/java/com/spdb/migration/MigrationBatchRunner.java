@@ -126,14 +126,11 @@ public class MigrationBatchRunner {
             if ("SQL".equals(command.commandType())) {
                 result = shardRunner.runSql(shardId, command.requestSql(), FETCH_SIZE);
             } else if ("TRAN_CODE".equals(command.commandType())) {
-                int lookbackDays = command.lookbackDays() == null
-                        ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS
-                        : command.lookbackDays();
                 int sampleSize = command.sampleSize() == null
                         ? MigrationTranCodeCommandForm.DEFAULT_SAMPLE_SIZE
                         : command.sampleSize();
                 List<MigrationShardRunner.ServiceCodeMapping> serviceMappings = tranCodeMappings.get(shard.tranCode());
-                result = shardRunner.runTranCode(shardId, shard.tranCode(), sampleSize, lookbackDays,
+                result = shardRunner.runTranCode(shardId, shard.tranCode(), sampleSize,
                         command.collectionType(), command.baseDate(), serviceMappings,
                         () -> commandService.isCancelRequested(commandId));
             } else {
@@ -160,9 +157,8 @@ public class MigrationBatchRunner {
 
     private void logShardStarted(MigrationCommandRow command, long shardId, MigrationShardRow shard) {
         if ("TRAN_CODE".equals(command.commandType())) {
-            log.info("Migration shard started, commandId={}, shardId={}, shardSeq={}, commandType={}, tranCode={}, sampleSize={}, lookbackDays={}",
-                    command.commandId(), shardId, shard.shardSeq(), command.commandType(), shard.tranCode(), command.sampleSize(),
-                    command.lookbackDays() == null ? MigrationTranCodeCommandForm.DEFAULT_LOOKBACK_DAYS : command.lookbackDays());
+            log.info("Migration shard started, commandId={}, shardId={}, shardSeq={}, commandType={}, tranCode={}, sampleSize={}",
+                    command.commandId(), shardId, shard.shardSeq(), command.commandType(), shard.tranCode(), command.sampleSize());
             return;
         }
         log.info("Migration shard started, commandId={}, shardId={}, shardSeq={}, commandType={}, timeFrom={}, timeTo={}",

@@ -8,7 +8,6 @@ public record ReplayVolumeCheckBatch(
         ReplayVolumeCheckBatchStatus status,
         LocalDateTime catalogSnapshotTime,
         int sampleSize,
-        int lookbackDays,
         LocalDate baseDate,
         long catalogCount,
         long hasVolumeCount,
@@ -24,11 +23,11 @@ public record ReplayVolumeCheckBatch(
         String collectionType) {
 
     public ReplayVolumeCheckBatch(long checkId, ReplayVolumeCheckBatchStatus status, LocalDateTime catalogSnapshotTime,
-                                  int sampleSize, int lookbackDays, LocalDate baseDate, long catalogCount, long noVolumeCount,
+                                  int sampleSize, LocalDate baseDate, long catalogCount, long noVolumeCount,
                                   long cleanupServiceCount, long cleanupRowCount, long actualCleanupRowCount,
                                   Long migrationCommandId, LocalDateTime createdTime, LocalDateTime startedTime,
                                   LocalDateTime endedTime, String errorMessage) {
-        this(checkId, status, catalogSnapshotTime, sampleSize, lookbackDays, baseDate, catalogCount,
+        this(checkId, status, catalogSnapshotTime, sampleSize, baseDate, catalogCount,
                 0L, noVolumeCount, cleanupServiceCount, cleanupRowCount, actualCleanupRowCount,
                 migrationCommandId, createdTime, startedTime, endedTime, errorMessage, null);
     }

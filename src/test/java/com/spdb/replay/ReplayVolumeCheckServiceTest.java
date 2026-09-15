@@ -150,7 +150,7 @@ class ReplayVolumeCheckServiceTest {
         when(migrationService.createTranCodeCommand(any(MigrationTranCodeCommandForm.class))).thenReturn(41L);
         LocalDate baseDate = LocalDate.of(2026, 9, 1);
 
-        ReplayVolumeCheckResult checked = service.check(100, 30, baseDate);
+        ReplayVolumeCheckResult checked = service.check(100, baseDate);
         assertThat(checked.batch().baseDate()).isEqualTo(baseDate);
         assertThat(checked.batch().collectionType()).isEqualTo(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
         ReplayVolumeCheckResult executed = service.confirm(checked.batch().checkId());
@@ -163,7 +163,7 @@ class ReplayVolumeCheckServiceTest {
         assertThat(executed.batch().actualCleanupRowCount()).isEqualTo(2L);
         assertThat(executed.batch().migrationCommandId()).isEqualTo(41L);
         MigrationTranCodeCommandForm expectedMigration = new MigrationTranCodeCommandForm(
-                "EMPTY", 100, 30, MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
+                "EMPTY", 100, MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
         expectedMigration.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_QUERY);
         expectedMigration.setBaseDate(baseDate);
         verify(migrationService).createTranCodeCommand(expectedMigration);
@@ -183,13 +183,13 @@ class ReplayVolumeCheckServiceTest {
         when(migrationService.createTranCodeCommand(any(MigrationTranCodeCommandForm.class))).thenReturn(51L);
         LocalDate baseDate = LocalDate.of(2026, 9, 2);
 
-        ReplayVolumeCheckResult checked = service.check(100, 30, baseDate, MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT);
+        ReplayVolumeCheckResult checked = service.check(100, baseDate, MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT);
         assertThat(checked.batch().collectionType()).isEqualTo(MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT);
 
         service.confirm(checked.batch().checkId());
 
         MigrationTranCodeCommandForm expectedMigration = new MigrationTranCodeCommandForm(
-                "EMPTY", 100, 30, MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
+                "EMPTY", 100, MigrationTranCodeCommandForm.DEFAULT_PARALLELISM, "回放交易量检查");
         expectedMigration.setCollectionType(MigrationTranCodeCommandForm.COLLECTION_TYPE_ACCOUNT);
         expectedMigration.setBaseDate(baseDate);
         verify(migrationService).createTranCodeCommand(expectedMigration);
@@ -208,7 +208,7 @@ class ReplayVolumeCheckServiceTest {
 
     @Test
     void checkRejectsMissingCollectionType() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.check(100, 30, LocalDate.of(2026, 9, 1), " "))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.check(100, LocalDate.of(2026, 9, 1), " "))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("采集方式");
     }

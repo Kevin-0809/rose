@@ -15,7 +15,7 @@ import static org.mockito.Mockito.*;
 
 class ReplayVolumeCheckControllerTest {
     private final ReplayVolumeCheckBatch batch = new ReplayVolumeCheckBatch(
-            7L, ReplayVolumeCheckBatchStatus.WAITING_CONFIRM, LocalDateTime.now(), 100, 30, LocalDate.of(2026, 9, 1),
+            7L, ReplayVolumeCheckBatchStatus.WAITING_CONFIRM, LocalDateTime.now(), 100, LocalDate.of(2026, 9, 1),
             2, 1, 1, 3, 0, null, LocalDateTime.now(), null, LocalDateTime.now(), null);
 
     @Test
@@ -52,14 +52,14 @@ class ReplayVolumeCheckControllerTest {
     void startAndConfirmRedirectToDetail() {
         ReplayVolumeCheckService service = mock(ReplayVolumeCheckService.class);
         LocalDate baseDate = LocalDate.of(2026, 9, 1);
-        when(service.check(100, 30, baseDate, "QUERY")).thenReturn(new ReplayVolumeCheckResult(batch, List.of(), List.of()));
+        when(service.check(100, baseDate, "QUERY")).thenReturn(new ReplayVolumeCheckResult(batch, List.of(), List.of()));
         when(service.confirm(7L)).thenReturn(new ReplayVolumeCheckResult(batch, List.of(), List.of()));
         var controller = new ReplayVolumeCheckController(service);
         var model = new ExtendedModelMap();
 
-        assertThat(controller.start(100, 30, "2026-09-01", "QUERY", model)).isEqualTo("redirect:/config/replay-volume-check/7");
+        assertThat(controller.start(100, "2026-09-01", "QUERY", model)).isEqualTo("redirect:/config/replay-volume-check/7");
         assertThat(controller.confirm(7L)).isEqualTo("redirect:/config/replay-volume-check/7");
-        verify(service).check(100, 30, baseDate, "QUERY");
+        verify(service).check(100, baseDate, "QUERY");
         verify(service).confirm(7L);
     }
 
@@ -69,7 +69,7 @@ class ReplayVolumeCheckControllerTest {
         var controller = new ReplayVolumeCheckController(service);
         var model = new ExtendedModelMap();
 
-        assertThat(controller.start(100, 30, "2026-13-40", "QUERY", model)).isEqualTo("config/replay-volume-check");
+        assertThat(controller.start(100, "2026-13-40", "QUERY", model)).isEqualTo("config/replay-volume-check");
         assertThat(model.getAttribute("error")).isEqualTo("日期格式不正确，请使用 yyyy-MM-dd");
         assertThat(model.getAttribute("baseDate")).isEqualTo("2026-13-40");
         verifyNoInteractions(service);
@@ -81,7 +81,7 @@ class ReplayVolumeCheckControllerTest {
         var controller = new ReplayVolumeCheckController(service);
         var model = new ExtendedModelMap();
 
-        assertThat(controller.start(100, 30, "2026-09-01", "", model)).isEqualTo("config/replay-volume-check");
+        assertThat(controller.start(100, "2026-09-01", "", model)).isEqualTo("config/replay-volume-check");
         assertThat(model.getAttribute("error")).isEqualTo("请选择采集方式（查询或账务）");
         verifyNoInteractions(service);
     }
@@ -92,7 +92,7 @@ class ReplayVolumeCheckControllerTest {
         var controller = new ReplayVolumeCheckController(service);
         var model = new ExtendedModelMap();
 
-        assertThat(controller.start(100, 30, "  ", "QUERY", model)).isEqualTo("config/replay-volume-check");
+        assertThat(controller.start(100, "  ", "QUERY", model)).isEqualTo("config/replay-volume-check");
         assertThat(model.getAttribute("error")).isEqualTo("请填写铺底日期");
         verifyNoInteractions(service);
     }

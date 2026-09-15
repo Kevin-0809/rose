@@ -43,7 +43,7 @@ class MigrationProgressTemplateTest {
         assertThat(html).contains("${progress.sampleSize}");
         assertThat(html).contains("${progress.collectionType == 'ACCOUNT' ? '账务' : (progress.collectionType == 'QUERY' ? '查询' : '-')}");
         assertThat(html).contains("${shard.tranCode}");
-        assertThat(html).contains("${shard.actualLookbackDays == null ? '-' : shard.actualLookbackDays}");
+        assertThat(html).contains("${shard.actualScanDays == null ? '-' : shard.actualScanDays}");
         assertThat(html).contains("migration-tran-codes");
         assertThat(html).contains("#strings.replace(progress.tranCodes, ',', ', ')");
     }

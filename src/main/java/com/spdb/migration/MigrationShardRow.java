@@ -9,7 +9,7 @@ public record MigrationShardRow(
         long migratedRows,
         long skippedRows,
         long droppedRows,
-        Integer actualLookbackDays,
+        Integer actualScanDays,
         int attempts,
         long durationSeconds,
         String errorMessage

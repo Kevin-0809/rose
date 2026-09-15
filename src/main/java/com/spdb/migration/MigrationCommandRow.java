@@ -29,7 +29,6 @@ public record MigrationCommandRow(
         String tranCodes,
         Integer sampleSize,
         String remark,
-        Integer lookbackDays,
         String collectionType,
         LocalDate baseDate
 ) {
@@ -61,7 +60,7 @@ public record MigrationCommandRow(
         this(commandId, sourceDataSource, targetDataSource, commandType, status, timeFrom, timeTo, windowSeconds,
                 parallelism, totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows,
                 droppedRows, durationText, createdTime, startedTime, endedTime, errorMessage, requestSql, responseSql,
-                null, null, remark, null, null, null);
+                null, null, remark, null, null);
     }
 
     public MigrationCommandRow(
@@ -75,7 +74,7 @@ public record MigrationCommandRow(
         this(commandId, sourceDataSource, targetDataSource, commandType, status, timeFrom, timeTo, windowSeconds,
                 parallelism, totalShardCount, completedShardCount, failedShardCount, migratedRows, skippedRows,
                 droppedRows, durationText, createdTime, startedTime, endedTime, errorMessage, requestSql, responseSql,
-                tranCodes, sampleSize, remark, null, null, null);
+                tranCodes, sampleSize, remark, null, null);
     }
 
     public int completionPercent() {
