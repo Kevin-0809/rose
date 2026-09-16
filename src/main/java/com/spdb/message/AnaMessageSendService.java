@@ -1,6 +1,7 @@
 package com.spdb.message;
 
 import com.spdb.message.utils.AuthUtil;
+import com.spdb.message.utils.MessageTextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.ResultSetExtractor;
@@ -373,7 +374,7 @@ public class AnaMessageSendService {
         if (t.equals("sop") || t.equals("sop2cbsp")) {
             return HexFormat.of().formatHex(body);
         }
-        return new String(body, target.equalsIgnoreCase("528") ? Charset.forName("GBK") : StandardCharsets.UTF_8);
+        return MessageTextUtil.decode(body);
     }
 
     private String pickAddress(String protocol) {

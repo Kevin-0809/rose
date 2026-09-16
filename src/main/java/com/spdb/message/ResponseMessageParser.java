@@ -17,16 +17,15 @@ public class ResponseMessageParser {
         try {
             if (t.equals("sop") || t.equals("sop2cbsp")) {
                 if (body.length < 97) return "";
-                return new String(body, 90, 7, GBK).trim();
+                return new String(body, 89, 7, GBK).trim();
             }
             if (t.equals("json") || t.equals("bzjson")) {
                 JsonNode root = JSON.readTree(body);
-                if (t.equals("json")) {
+                if (t.equals("bzjson")) {
                     JsonNode nested = root.path("Body").path("RspSvcHeader").path("ReturnCode");
                     if (!nested.isMissingNode() && !nested.isNull()) return nested.asText();
                 }
-                JsonNode node = root.get("ReturnCode");
-                return node == null || node.isNull() ? "" : node.asText();
+                return firstText(root, "ReturnCode", "returnCode");
             }
             if (t.equals("soap")) {
                 DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -41,6 +40,14 @@ public class ResponseMessageParser {
                 return nodes.getLength() == 0 ? "" : nodes.item(0).getTextContent().trim();
             }
         } catch (Exception ignored) { }
+        return "";
+    }
+
+    private static String firstText(JsonNode root, String... names) {
+        for (String name : names) {
+            JsonNode node = root.get(name);
+            if (node != null && !node.isNull()) return node.asText();
+        }
         return "";
     }
 }
