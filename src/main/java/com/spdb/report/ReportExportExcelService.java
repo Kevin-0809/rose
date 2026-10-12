@@ -402,8 +402,8 @@ public class ReportExportExcelService {
             cell(excelRow, 5, row.internalOwner(), rowStyle);
             cell(excelRow, 6, row.moduleName(), rowStyle);
             numericCell(excelRow, 7, row.sentTransactionCount(), rowStyle);
-            numericCell(excelRow, 8, row.compResult1Count(), rowStyle);
-            numericCell(excelRow, 9, row.compResult2Count(), rowStyle);
+            numericCell(excelRow, 8, row.compResult2Count(), rowStyle);
+            numericCell(excelRow, 9, row.compResult1Count(), rowStyle);
             numericCell(excelRow, 10, row.compResult3Count(), rowStyle);
             numericCell(excelRow, 11, row.compResult8Count(), rowStyle);
             numericCell(excelRow, 12, row.compResult4Count(), rowStyle);
@@ -550,8 +550,8 @@ public class ReportExportExcelService {
         cell(excelRow, 5, "", rowStyle);
         cell(excelRow, 6, "", rowStyle);
         numericCell(excelRow, 7, total, rowStyle);
-        numericCell(excelRow, 8, one, rowStyle);
-        numericCell(excelRow, 9, two, rowStyle);
+        numericCell(excelRow, 8, two, rowStyle);
+        numericCell(excelRow, 9, one, rowStyle);
         numericCell(excelRow, 10, three, rowStyle);
         numericCell(excelRow, 11, eight, rowStyle);
         numericCell(excelRow, 12, four, rowStyle);

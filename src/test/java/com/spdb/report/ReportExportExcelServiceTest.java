@@ -156,6 +156,8 @@ class ReportExportExcelServiceTest {
             assertThat(data.getCell(5).getStringCellValue()).isEqualTo("行内负责人甲");
             assertThat(data.getCell(6).getStringCellValue()).isEqualTo("支付");
             assertNumericCell(data, 7, 10L);
+            assertNumericCell(data, 8, 2L);
+            assertNumericCell(data, 9, 1L);
             assertPercentCell(data, 14, 0.7d);
             assertPercentCell(data, 15, 0.7d);
             assertNumericCell(data, 16, 20d);
@@ -163,6 +165,8 @@ class ReportExportExcelServiceTest {
             Row total = sheet.getRow(2);
             assertThat(total.getCell(2).getStringCellValue()).isEqualTo("合计");
             assertNumericCell(total, 7, 10L);
+            assertNumericCell(total, 8, 2L);
+            assertNumericCell(total, 9, 1L);
             assertPercentCell(total, 14, 0.7d);
             assertPercentCell(total, 15, 0.7d);
             assertThat(total.getCell(16).getStringCellValue()).isBlank();
