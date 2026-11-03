@@ -130,6 +130,73 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void supplementsMissingFieldCnNameByLayeredFieldMapping() {
+        jdbc.update("""
+                insert into ana_field_mapping(tran_code, service_code, std_field_name, field_cn_name, sop_field_name, soap_field_name, bizjson_field_name) values
+                ('T001', 'SVC1', 'amount', null, 'SOP_AMOUNT', 'Request.amount', 'biz.amount'),
+                ('T001', 'SVC1', 'request.amount', '金额回退', null, null, null),
+                ('T002', 'SVC2', 'sop-amount', 'SOP中文', 'SOP_AMOUNT', null, null),
+                ('T003', 'SVC3', 'biz-amount', 'Biz中文', null, null, 'biz.amount'),
+                ('T004', 'SVC4', 'unknown', '不该使用', null, 'other', null),
+                ('T005', 'SVC5', 'std.raw_name_001', '原始名中文', null, 'other', null)
+                """);
+        jdbc.update("""
+                insert into tss_field_comp values
+                ('F1', '20260727', 1, 1, 1, 'SVC1&soap', 'Request.amount', 'source', 'ignored', 'destination'),
+                ('F2', '20260727', 1, 1, 1, 'SVC2&soap', 'SOP_AMOUNT', 'source', 'ignored', 'destination'),
+                ('F3', '20260727', 1, 1, 1, 'SVC3&soap', 'biz.amount', 'source', 'ignored', 'destination'),
+                ('F4', '20260727', 1, 1, 1, 'SVC4&soap', 'unmapped', 'source', 'ignored', 'destination'),
+                ('F5', '20260727', 1, 1, 1, 'SVC5&soap', 'std.raw_name_001', 'source', 'ignored', 'destination')
+                """);
+
+        runner.run("BATCH-FIELD-CN", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        List<Map<String, Object>> fields = jdbc.queryForList("""
+                select service_code, field_cn_name, mapping_status, field_name
+                from ana_field_diff_tracking_export
+                where source_batch_id = 'BATCH-FIELD-CN'
+                order by service_code
+                """);
+        assertThat(fields).hasSize(5);
+        assertThat(fields.get(0)).containsEntry("service_code", "SVC1")
+                .containsEntry("field_cn_name", "金额回退")
+                .containsEntry("mapping_status", "MAPPED");
+        assertThat(fields.get(1)).containsEntry("service_code", "SVC2")
+                .containsEntry("field_cn_name", "SOP中文")
+                .containsEntry("mapping_status", "UNMAPPED");
+        assertThat(fields.get(2)).containsEntry("service_code", "SVC3")
+                .containsEntry("field_cn_name", "Biz中文")
+                .containsEntry("mapping_status", "UNMAPPED");
+        assertThat(fields.get(3)).containsEntry("service_code", "SVC4")
+                .containsEntry("mapping_status", "UNMAPPED");
+        assertThat(fields.get(3).get("field_cn_name")).isNull();
+        assertThat(fields.get(4)).containsEntry("service_code", "SVC5")
+                .containsEntry("field_cn_name", "原始名中文")
+                .containsEntry("mapping_status", "UNMAPPED");
+        assertThat(fields.get(4).get("field_name")).asString().contains("原始名中文");
+    }
+
+    @Test
+    void looksUpArrayFieldCnNameByLastSegmentAndService() {
+        jdbc.update("""
+                insert into ana_field_mapping(tran_code, service_code, std_field_name, field_cn_name, sop_field_name, soap_field_name, bizjson_field_name) values
+                ('T006', 'SVC6', 'CurrencyId', '币种', null, 'CurrencyId', null),
+                ('T006', 'SVC6', 'AcctNo', '账号', null, 'AcctNo', null)
+                """);
+        jdbc.update("insert into tss_field_comp values ('F6', '20260727', 1, 1, 1, 'SVC6&soap', 'CurrencyId.Acctno', 'source', 'ignored', 'destination')");
+
+        runner.run("BATCH-FIELD-ARRAY", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        assertThat(jdbc.queryForMap("""
+                select field_cn_name, soap_field_name, mapping_status
+                  from ana_field_diff_tracking_export
+                 where source_batch_id = 'BATCH-FIELD-ARRAY'
+                """)).containsEntry("field_cn_name", "账号")
+                .containsEntry("soap_field_name", "CurrencyId.Acctno")
+                .containsEntry("mapping_status", "UNMAPPED");
+    }
+
+    @Test
     void splitsBothFailedTransactionsByResponseCodeConsistencyInSummarySuccessRate() {
         jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC1', '交易一', '支付', '负责人')");
         jdbc.update("""
@@ -483,15 +550,16 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
-    void usesMergeForTransactionDetailInsert() throws Exception {
+    void usesInsertForTransactionDetailInsert() throws Exception {
         var method = ReportExportBatchRunner.class.getDeclaredMethod("transactionDetailInsertSql");
         method.setAccessible(true);
 
         String sql = (String) method.invoke(runner);
 
-        assertThat(sql).contains("merge into ana_tran_diff_tracking_export as target")
-                .contains("using (")
-                .contains("when not matched then")
+        assertThat(sql).contains("insert into ana_tran_diff_tracking_export")
+                .contains("values (")
+                .doesNotContain("merge into")
+                .doesNotContain("when not matched")
                 .doesNotContain("on conflict")
                 .doesNotContain("where not exists");
     }
@@ -571,17 +639,18 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
-    void usesMergeForFieldDetailInsert() throws Exception {
+    void usesInsertForFieldDetailInsert() throws Exception {
         var method = ReportExportBatchRunner.class.getDeclaredMethod("fieldDetailInsertSql");
         method.setAccessible(true);
 
         String sql = (String) method.invoke(runner);
 
-        assertThat(sql).contains("merge into ana_field_diff_tracking_export as target")
-                .contains("cast(:orig as text) as orig_field_value")
-                .contains("cast(:dest as text) as dest_field_value")
-                .contains("using (")
-                .contains("when not matched then")
+        assertThat(sql).contains("insert into ana_field_diff_tracking_export")
+                .contains("cast(:orig as text)")
+                .contains("cast(:dest as text)")
+                .contains("values (")
+                .doesNotContain("merge into")
+                .doesNotContain("when not matched")
                 .doesNotContain("on conflict")
                 .doesNotContain("where not exists");
     }

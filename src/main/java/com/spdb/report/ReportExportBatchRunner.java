@@ -157,8 +157,8 @@ public class ReportExportBatchRunner {
 
     private List<FieldMapping> fieldMappings() {
         List<FieldMapping> result = new ArrayList<>();
-        jdbc.getJdbcTemplate().query("select tran_code, service_code, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name from ana_field_mapping", (RowCallbackHandler)
-                rs -> result.add(new FieldMapping(rs.getString("tran_code"), rs.getString("service_code"), rs.getString("sop_field_name"), rs.getString("soap_field_name"), rs.getString("bizjson_field_name"), rs.getString("field_cn_name"))));
+        jdbc.getJdbcTemplate().query("select tran_code, service_code, std_field_name, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name from ana_field_mapping", (RowCallbackHandler)
+                rs -> result.add(new FieldMapping(rs.getString("tran_code"), rs.getString("service_code"), rs.getString("std_field_name"), rs.getString("sop_field_name"), rs.getString("soap_field_name"), rs.getString("bizjson_field_name"), rs.getString("field_cn_name"))));
         return result;
     }
 
@@ -552,8 +552,8 @@ public class ReportExportBatchRunner {
 
     private void streamTransactionService(String batchId, String reportDate, LocalDateTime exportTime, String normalizedService,
                                           Map<String, Catalog> catalogs, AtomicLong rowNo, Set<String> ignoredTransactionIds) {
-        Map<String, TransactionDetail> detailsByIssueKey = new LinkedHashMap<>();
-        Map<String, Set<String>> affectedMesgSeqsByIssueKey = new LinkedHashMap<>();
+        Map<IssueDetailKey, TransactionDetail> detailsByKey = new LinkedHashMap<>();
+        Map<IssueDetailKey, Set<String>> affectedMesgSeqsByKey = new LinkedHashMap<>();
         String insert = transactionDetailInsertSql();
         String sql = """
                 select tc.mesg_seq, tc.orig_cdate, tc.conv_index, tc.conv_cindex, tc.dest_trcd, tc.comp_result,
@@ -572,19 +572,19 @@ public class ReportExportBatchRunner {
             statement.setFetchSize(TRANSACTION_FETCH_SIZE);
             statement.setString(1, normalizedService);
             try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) collectTransactionRow(rs, catalogs, detailsByIssueKey, affectedMesgSeqsByIssueKey, ignoredTransactionIds);
+                while (rs.next()) collectTransactionRow(batchId, rs, catalogs, detailsByKey, affectedMesgSeqsByKey, ignoredTransactionIds);
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to stream transaction details for service " + normalizedService, exception);
         }
-        for (Map.Entry<String, TransactionDetail> entry : detailsByIssueKey.entrySet()) {
-            long affectedCount = affectedMesgSeqsByIssueKey.getOrDefault(entry.getKey(), Set.of()).size();
+        for (Map.Entry<IssueDetailKey, TransactionDetail> entry : detailsByKey.entrySet()) {
+            long affectedCount = affectedMesgSeqsByKey.getOrDefault(entry.getKey(), Set.of()).size();
             insertTransactionDetail(insert, batchId, reportDate, exportTime, rowNo.incrementAndGet(), entry.getValue(), affectedCount);
         }
     }
 
-    private void collectTransactionRow(ResultSet rs, Map<String, Catalog> catalogs, Map<String, TransactionDetail> detailsByIssueKey,
-                                       Map<String, Set<String>> affectedMesgSeqsByIssueKey, Set<String> ignoredTransactionIds) throws SQLException {
+    private void collectTransactionRow(String batchId, ResultSet rs, Map<String, Catalog> catalogs, Map<IssueDetailKey, TransactionDetail> detailsByKey,
+                                       Map<IssueDetailKey, Set<String>> affectedMesgSeqsByKey, Set<String> ignoredTransactionIds) throws SQLException {
         Tran row = new Tran(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getString("dest_trcd"), rs.getString("comp_result"));
         if (ignoredTransactionIds.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex()))) return;
         Retcode retcode = rs.getString("ret_mesg_seq") == null ? null
@@ -592,8 +592,9 @@ public class ReportExportBatchRunner {
         if (!shouldExportTransaction(row, retcode)) return;
         TransactionDetail detail = transactionDetail(row, retcode, catalogs);
         if (detail.issueKey() == null || detail.issueKey().isBlank()) return;
-        detailsByIssueKey.putIfAbsent(detail.issueKey(), detail);
-        affectedMesgSeqsByIssueKey.computeIfAbsent(detail.issueKey(), ignored -> new HashSet<>()).add(row.mesgSeq());
+        IssueDetailKey key = new IssueDetailKey(batchId, detail.service(), detail.issueKey());
+        detailsByKey.putIfAbsent(key, detail);
+        affectedMesgSeqsByKey.computeIfAbsent(key, ignored -> new HashSet<>()).add(row.mesgSeq());
     }
 
     private TransactionDetail transactionDetail(Tran tran, Retcode retcode, Map<String, Catalog> catalogs) {
@@ -629,60 +630,53 @@ public class ReportExportBatchRunner {
 
     private String transactionDetailInsertSql() {
         return """
-                merge into ana_tran_diff_tracking_export as target
-                using (
-                    select cast(:time as timestamp) as export_timestamp, cast(:batchId as varchar(64)) as source_batch_id,
-                    cast(:date as varchar(8)) as business_date, cast(:rowNo as bigint) as row_no,
-                    cast(:service as varchar(200)) as service_code, cast(:origCode as varchar(64)) as orig_error_code,
-                    cast(:destCode as varchar(64)) as dest_error_code, cast(:tranCode as varchar(32)) as tran_code,
-                    cast(:tranName as varchar(200)) as tran_name, cast(:module as varchar(100)) as module_name,
-                    cast(:origDesc as text) as orig_error_desc, cast(:destDesc as text) as dest_error_desc,
-                    cast(:owner as varchar(100)) as transaction_owner, cast(:seq as varchar(64)) as tran_seq_no,
-                    '交易级' as problem_level, cast(:date as varchar(8)) as registration_date,
-                    cast(:field as text) as field_name, cast(:description as text) as problem_description,
-                    cast(:issueKey as varchar(600)) as issue_key, cast(:affectedCount as bigint) as affected_tran_count
-                ) as source
-                on (target.source_batch_id = source.source_batch_id
-                    and target.service_code = source.service_code
-                    and target.orig_error_code = source.orig_error_code
-                    and target.dest_error_code = source.dest_error_code)
-                when not matched then
-                    insert (export_timestamp, source_batch_id, business_date, row_no, service_code, orig_error_code,
-                    dest_error_code, tran_code, tran_name, module_name, orig_error_desc, dest_error_desc, transaction_owner,
-                    tran_seq_no, problem_level, registration_date, field_name, problem_description, issue_key, affected_tran_count)
-                    values (source.export_timestamp, source.source_batch_id, source.business_date, source.row_no, source.service_code,
-                    source.orig_error_code, source.dest_error_code, source.tran_code, source.tran_name, source.module_name,
-                    source.orig_error_desc, source.dest_error_desc, source.transaction_owner, source.tran_seq_no,
-                    source.problem_level, source.registration_date, source.field_name, source.problem_description, source.issue_key,
-                    source.affected_tran_count)
+                insert into ana_tran_diff_tracking_export (
+                    export_timestamp, source_batch_id, business_date, row_no, service_code, orig_error_code,
+                    dest_error_code, tran_code, tran_name, module_name, orig_error_desc, dest_error_desc,
+                    transaction_owner, tran_seq_no, problem_level, registration_date, field_name,
+                    problem_description, issue_key, affected_tran_count)
+                values (
+                    cast(:time as timestamp), cast(:batchId as varchar(64)), cast(:date as varchar(8)),
+                    cast(:rowNo as bigint), cast(:service as varchar(200)), cast(:origCode as varchar(64)),
+                    cast(:destCode as varchar(64)), cast(:tranCode as varchar(32)), cast(:tranName as varchar(200)),
+                    cast(:module as varchar(100)), cast(:origDesc as text), cast(:destDesc as text),
+                    cast(:owner as varchar(100)), cast(:seq as varchar(64)), '交易级', cast(:date as varchar(8)),
+                    cast(:field as text), cast(:description as text), cast(:issueKey as varchar(600)),
+                    cast(:affectedCount as bigint))
                 """;
     }
 
     private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Field> fields, Map<String, Catalog> catalogs,
                                     List<FieldMapping> fieldMappings, Set<String> ignoredTransactionIds) {
-        Map<String, Field> grouped = new TreeMap<>();
-        Map<String, Set<String>> affectedMesgSeqs = new TreeMap<>();
+        Map<IssueDetailKey, Field> grouped = new TreeMap<>(ISSUE_DETAIL_ORDER);
+        Map<IssueDetailKey, Set<String>> affectedMesgSeqs = new TreeMap<>(ISSUE_DETAIL_ORDER);
         fields.stream().sorted(FIELD_ORDER).forEach(row -> {
             if (ignoredTransactionIds.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex()))) {
                 return;
             }
-            String issueKey = fieldIssueKey(service(row.destTrcd()), normalizedField(row.origFieldName()));
-            grouped.putIfAbsent(issueKey, row);
-            affectedMesgSeqs.computeIfAbsent(issueKey, ignored -> new HashSet<>()).add(row.mesgSeq());
+            String service = service(row.destTrcd());
+            IssueDetailKey key = new IssueDetailKey(batchId, service, fieldIssueKey(service, normalizedField(row.origFieldName())));
+            grouped.putIfAbsent(key, row);
+            affectedMesgSeqs.computeIfAbsent(key, ignored -> new HashSet<>()).add(row.mesgSeq());
         });
+        Map<String, List<FieldMapping>> mappingsByService = fieldMappingsByService(fieldMappings);
+        Map<String, FieldMappingLookup> lookupsByService = fieldMappingLookups(mappingsByService);
         String insert = fieldDetailInsertSql();
         long rowNo = 0;
-        for (Map.Entry<String, Field> entry : grouped.entrySet()) {
+        for (Map.Entry<IssueDetailKey, Field> entry : grouped.entrySet()) {
+            IssueDetailKey detailKey = entry.getKey();
             Field field = entry.getValue();
-            String service = service(field.destTrcd());
-            Catalog catalog = catalogs.get(key(service));
+            String service = detailKey.serviceCode();
+            String serviceKey = key(service);
+            Catalog catalog = catalogs.get(serviceKey);
             String normalized = normalizedField(field.origFieldName());
-            String issueKey = entry.getKey();
-            FieldMapping mapping = fieldMapping(fieldMappings, service, normalized);
+            String issueKey = detailKey.issueKey();
+            FieldMappingLookup lookup = lookupsByService.getOrDefault(serviceKey, FieldMappingLookup.EMPTY);
+            FieldMapping mapping = lookup.mapping(normalized);
             String sop = mapping == null ? null : mapping.sopFieldName();
             String soap = mapping == null ? normalized : mapping.soapFieldName();
             String bizjson = mapping == null ? null : mapping.bizjsonFieldName();
-            String fieldCn = mapping == null ? null : mapping.fieldCnName();
+            String fieldCn = supplementedFieldCnName(lookup, field.origFieldName(), normalized, soap, mapping == null ? null : mapping.fieldCnName());
             jdbc.update(insert,
                     params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", ++rowNo)
                             .addValue("service", service).addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
@@ -691,45 +685,32 @@ public class ReportExportBatchRunner {
                             .addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", field.mesgSeq()).addValue("field", joinedFieldNames(sop, soap, bizjson, fieldCn))
                             .addValue("description", "528：" + valueStatus(field.origValue()) + "；CCBS：" + valueStatus(field.destValue()))
                             .addValue("issueKey", issueKey)
-                            .addValue("affectedCount", affectedMesgSeqs.getOrDefault(issueKey, Set.of()).size()));
+                            .addValue("affectedCount", affectedMesgSeqs.getOrDefault(detailKey, Set.of()).size()));
         }
     }
 
     private String fieldDetailInsertSql() {
         return """
-                merge into ana_field_diff_tracking_export as target
-                using (
-                    select cast(:time as timestamp) as export_timestamp, cast(:batchId as varchar(64)) as source_batch_id,
-                    cast(:date as varchar(8)) as business_date, cast(:rowNo as bigint) as row_no,
-                    cast(:service as varchar(200)) as service_code, cast(:tranCode as varchar(32)) as tran_code,
-                    cast(:tranName as varchar(200)) as tran_name, cast(:module as varchar(100)) as module_name,
-                    cast(:sop as varchar(200)) as sop_field_name, cast(:soap as varchar(200)) as soap_field_name,
-                    cast(:bizjson as varchar(200)) as bizjson_field_name, cast(:fieldCn as varchar(200)) as field_cn_name,
-                    cast(:mappingStatus as varchar(32)) as mapping_status, cast(:orig as text) as orig_field_value,
-                    cast(:dest as text) as dest_field_value, cast(:owner as varchar(100)) as transaction_owner,
-                    cast(:seq as varchar(64)) as tran_seq_no, '字段级' as problem_level,
-                    cast(:date as varchar(8)) as registration_date, cast(:field as text) as field_name,
-                    cast(:description as text) as problem_description, cast(:issueKey as varchar(600)) as issue_key,
-                    cast(:affectedCount as bigint) as affected_tran_count
-                ) as source
-                on (target.source_batch_id = source.source_batch_id
-                    and target.service_code = source.service_code
-                    and target.issue_key = source.issue_key)
-                when not matched then
-                    insert (export_timestamp, source_batch_id, business_date, row_no, service_code, tran_code, tran_name,
+                insert into ana_field_diff_tracking_export (
+                    export_timestamp, source_batch_id, business_date, row_no, service_code, tran_code, tran_name,
                     module_name, sop_field_name, soap_field_name, bizjson_field_name, field_cn_name, mapping_status,
                     orig_field_value, dest_field_value, transaction_owner, tran_seq_no, problem_level, registration_date,
                     field_name, problem_description, issue_key, affected_tran_count)
-                    values (source.export_timestamp, source.source_batch_id, source.business_date, source.row_no,
-                    source.service_code, source.tran_code, source.tran_name, source.module_name, source.sop_field_name,
-                    source.soap_field_name, source.bizjson_field_name, source.field_cn_name, source.mapping_status,
-                    source.orig_field_value, source.dest_field_value, source.transaction_owner, source.tran_seq_no,
-                    source.problem_level, source.registration_date, source.field_name, source.problem_description,
-                    source.issue_key, source.affected_tran_count)
+                values (
+                    cast(:time as timestamp), cast(:batchId as varchar(64)), cast(:date as varchar(8)),
+                    cast(:rowNo as bigint), cast(:service as varchar(200)), cast(:tranCode as varchar(32)),
+                    cast(:tranName as varchar(200)), cast(:module as varchar(100)), cast(:sop as varchar(200)),
+                    cast(:soap as varchar(200)), cast(:bizjson as varchar(200)), cast(:fieldCn as varchar(200)),
+                    cast(:mappingStatus as varchar(32)), cast(:orig as text), cast(:dest as text),
+                    cast(:owner as varchar(100)), cast(:seq as varchar(64)), '字段级', cast(:date as varchar(8)),
+                    cast(:field as text), cast(:description as text), cast(:issueKey as varchar(600)),
+                    cast(:affectedCount as bigint))
                 """;
     }
 
     private static final Comparator<Field> FIELD_ORDER = Comparator.comparing(Field::mesgSeq, Comparator.nullsFirst(String::compareTo)).thenComparingInt(Field::convIndex).thenComparingInt(Field::convCindex).thenComparingInt(Field::fieldIndex);
+    private static final Comparator<IssueDetailKey> ISSUE_DETAIL_ORDER = Comparator.comparing(IssueDetailKey::batchId)
+            .thenComparing(IssueDetailKey::serviceCode).thenComparing(IssueDetailKey::issueKey);
     private static BigDecimal rate(long numerator, long denominator) { return denominator == 0 ? BigDecimal.ZERO : BigDecimal.valueOf(numerator).divide(BigDecimal.valueOf(denominator), 8, RoundingMode.HALF_UP); }
     private static long count(List<Tran> rows, Map<String, Retcode> retcodes, String result) { return rows.stream().filter(row -> result.equals(summaryResult(row, retcodes.get(tranKey(row.mesgSeq(), row.origCdate()))))).count(); }
     private static String summaryResult(Tran row, Retcode retcode) {
@@ -752,9 +733,34 @@ public class ReportExportBatchRunner {
         int suffix = normalized.indexOf('_');
         return suffix < 0 ? normalized : normalized.substring(0, suffix);
     }
-    private static FieldMapping fieldMapping(List<FieldMapping> mappings, String service, String soapFieldName) {
-        return mappings.stream().filter(mapping -> key(mapping.serviceCode()).equals(key(service))).filter(mapping -> key(mapping.soapFieldName()).equals(key(soapFieldName)))
-                .findFirst().orElse(null);
+    private static Map<String, List<FieldMapping>> fieldMappingsByService(List<FieldMapping> mappings) {
+        Map<String, List<FieldMapping>> result = new LinkedHashMap<>();
+        for (FieldMapping mapping : mappings) result.computeIfAbsent(key(mapping.serviceCode()), ignored -> new ArrayList<>()).add(mapping);
+        return result;
+    }
+    private static Map<String, FieldMappingLookup> fieldMappingLookups(Map<String, List<FieldMapping>> mappingsByService) {
+        Map<String, FieldMappingLookup> result = new LinkedHashMap<>();
+        for (Map.Entry<String, List<FieldMapping>> entry : mappingsByService.entrySet()) {
+            result.put(entry.getKey(), FieldMappingLookup.of(entry.getValue()));
+        }
+        return result;
+    }
+    private static String supplementedFieldCnName(FieldMappingLookup lookup, String originalFieldName, String normalizedFieldName,
+                                                  String soapFieldName, String currentFieldCnName) {
+        if (!text(currentFieldCnName).isBlank()) return currentFieldCnName;
+        String[] candidates = {lastFieldSegment(originalFieldName), lastFieldSegment(soapFieldName),
+                text(originalFieldName).trim(), normalizedFieldName};
+        for (String candidate : candidates) {
+            if (candidate.isBlank()) continue;
+            String matched = lookup.findFieldCnName(candidate);
+            if (!text(matched).isBlank()) return matched;
+        }
+        return currentFieldCnName;
+    }
+    private static String lastFieldSegment(String value) {
+        String text = text(value).trim();
+        int separator = text.lastIndexOf('.');
+        return separator < 0 ? text : text.substring(separator + 1);
     }
     private static String transactionDescription(Retcode retcode) { return "528错误码：" + text(retcode == null ? null : retcode.origCode()) + "；描述：" + text(retcode == null ? null : retcode.origDesc()) + "；CCBS错误码：" + text(retcode == null ? null : retcode.destCode()) + "；CCBS错误描述：" + text(retcode == null ? null : retcode.destDesc()); }
     private static boolean shouldExportTransaction(Tran tran, Retcode retcode) {
@@ -790,7 +796,41 @@ public class ReportExportBatchRunner {
     private static long elapsedMs(long started) { return (System.nanoTime() - started) / 1_000_000L; }
 
     private record Catalog(String tranCode, String tranName, String moduleName, String owner, String internalOwner) {}
-    private record FieldMapping(String tranCode, String serviceCode, String sopFieldName, String soapFieldName, String bizjsonFieldName, String fieldCnName) {}
+    private record FieldMappingLookup(Map<String, FieldMapping> bySoap, Map<String, String> soapCnNames,
+                                      Map<String, String> sopCnNames, Map<String, String> bizjsonCnNames,
+                                      Map<String, String> stdCnNames) {
+        private static final FieldMappingLookup EMPTY = new FieldMappingLookup(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        private static FieldMappingLookup of(List<FieldMapping> mappings) {
+            Map<String, FieldMapping> bySoap = new HashMap<>();
+            Map<String, String> soap = new HashMap<>(), sop = new HashMap<>(), bizjson = new HashMap<>(), std = new HashMap<>();
+            for (FieldMapping mapping : mappings) {
+                bySoap.putIfAbsent(key(mapping.soapFieldName()), mapping);
+                putCnName(soap, mapping.soapFieldName(), mapping.fieldCnName());
+                putCnName(sop, mapping.sopFieldName(), mapping.fieldCnName());
+                putCnName(bizjson, mapping.bizjsonFieldName(), mapping.fieldCnName());
+                putCnName(std, mapping.stdFieldName(), mapping.fieldCnName());
+            }
+            return new FieldMappingLookup(bySoap, soap, sop, bizjson, std);
+        }
+        private FieldMapping mapping(String soapFieldName) { return bySoap.get(key(soapFieldName)); }
+        private String findFieldCnName(String fieldName) {
+            String normalized = key(fieldName);
+            String name = soapCnNames.get(normalized);
+            if (!text(name).isBlank()) return name;
+            name = sopCnNames.get(normalized);
+            if (!text(name).isBlank()) return name;
+            name = bizjsonCnNames.get(normalized);
+            if (!text(name).isBlank()) return name;
+            name = stdCnNames.get(normalized);
+            return text(name).isBlank() ? null : name;
+        }
+        private static void putCnName(Map<String, String> target, String fieldName, String cnName) {
+            if (text(fieldName).isBlank() || text(cnName).isBlank()) return;
+            target.putIfAbsent(key(fieldName), cnName);
+        }
+    }
+    private record FieldMapping(String tranCode, String serviceCode, String stdFieldName, String sopFieldName, String soapFieldName, String bizjsonFieldName, String fieldCnName) {}
+    private record IssueDetailKey(String batchId, String serviceCode, String issueKey) {}
     private record Retcode(String serviceCode, String origCode, String origDesc, String destCode, String destDesc) {}
     private record Tran(String mesgSeq, String origCdate, int convIndex, int convCindex, String destTrcd, String compResult) {}
     private record TakeTimes(BigDecimal average528, BigDecimal averageCcbs) {
