@@ -15,6 +15,8 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -107,8 +109,9 @@ class ReportExportExcelServiceTest {
         assertThat(output.toString()).doesNotContain("secret");
     }
 
-    @Test
-    void dailyExportAddsInterfaceComparisonSheetWithOwnersAndRates() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void dailyExportAddsInterfaceComparisonSheetWithOwnersAndRates(boolean raw) throws Exception {
         jdbc.update("""
                 insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,
                     sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,
@@ -122,7 +125,8 @@ class ReportExportExcelServiceTest {
                     owner,internal_owner,sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,
                     comp_result_4_count,comp_result_8_count,comp_result_5_count,field_pass_transaction_count,success_rate,
                     comparison_pass_rate,average_528_take_time,average_ccbs_take_time)
-                values ('RPT-IFACE','20260728','SVC1','T001','交易一','支付','开发负责人甲','行内负责人甲',10,1,2,3,4,5,0,4,0.7,0.7,20,20)
+                values ('RPT-IFACE','20260728','SVC1','T001','交易一','支付','开发负责人甲','行内负责人甲',15,1,2,3,4,5,0,1,0.46666667,0.26666667,20,20),
+                       ('RPT-IFACE','20260728','SVC2','T002','交易二','支付','开发负责人乙','行内负责人乙',5,0,0,1,3,0,1,2,1,0.75,30,40)
                 """);
         jdbc.update("insert into tss_dest_pkg values (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?)",
                 "M1", "SVC1&soap", "528", 10,
@@ -131,7 +135,11 @@ class ReportExportExcelServiceTest {
                 "M2", "SVC1&soap", "ccbs", 25);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
-        service.stream("RPT-IFACE", output);
+        if (raw) {
+            service.streamRawDaily("RPT-IFACE", output);
+        } else {
+            service.stream("RPT-IFACE", output);
+        }
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             Sheet sheet = workbook.getSheet("接口比对明细");
@@ -143,10 +151,26 @@ class ReportExportExcelServiceTest {
             assertThat(sheet.getRow(0).getCell(4).getStringCellValue()).isEqualTo("开发负责人");
             assertThat(sheet.getRow(0).getCell(5).getStringCellValue()).isEqualTo("行内负责人");
             assertThat(sheet.getRow(0).getCell(6).getStringCellValue()).isEqualTo("领域");
-            assertThat(sheet.getRow(0).getCell(14).getStringCellValue()).isEqualTo("交易成功率");
-            assertThat(sheet.getRow(0).getCell(15).getStringCellValue()).isEqualTo("接口比对通过率");
-            assertThat(sheet.getRow(0).getCell(16).getStringCellValue()).isEqualTo("528平均耗时");
-            assertThat(sheet.getRow(0).getCell(17).getStringCellValue()).isEqualTo("CCBS平均耗时");
+            assertThat(sheet.getRow(0).getLastCellNum()).isEqualTo((short) 19);
+            assertThat(sheet.getPaneInformation().isFreezePane()).isTrue();
+            assertThat(((org.apache.poi.xssf.usermodel.XSSFSheet) sheet)
+                    .getCTWorksheet().getAutoFilter().getRef()).isEqualTo("A1:S1");
+            assertThat(sheet.getRow(0).getHeightInPoints()).isGreaterThanOrEqualTo(42f);
+            for (int column : new int[]{8, 9}) {
+                assertThat(sheet.getColumnWidth(column)).isGreaterThanOrEqualTo(5600);
+                assertThat(sheet.getRow(0).getCell(column).getCellStyle().getWrapText()).isTrue();
+            }
+            assertThat(sheet.getRow(0).getCell(8).getStringCellValue()).isEqualTo("二者均成功且无字段差异");
+            assertThat(sheet.getRow(0).getCell(9).getStringCellValue()).isEqualTo("二者均成功且有字段差异");
+            assertThat(sheet.getRow(0).getCell(10).getStringCellValue()).isEqualTo("528成功/CCBS失败");
+            assertThat(sheet.getRow(0).getCell(11).getStringCellValue()).isEqualTo("528失败/CCBS成功");
+            assertThat(sheet.getRow(0).getCell(12).getStringCellValue()).isEqualTo("二者均失败响应码一致");
+            assertThat(sheet.getRow(0).getCell(13).getStringCellValue()).isEqualTo("二者均失败响应码不一致");
+            assertThat(sheet.getRow(0).getCell(14).getStringCellValue()).isEqualTo("响应码忽略");
+            assertThat(sheet.getRow(0).getCell(15).getStringCellValue()).isEqualTo("交易成功率");
+            assertThat(sheet.getRow(0).getCell(16).getStringCellValue()).isEqualTo("接口比对通过率");
+            assertThat(sheet.getRow(0).getCell(17).getStringCellValue()).isEqualTo("528平均耗时");
+            assertThat(sheet.getRow(0).getCell(18).getStringCellValue()).isEqualTo("CCBS平均耗时");
             Row data = sheet.getRow(1);
             assertThat(data.getCell(0).getStringCellValue()).isEqualTo("RPT-IFACE");
             assertThat(data.getCell(1).getStringCellValue()).isEqualTo("T001");
@@ -155,22 +179,44 @@ class ReportExportExcelServiceTest {
             assertThat(data.getCell(4).getStringCellValue()).isEqualTo("开发负责人甲");
             assertThat(data.getCell(5).getStringCellValue()).isEqualTo("行内负责人甲");
             assertThat(data.getCell(6).getStringCellValue()).isEqualTo("支付");
-            assertNumericCell(data, 7, 10L);
-            assertNumericCell(data, 8, 2L);
-            assertNumericCell(data, 9, 1L);
-            assertPercentCell(data, 14, 0.7d);
-            assertPercentCell(data, 15, 0.7d);
-            assertNumericCell(data, 16, 20d);
+            assertNumericCell(data, 7, 15L);
+            assertNumericCell(data, 8, 1L);
+            assertNumericCell(data, 9, 3L);
+            assertNumericCell(data, 10, 2L);
+            assertNumericCell(data, 11, 1L);
+            assertNumericCell(data, 12, 3L);
+            assertNumericCell(data, 13, 5L);
+            assertNumericCell(data, 14, 0L);
+            assertPercentCell(data, 15, 0.4667d);
+            assertPercentCell(data, 16, 0.2667d);
             assertNumericCell(data, 17, 20d);
-            Row total = sheet.getRow(2);
+            assertNumericCell(data, 18, 20d);
+            Row second = sheet.getRow(2);
+            assertNumericCell(second, 8, 2L);
+            assertNumericCell(second, 9, 1L);
+            assertNumericCell(second, 10, 0L);
+            assertNumericCell(second, 11, 0L);
+            assertNumericCell(second, 12, 1L);
+            assertNumericCell(second, 13, 0L);
+            assertNumericCell(second, 14, 1L);
+            assertPercentCell(second, 15, 1d);
+            assertPercentCell(second, 16, 0.75d);
+            assertNumericCell(second, 17, 30d);
+            assertNumericCell(second, 18, 40d);
+            Row total = sheet.getRow(3);
             assertThat(total.getCell(2).getStringCellValue()).isEqualTo("合计");
-            assertNumericCell(total, 7, 10L);
-            assertNumericCell(total, 8, 2L);
-            assertNumericCell(total, 9, 1L);
-            assertPercentCell(total, 14, 0.7d);
-            assertPercentCell(total, 15, 0.7d);
-            assertThat(total.getCell(16).getStringCellValue()).isBlank();
+            assertNumericCell(total, 7, 20L);
+            assertNumericCell(total, 8, 3L);
+            assertNumericCell(total, 9, 4L);
+            assertNumericCell(total, 10, 2L);
+            assertNumericCell(total, 11, 1L);
+            assertNumericCell(total, 12, 4L);
+            assertNumericCell(total, 13, 5L);
+            assertNumericCell(total, 14, 1L);
+            assertPercentCell(total, 15, 0.5789d);
+            assertPercentCell(total, 16, 0.3684d);
             assertThat(total.getCell(17).getStringCellValue()).isBlank();
+            assertThat(total.getCell(18).getStringCellValue()).isBlank();
         }
     }
 

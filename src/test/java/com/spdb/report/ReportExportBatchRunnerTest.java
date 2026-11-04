@@ -293,6 +293,138 @@ class ReportExportBatchRunnerTest {
     }
 
     @Test
+    void splitsSuccessfulInterfaceTransactionsByFieldDifferences() {
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC1', '交易一', '支付', '负责人')");
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('OK-FIELD-PASS', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('OK-FIELD-DIFF', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('FAIL-SAME', '20260728', 1, 1, 'SVC1&soap', '3'),
+                ('FAIL-DIFF', '20260728', 1, 1, 'SVC1&soap', '3'),
+                ('ORIG-FAIL', '20260728', 1, 1, 'SVC1&soap', '1')
+                """);
+        jdbc.update("""
+                insert into tss_retcode_comp values
+                ('FAIL-SAME', '20260728', 'SVC1&soap', 'E1', 'orig failed', 'E1', 'dest failed'),
+                ('FAIL-DIFF', '20260728', 'SVC1&soap', 'E2', 'orig failed', 'E3', 'dest failed'),
+                ('ORIG-FAIL', '20260728', 'SVC1&soap', 'E4', 'orig failed', '000000000000', 'dest ok')
+                """);
+        jdbc.update("""
+                insert into tss_field_comp values
+                ('OK-FIELD-DIFF', '20260728', 1, 1, 1, 'SVC1&soap', 'Request.amount', '100', 'ignored', '200'),
+                ('OK-FIELD-DIFF', '20260728', 1, 1, 2, 'SVC1&soap', 'Request.currency', 'CNY', 'ignored', 'USD'),
+                ('ORIG-FAIL', '20260728', 1, 1, 1, 'SVC1&soap', 'Request.amount', '100', 'ignored', '200')
+                """);
+
+        runner.run("BATCH-INTERFACE-FIELD-SPLIT", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select sent_transaction_count, comp_result_1_count, comp_result_3_count, comp_result_4_count,
+                       comp_result_8_count, field_pass_transaction_count,
+                       comp_result_4_count - field_pass_transaction_count field_diff_transaction_count,
+                       success_rate, comparison_pass_rate
+                from ana_report_export_interface_summary
+                where batch_id = 'BATCH-INTERFACE-FIELD-SPLIT' and service_code = 'SVC1'
+                """);
+        assertThat(summary).containsEntry("sent_transaction_count", 5L)
+                .containsEntry("comp_result_1_count", 1L)
+                .containsEntry("comp_result_3_count", 1L)
+                .containsEntry("comp_result_4_count", 2L)
+                .containsEntry("comp_result_8_count", 1L)
+                .containsEntry("field_pass_transaction_count", 1L)
+                .containsEntry("field_diff_transaction_count", 1L);
+        assertThat(summary.get("success_rate").toString()).isEqualTo("0.60000000");
+        assertThat(summary.get("comparison_pass_rate").toString()).isEqualTo("0.40000000");
+    }
+
+    @Test
+    void countsSuccessfulInterfaceTransactionsOncePerMesgSeqAcrossConversionsAndFieldDifferences() {
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T001', 'SVC1', '交易一', '支付', '负责人')");
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('OK-FIELD-PASS', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('OK-FIELD-PASS', '20260728', 2, 1, 'SVC1&bizjson', '4'),
+                ('OK-FIELD-DIFF', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('OK-FIELD-DIFF', '20260728', 2, 1, 'SVC1&bizjson', '4'),
+                ('FAIL-SAME', '20260728', 1, 1, 'SVC1&soap', '3'),
+                ('FAIL-SAME', '20260728', 2, 1, 'SVC1&bizjson', '3')
+                """);
+        jdbc.update("insert into tss_retcode_comp values ('FAIL-SAME', '20260728', 'SVC1&soap', 'E1', 'orig failed', 'E1', 'dest failed')");
+        jdbc.update("""
+                insert into tss_field_comp values
+                ('OK-FIELD-DIFF', '20260728', 2, 1, 1, 'SVC1&bizjson', 'Request.amount', '100', 'ignored', '200'),
+                ('OK-FIELD-DIFF', '20260728', 2, 1, 2, 'SVC1&bizjson', 'Request.currency', 'CNY', 'ignored', 'USD')
+                """);
+
+        runner.run("BATCH-INTERFACE-MESG-SEQ", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select sent_transaction_count, comp_result_3_count, comp_result_4_count,
+                       field_pass_transaction_count,
+                       comp_result_4_count - field_pass_transaction_count field_diff_transaction_count,
+                       success_rate, comparison_pass_rate
+                from ana_report_export_interface_summary
+                where batch_id = 'BATCH-INTERFACE-MESG-SEQ' and service_code = 'SVC1'
+                """);
+        assertThat(summary).containsEntry("sent_transaction_count", 6L)
+                .containsEntry("comp_result_3_count", 2L)
+                .containsEntry("comp_result_4_count", 2L)
+                .containsEntry("field_pass_transaction_count", 1L)
+                .containsEntry("field_diff_transaction_count", 1L);
+        assertThat(summary.get("success_rate").toString()).isEqualTo("0.66666667");
+        assertThat(summary.get("comparison_pass_rate").toString()).isEqualTo("0.50000000");
+    }
+
+    @Test
+    void isolatesFieldDifferencesForSameMesgSeqAcrossServiceCodes() {
+        jdbc.update("""
+                insert into tss_tran_comp values
+                ('SHARED', '20260728', 1, 1, 'SVC1&soap', '4'),
+                ('SHARED', '20260728', 1, 1, 'SVC2&soap', '4')
+                """);
+        jdbc.update("""
+                insert into tss_field_comp values
+                ('SHARED', '20260728', 1, 1, 1, 'SVC1&soap', 'Request.amount', '100', 'ignored', '200')
+                """);
+
+        runner.run("BATCH-INTERFACE-SERVICE-ISOLATION", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        Map<String, Object> svc1 = jdbc.queryForMap("""
+                select comp_result_4_count, field_pass_transaction_count
+                from ana_report_export_interface_summary
+                where batch_id = 'BATCH-INTERFACE-SERVICE-ISOLATION' and service_code = 'SVC1'
+                """);
+        assertThat(svc1).containsEntry("comp_result_4_count", 1L)
+                .containsEntry("field_pass_transaction_count", 0L);
+        Map<String, Object> svc2 = jdbc.queryForMap("""
+                select comp_result_4_count, field_pass_transaction_count
+                from ana_report_export_interface_summary
+                where batch_id = 'BATCH-INTERFACE-SERVICE-ISOLATION' and service_code = 'SVC2'
+                """);
+        assertThat(svc2).containsEntry("comp_result_4_count", 1L)
+                .containsEntry("field_pass_transaction_count", 1L);
+    }
+
+    @Test
+    void countsSuccessfulInterfaceTransactionWithNullMesgSeqAndNoFieldDifferences() {
+        jdbc.update("insert into tss_tran_comp values (null, '20260728', 1, 1, 'SVC1&soap', '4')");
+
+        runner.run("BATCH-INTERFACE-NULL-MESG-SEQ", "20260728", LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        Map<String, Object> summary = jdbc.queryForMap("""
+                select sent_transaction_count, comp_result_4_count, field_pass_transaction_count,
+                       success_rate, comparison_pass_rate
+                from ana_report_export_interface_summary
+                where batch_id = 'BATCH-INTERFACE-NULL-MESG-SEQ' and service_code = 'SVC1'
+                """);
+        assertThat(summary).containsEntry("sent_transaction_count", 1L)
+                .containsEntry("comp_result_4_count", 1L)
+                .containsEntry("field_pass_transaction_count", 1L);
+        assertThat(summary.get("success_rate").toString()).isEqualTo("1.00000000");
+        assertThat(summary.get("comparison_pass_rate").toString()).isEqualTo("1.00000000");
+    }
+
+    @Test
     void persistsExtendedSummaryMetricsForFieldPassProblemsAndDuplicates() {
         jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-OLD', '20260720', 'SUCCEEDED', '2026-07-20 10:00:00')");
         jdbc.update("insert into ana_report_export_command(batch_id, report_date, status, created_time) values ('BATCH-EXTENDED-SUMMARY', '20260728', 'SUCCEEDED', '2026-07-28 10:00:00')");

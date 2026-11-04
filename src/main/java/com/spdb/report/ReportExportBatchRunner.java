@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -234,18 +235,25 @@ public class ReportExportBatchRunner {
         Map<String, TakeTimes> takeTimes = takeTimes();
         Map<String, List<Tran>> byService = new TreeMap<>();
         for (Tran tran : transactions) byService.computeIfAbsent(service(tran.destTrcd()), ignored -> new ArrayList<>()).add(tran);
-        Set<String> fieldTransactions = new TreeSet<>();
-        for (Field field : fields) fieldTransactions.add(transactionIdentity(field.mesgSeq(), field.origCdate(), field.convIndex(), field.convCindex()));
+        Map<String, Set<String>> fieldTransactionsByService = new HashMap<>();
+        for (Field field : fields) {
+            fieldTransactionsByService.computeIfAbsent(service(field.destTrcd()), ignored -> new HashSet<>()).add(field.mesgSeq());
+        }
         for (Map.Entry<String, List<Tran>> entry : byService.entrySet()) {
             String service = entry.getKey();
             List<Tran> rows = entry.getValue();
             long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"),
-                    four = count(rows, retcodes, "4"), eight = count(rows, retcodes, "8"), five = count(rows, retcodes, "5");
+                    eight = count(rows, retcodes, "8"), five = count(rows, retcodes, "5");
+            Set<String> successfulTransactions = new HashSet<>();
+            for (Tran row : rows) {
+                if ("4".equals(row.compResult())) successfulTransactions.add(row.mesgSeq());
+            }
+            long four = successfulTransactions.size();
             long total = rows.size();
             long effectiveTotal = Math.max(0, total - five);
-            long fieldPass = rows.stream()
-                    .filter(row -> "4".equals(row.compResult()))
-                    .filter(row -> !fieldTransactions.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex())))
+            Set<String> fieldTransactions = fieldTransactionsByService.getOrDefault(service, Collections.emptySet());
+            long fieldPass = successfulTransactions.stream()
+                    .filter(mesgSeq -> !fieldTransactions.contains(mesgSeq))
                     .count();
             Catalog catalog = catalogs.get(key(service));
             TakeTimes takeTime = takeTimes.getOrDefault(service, TakeTimes.EMPTY);

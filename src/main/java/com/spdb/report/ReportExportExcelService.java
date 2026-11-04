@@ -386,9 +386,11 @@ public class ReportExportExcelService {
         long started = System.nanoTime();
         SXSSFSheet sheet = book.createSheet("接口比对明细");
         String[] headers = {"批次号", "交易码", "S码", "交易描述", "开发负责人", "行内负责人", "领域", "发送交易量",
+                "二者均成功且无字段差异", "二者均成功且有字段差异",
                 "528成功/CCBS失败", "528失败/CCBS成功", "二者均失败响应码一致", "二者均失败响应码不一致",
-                "二者均成功", "响应码忽略", "交易成功率", "接口比对通过率", "528平均耗时", "CCBS平均耗时"};
+                "响应码忽略", "交易成功率", "接口比对通过率", "528平均耗时", "CCBS平均耗时"};
         writeDetailHeader(sheet, headers, styles);
+        sheet.getRow(0).setHeightInPoints(42f);
         List<InterfaceSummaryRow> rows = interfaceSummaryRows(batchId);
         int rowIndex = 1;
         for (InterfaceSummaryRow row : rows) {
@@ -402,22 +404,23 @@ public class ReportExportExcelService {
             cell(excelRow, 5, row.internalOwner(), rowStyle);
             cell(excelRow, 6, row.moduleName(), rowStyle);
             numericCell(excelRow, 7, row.sentTransactionCount(), rowStyle);
-            numericCell(excelRow, 8, row.compResult2Count(), rowStyle);
-            numericCell(excelRow, 9, row.compResult1Count(), rowStyle);
-            numericCell(excelRow, 10, row.compResult3Count(), rowStyle);
-            numericCell(excelRow, 11, row.compResult8Count(), rowStyle);
-            numericCell(excelRow, 12, row.compResult4Count(), rowStyle);
-            numericCell(excelRow, 13, row.compResult5Count(), rowStyle);
-            percentCell(excelRow, 14, row.successRate(), styles.percentStyle(rowIndex - 1));
-            percentCell(excelRow, 15, row.comparisonPassRate(), styles.percentStyle(rowIndex - 1));
-            numericCell(excelRow, 16, row.average528TakeTime(), rowStyle);
-            numericCell(excelRow, 17, row.averageCcbsTakeTime(), rowStyle);
+            numericCell(excelRow, 8, row.fieldPassTransactionCount(), rowStyle);
+            numericCell(excelRow, 9, row.compResult4Count() - row.fieldPassTransactionCount(), rowStyle);
+            numericCell(excelRow, 10, row.compResult2Count(), rowStyle);
+            numericCell(excelRow, 11, row.compResult1Count(), rowStyle);
+            numericCell(excelRow, 12, row.compResult3Count(), rowStyle);
+            numericCell(excelRow, 13, row.compResult8Count(), rowStyle);
+            numericCell(excelRow, 14, row.compResult5Count(), rowStyle);
+            percentCell(excelRow, 15, row.successRate(), styles.percentStyle(rowIndex - 1));
+            percentCell(excelRow, 16, row.comparisonPassRate(), styles.percentStyle(rowIndex - 1));
+            numericCell(excelRow, 17, row.average528TakeTime(), rowStyle);
+            numericCell(excelRow, 18, row.averageCcbsTakeTime(), rowStyle);
         }
         writeInterfaceSummaryTotalRow(sheet.createRow(rowIndex), rows, styles);
         sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, headers.length - 1));
         sheet.createFreezePane(0, 1);
         for (int i = 0; i < headers.length; i++) {
-            sheet.setColumnWidth(i, (i == 0 || i == 2 || i == 3 || i == 6) ? 5600 : 3600);
+            sheet.setColumnWidth(i, (i == 0 || i == 2 || i == 3 || i == 6 || i == 8 || i == 9) ? 5600 : 3600);
         }
         log.info("接口比对明细Sheet写入完成，batchId={}, rowCount={}, elapsedMs={}",
                 batchId, rows.size(), elapsedMs(started));
@@ -550,16 +553,17 @@ public class ReportExportExcelService {
         cell(excelRow, 5, "", rowStyle);
         cell(excelRow, 6, "", rowStyle);
         numericCell(excelRow, 7, total, rowStyle);
-        numericCell(excelRow, 8, two, rowStyle);
-        numericCell(excelRow, 9, one, rowStyle);
-        numericCell(excelRow, 10, three, rowStyle);
-        numericCell(excelRow, 11, eight, rowStyle);
-        numericCell(excelRow, 12, four, rowStyle);
-        numericCell(excelRow, 13, five, rowStyle);
-        percentCell(excelRow, 14, rate(three + four, effectiveTotal), styles.summaryTotalPercentStyle(true));
-        percentCell(excelRow, 15, rate(fieldPass + three, effectiveTotal), styles.summaryTotalPercentStyle(true));
-        cell(excelRow, 16, "", rowStyle);
+        numericCell(excelRow, 8, fieldPass, rowStyle);
+        numericCell(excelRow, 9, four - fieldPass, rowStyle);
+        numericCell(excelRow, 10, two, rowStyle);
+        numericCell(excelRow, 11, one, rowStyle);
+        numericCell(excelRow, 12, three, rowStyle);
+        numericCell(excelRow, 13, eight, rowStyle);
+        numericCell(excelRow, 14, five, rowStyle);
+        percentCell(excelRow, 15, rate(three + four, effectiveTotal), styles.summaryTotalPercentStyle(true));
+        percentCell(excelRow, 16, rate(fieldPass + three, effectiveTotal), styles.summaryTotalPercentStyle(true));
         cell(excelRow, 17, "", rowStyle);
+        cell(excelRow, 18, "", rowStyle);
     }
 
     private List<InterfaceSummaryRow> interfaceSummaryRows(String batchId) {
