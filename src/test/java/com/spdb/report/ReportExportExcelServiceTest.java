@@ -304,6 +304,51 @@ class ReportExportExcelServiceTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2})
+    void masksOnlyDescriptionSegmentsAndPreservesErrorCodes(int exportType) throws Exception {
+        jdbc.update("insert into ana_report_export_summary(batch_id,report_date,module_name,covered_528_interface_count,"
+                + "sent_transaction_count,comp_result_1_count,comp_result_2_count,comp_result_3_count,comp_result_4_count,"
+                + "comp_result_8_count,comp_result_5_count,success_rate,diff_528_field_count,field_pass_transaction_count,"
+                + "comparison_pass_rate,transaction_issue_count,field_issue_count,issue_total_count,duplicate_issue_count) "
+                + "values ('RPT-MASK','20261104','ModuleMask',1,1,1,0,0,0,0,0,0,0,0,0,1,0,1,0)");
+        String description = "528错误码：EGG0674；描述：客户账号[98400078801500006905]在20261104查询金额100.00；"
+                + "CCBS错误码：5011270；CCBS错误描述：账户[ABC-123]在20261104不存在";
+        jdbc.update("insert into ana_tran_diff_tracking_export(source_batch_id,module_name,row_no,issue_id,issue_key,"
+                + "tran_code,tran_name,problem_level,registration_date,field_name,problem_description) "
+                + "values (?,?,?,?,?,?,?,?,?,?,?)", "RPT-MASK", "ModuleMask", 1, 1, "TRAN|mask", "T1", "交易", "交易级", "20261104", "返回码", description);
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        if (exportType == 1) {
+            service.streamRawDaily("RPT-MASK", output);
+        } else if (exportType == 2) {
+            service.streamFullIssueList("RPT-MASK", output);
+        } else {
+            service.stream("RPT-MASK", output);
+        }
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
+            Sheet sheet = workbook.getSheet(exportType == 2 ? "全量问题清单" : "ModuleMask");
+            assertThat(sheet.getRow(1).getCell(8).getStringCellValue())
+                    .isEqualTo("528错误码：EGG0674；描述：客户账号[********************]在********查询金额***.**；"
+                            + "CCBS错误码：5011270；CCBS错误描述：账户[*******]在********不存在");
+        }
+        assertThat(jdbc.queryForObject("select problem_description from ana_tran_diff_tracking_export where source_batch_id='RPT-MASK'", String.class))
+                .isEqualTo(description);
+    }
+
+    @Test
+    void descriptionMaskingPreservesEmptySegmentsAndNonMatchingText() {
+        assertThat(ReportExportExcelService.maskTransactionDescription(null)).isNull();
+        assertThat(ReportExportExcelService.maskTransactionDescription("")).isEmpty();
+        assertThat(ReportExportExcelService.maskTransactionDescription("普通文本123；528：有值；CCBS：无值"))
+                .isEqualTo("普通文本123；528：有值；CCBS：无值");
+        assertThat(ReportExportExcelService.maskTransactionDescription("528错误码：00123；描述：；CCBS错误码：E456；CCBS错误描述："))
+                .isEqualTo("528错误码：00123；描述：；CCBS错误码：E456；CCBS错误描述：");
+        assertThat(ReportExportExcelService.maskTransactionDescription("528错误码：00123；描述：账号[A-$]、账号[B2]；金额12；CCBS错误码：E456；CCBS错误描述：查询条件[X9]"))
+                .isEqualTo("528错误码：00123；描述：账号[***]、账号[**]；金额**；CCBS错误码：E456；CCBS错误描述：查询条件[X*]");
+    }
+
     @Test
     void dailyDetailAddsGlobalSequenceFromTrailing26CharactersAndKeepsFirstRequest() throws Exception {
         String matchedTransId = "12345678901234567890123456";

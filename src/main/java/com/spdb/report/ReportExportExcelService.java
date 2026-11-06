@@ -44,9 +44,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class ReportExportExcelService {
+    private static final Pattern ACCOUNT_BRACKET = Pattern.compile("((?:账号|账户)\\s*\\[)([^\\]]*)(\\])");
+    private static final Pattern DIGIT = Pattern.compile("\\d");
     private static final int SUMMARY_LAST_COLUMN = 12;
     private static final Logger log = LoggerFactory.getLogger(ReportExportExcelService.class);
     private static final int DEFAULT_DELAY_GRACE_DAYS = 4;
@@ -820,7 +824,7 @@ public class ReportExportExcelService {
             throws java.sql.SQLException {
         String description = rawFieldRow
                 ? rawFieldDescription(rs.getString("orig_field_value"), rs.getString("dest_field_value"))
-                : text(rs.getObject("problem_description"));
+                : maskTransactionDescription(text(rs.getObject("problem_description")));
         List<String> values = new ArrayList<>(dailyDetail ? DAILY_DETAIL_HEADERS.length : BASE_DETAIL_HEADERS.length);
         values.add(text(rs.getObject("module_name")));
         values.add(text(rs.getObject("row_no")));
@@ -857,6 +861,33 @@ public class ReportExportExcelService {
 
     private static String rawFieldDescription(String origFieldValue, String destFieldValue) {
         return "528字段值：" + text(origFieldValue) + "；CCBS字段值：" + text(destFieldValue);
+    }
+
+    static String maskTransactionDescription(String description) {
+        if (description == null || description.isBlank()) return description;
+        String descriptionMarker = "；描述：";
+        String ccbsCodeMarker = "；CCBS错误码：";
+        String ccbsDescriptionMarker = "；CCBS错误描述：";
+        int descriptionStart = description.indexOf(descriptionMarker);
+        int ccbsCodeStart = description.indexOf(ccbsCodeMarker, descriptionStart + descriptionMarker.length());
+        int ccbsDescriptionStart = description.indexOf(ccbsDescriptionMarker, ccbsCodeStart + ccbsCodeMarker.length());
+        if (descriptionStart < 0 || ccbsCodeStart < 0 || ccbsDescriptionStart < 0) return description;
+        String first = description.substring(0, descriptionStart + descriptionMarker.length());
+        String second = description.substring(descriptionStart + descriptionMarker.length(), ccbsCodeStart);
+        String third = description.substring(ccbsCodeStart, ccbsDescriptionStart + ccbsDescriptionMarker.length());
+        String fourth = description.substring(ccbsDescriptionStart + ccbsDescriptionMarker.length());
+        return first + maskDescriptionSegment(second) + third + maskDescriptionSegment(fourth);
+    }
+
+    private static String maskDescriptionSegment(String segment) {
+        Matcher accountMatcher = ACCOUNT_BRACKET.matcher(segment);
+        StringBuffer maskedAccounts = new StringBuffer();
+        while (accountMatcher.find()) {
+            accountMatcher.appendReplacement(maskedAccounts,
+                    Matcher.quoteReplacement(accountMatcher.group(1) + "*".repeat(accountMatcher.group(2).length()) + accountMatcher.group(3)));
+        }
+        accountMatcher.appendTail(maskedAccounts);
+        return DIGIT.matcher(maskedAccounts.toString()).replaceAll("*");
     }
 
     private List<String> modules(String batchId) {
