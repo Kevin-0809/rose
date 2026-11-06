@@ -781,7 +781,7 @@ public class ReportExportExcelService {
             Row r = sheet.createRow(row[0]++);
             CellStyle rowStyle = styles.rowStyle(dataOrdinal);
             boolean rawFieldRow = rawFieldValues && "ana_field_diff_tracking_export".equals(table);
-            writeDetailRowCells(r, rs, rawFieldRow, dailyDetail, rowStyle);
+            writeDetailRowCells(r, rs, rawFieldRow, dailyDetail, !rawFieldValues, rowStyle);
         });
         return row[0] - startRow;
     }
@@ -817,14 +817,17 @@ public class ReportExportExcelService {
         int dataOrdinal = row[0];
         Row r = sheet.createRow(row[0]++);
         CellStyle rowStyle = styles.rowStyle(dataOrdinal);
-        writeDetailRowCells(r, rs, rawFieldRow, false, rowStyle);
+        writeDetailRowCells(r, rs, rawFieldRow, false, true, rowStyle);
     }
 
-    private void writeDetailRowCells(Row row, ResultSet rs, boolean rawFieldRow, boolean dailyDetail, CellStyle rowStyle)
+    private void writeDetailRowCells(Row row, ResultSet rs, boolean rawFieldRow, boolean dailyDetail,
+                                     boolean maskProblemDescription, CellStyle rowStyle)
             throws java.sql.SQLException {
         String description = rawFieldRow
                 ? rawFieldDescription(rs.getString("orig_field_value"), rs.getString("dest_field_value"))
-                : maskTransactionDescription(text(rs.getObject("problem_description")));
+                : maskProblemDescription
+                ? maskTransactionDescription(text(rs.getObject("problem_description")))
+                : text(rs.getObject("problem_description"));
         List<String> values = new ArrayList<>(dailyDetail ? DAILY_DETAIL_HEADERS.length : BASE_DETAIL_HEADERS.length);
         values.add(text(rs.getObject("module_name")));
         values.add(text(rs.getObject("row_no")));

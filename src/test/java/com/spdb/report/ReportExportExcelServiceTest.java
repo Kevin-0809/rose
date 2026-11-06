@@ -330,8 +330,9 @@ class ReportExportExcelServiceTest {
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
             Sheet sheet = workbook.getSheet(exportType == 2 ? "全量问题清单" : "ModuleMask");
             assertThat(sheet.getRow(1).getCell(8).getStringCellValue())
-                    .isEqualTo("528错误码：EGG0674；描述：客户账号[********************]在********查询金额***.**；"
-                            + "CCBS错误码：5011270；CCBS错误描述：账户[*******]在********不存在");
+                    .isEqualTo(exportType == 1 ? description
+                            : "528错误码：EGG0674；描述：客户账号[********************]在********查询金额***.**；"
+                                    + "CCBS错误码：5011270；CCBS错误描述：账户[*******]在********不存在");
         }
         assertThat(jdbc.queryForObject("select problem_description from ana_tran_diff_tracking_export where source_batch_id='RPT-MASK'", String.class))
                 .isEqualTo(description);
