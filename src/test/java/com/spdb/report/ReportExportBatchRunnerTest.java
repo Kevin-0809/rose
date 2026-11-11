@@ -5,7 +5,10 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -13,6 +16,10 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 
 import java.time.LocalDateTime;
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,15 +32,259 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ReportExportBatchRunnerTest {
     private JdbcTemplate jdbc;
     private ReportExportBatchRunner runner;
+    private String postgresSchema;
+    private com.zaxxer.hikari.HikariDataSource postgresPool;
+
+    @ParameterizedTest
+    @ValueSource(longs = {20261110L, 42L, 739L})
+    void matchesOriginalReportResultsForSeededEdgeCasesAndRepeatedBatches(long seed) throws Exception {
+        String[] fieldNames = {"amount", "Request.amount.extra", "Request.amount_001.extra", "a.", ".a.", "..", ".", "", null,
+                " Request.Amount ", "Request.amount", "Request.amount.extra.", "a..b", "a_b.c", "a.b_c.d",
+                "\tRequest.amount\t", "\nRequest.Amount\n"};
+        String[] codes = {"E1", "E2", "AAAAAAA", "000000000000", "", null, " e1 ", "e1"};
+        java.util.Random random = new java.util.Random(seed);
+        jdbc.update("insert into ana_tran_catalog(tran_code, service_code, tran_name, module_name, owner) values ('T1','SVC1','交易一','支付','甲'), ('T2','svc2','交易二','支付','乙'), ('T3','SVC3','交易三',null,'丙')");
+        jdbc.update("insert into ana_field_mapping(tran_code,service_code,soap_field_name,field_cn_name) values ('T1','SVC1','Request.amount','金额')");
+        for (int i = 0; i < 180; i++) {
+            String seq = i % 29 == 0 ? null : "SEQ" + String.format("%03d", i / 2);
+            String date = (i / 2) % 3 == 0 ? "20260726" : "20260727";
+            String service = "SVC" + ((i / 2) % 4 + 1) + (i % 2 == 0 ? "&soap" : "&bizjson");
+            jdbc.update("insert into tss_tran_comp values (?, ?, ?, 1, ?, ?)", seq, date, i % 3, service, String.valueOf(i % 9));
+            if (i % 2 == 0 && i % 3 != 0) {
+                jdbc.update("insert into tss_retcode_comp values (?, ?, ?, ?, ?, ?, ?)", seq, date, service,
+                        codes[random.nextInt(codes.length)], "原错误" + i, codes[random.nextInt(codes.length)], "目标错误" + i);
+            }
+            if (i % 2 == 0) {
+                jdbc.update("insert into tss_field_comp values (?, ?, ?, 1, ?, ?, ?, ?, 'dest', ?)",
+                        seq, date, i % 3, i, service, fieldNames[(i / 2) % fieldNames.length], "原值" + i, i % 5 == 0 ? null : "目标值" + i);
+            }
+        }
+        assertMatchesOriginal();
+    }
+
+    @Test
+    void matchesOriginalAcrossCursorWindowsForHotServiceAndRepeatedSequences() throws Exception {
+        List<Object[]> transactions = new ArrayList<>();
+        List<Object[]> fields = new ArrayList<>();
+        List<Object[]> responses = new ArrayList<>();
+        for (int i = 0; i < 1205; i++) {
+            String seq = String.format("FLOW%05d", i);
+            transactions.add(new Object[]{seq, "20260727", 1, 1, "HOT&soap", "1"});
+            responses.add(new Object[]{seq, "20260727", "HOT&soap", "E1", "orig", "E2", "dest"});
+            fields.add(new Object[]{seq, "20260727", 1, 1, 1, "HOT&soap", "Request.amount.extra", "orig" + i, "dest", "dest" + i});
+            fields.add(new Object[]{seq, "20260727", 1, 1, 2, "HOT&soap", "Request.amount_suffix.extra", "other" + i, "dest", "other" + i});
+        }
+        jdbc.batchUpdate("insert into tss_tran_comp values (?, ?, ?, ?, ?, ?)", transactions);
+        jdbc.batchUpdate("insert into tss_retcode_comp values (?, ?, ?, ?, ?, ?, ?)", responses);
+        jdbc.batchUpdate("insert into tss_field_comp values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", fields);
+        assertMatchesOriginal();
+        assertThat(jdbc.queryForObject("select affected_tran_count from ana_tran_diff_tracking_export", Long.class)).isEqualTo(1205L);
+        assertThat(jdbc.queryForObject("select affected_tran_count from ana_field_diff_tracking_export", Long.class)).isEqualTo(1205L);
+        assertThat(jdbc.queryForObject("select orig_field_value from ana_field_diff_tracking_export", String.class)).isEqualTo("orig0");
+    }
+
+    private void assertMatchesOriginal() throws Exception {
+        var namedJdbc = new NamedParameterJdbcTemplate(jdbc.getDataSource());
+        var manager = new JdbcTransactionManager(jdbc.getDataSource());
+        LocalDateTime time = LocalDateTime.of(2026, 7, 27, 10, 0);
+        LegacyReportExportReference.run(namedJdbc, manager, "BATCH-COMPAT", "20260727", time);
+        Map<String, List<Map<String, Object>>> expected = reportSnapshot();
+        LegacyReportExportReference.run(namedJdbc, manager, "BATCH-COMPAT", "20260727", time);
+        Map<String, List<Map<String, Object>>> expectedRetry = reportSnapshot();
+        Map<String, List<String>> expectedExcel = excelSnapshot();
+        resetReportOutputs();
+
+        runner.run("BATCH-COMPAT", "20260727", time);
+        assertThat(reportSnapshot()).usingRecursiveComparison().isEqualTo(expected);
+        runner.run("BATCH-COMPAT", "20260727", time);
+        assertThat(reportSnapshot()).usingRecursiveComparison().isEqualTo(expectedRetry);
+        assertThat(excelSnapshot()).isEqualTo(expectedExcel);
+    }
+
+    private Map<String, List<String>> excelSnapshot() throws Exception {
+        ReportExportExcelService service = new ReportExportExcelService(new NamedParameterJdbcTemplate(jdbc.getDataSource()));
+        Map<String, List<String>> result = new java.util.LinkedHashMap<>();
+        for (String kind : List.of("daily", "raw", "weekly", "issues")) {
+            var output = new java.io.ByteArrayOutputStream();
+            switch (kind) {
+                case "daily" -> service.stream("BATCH-COMPAT", output);
+                case "raw" -> service.streamRawDaily("BATCH-COMPAT", output);
+                case "weekly" -> service.streamWeekly("BATCH-COMPAT", output);
+                case "issues" -> service.streamFullIssueList("BATCH-COMPAT", output);
+                default -> throw new AssertionError(kind);
+            }
+            List<String> cells = new ArrayList<>();
+            try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(output.toByteArray()))) {
+                for (var sheet : workbook) {
+                    cells.add("sheet:" + sheet.getSheetName());
+                    for (var merged : sheet.getMergedRegions()) cells.add("merge:" + merged.formatAsString());
+                    for (var row : sheet) {
+                        cells.add("row:" + row.getRowNum() + ":" + row.getHeight());
+                        for (var cell : row) {
+                            cells.add(cell.getAddress() + ":" + cell.getCellType() + ":" + cell.getCellStyle().getIndex() + ":" + cell);
+                        }
+                    }
+                }
+            }
+            result.put(kind, cells);
+        }
+        return result;
+    }
+
+    @Test
+    void preservesOriginalCompositeIssueKeyGroupingEvenWhenCodesContainSeparators() throws Exception {
+        jdbc.update("insert into tss_tran_comp values ('A','20260727',1,1,'SVC&soap','1'), ('B','20260727',1,1,'SVC&soap','1')");
+        jdbc.update("insert into tss_retcode_comp values ('A','20260727','SVC&soap','a|b','first','c','first'), ('B','20260727','SVC&soap','a','second','b|c','second')");
+        assertMatchesOriginal();
+    }
+
+    @Test
+    void preservesBlankDomainClassificationForTabsAndUnicodeWhitespace() throws Exception {
+        jdbc.update("insert into ana_tran_catalog(service_code, module_name) values (?, ?), (?, ?)", "SVC1", "\t", "SVC2", "\u3000");
+        jdbc.update("insert into tss_tran_comp values ('A','20260727',1,1,'SVC1','4'), ('B','20260727',1,1,'SVC2','4')");
+        jdbc.update("insert into tss_field_comp values ('A','20260727',1,1,1,'SVC1','amount','one','amount','two'), ('B','20260727',1,1,1,'SVC2','amount','three','amount','four')");
+        assertMatchesOriginal();
+    }
+
+    @Test
+    void preservesJavaRootUnicodeCaseConversionForIssueGroupsAndCatalogs() throws Exception {
+        jdbc.update("insert into ana_tran_catalog(service_code, module_name) values ('ΟΣ', '希腊领域')");
+        jdbc.update("insert into tss_tran_comp values ('A','20260727',1,1,'ος','1'), ('B','20260727',1,1,'ος','1')");
+        jdbc.update("insert into tss_retcode_comp values ('A','20260727','ος','ΟΣ','first','E2','dest'), ('B','20260727','ος','οσ','second','E2','dest')");
+        jdbc.update("insert into tss_field_comp values ('A','20260727',1,1,1,'ος','ΟΣ','one','dest','two'), ('B','20260727',1,1,1,'ος','οσ','three','dest','four')");
+        jdbc.update("insert into tss_tran_comp values ('C','20260727',1,1,'ος','1'), ('D','20260727',1,1,'ος','1')");
+        jdbc.update("insert into tss_retcode_comp values ('C','20260727','ος','İ','first','E2','dest'), ('D','20260727','ος',?,'second','E2','dest')", "i\u0307");
+        jdbc.update("insert into tss_field_comp values ('C','20260727',1,1,1,'ος','İ','one','dest','two'), ('D','20260727',1,1,1,'ος',?,'three','dest','four')", "i\u0307");
+        assertMatchesOriginal();
+    }
+
+    @Test
+    void preservesCompositeTransactionIdentityAndResponseLookupWithSeparators() throws Exception {
+        jdbc.update("insert into tss_tran_comp values ('A|B','C',1,1,'SVC','5'), ('D','E|F',1,1,'SVC','8')");
+        jdbc.update("insert into tss_field_comp values ('A','B|C',1,1,1,'SVC','amount','one','amount','two')");
+        jdbc.update("insert into tss_retcode_comp values ('D|E','F','SVC','E1','orig','E1','dest')");
+        assertMatchesOriginal();
+    }
+
+    @Test
+    void preservesJavaUtf16FieldOrderAndRepresentativeSelection() throws Exception {
+        jdbc.update("insert into tss_field_comp values ('A','20260727',1,1,1,'SVC',?,'one','dest','two'), ('B','20260727',1,1,1,'SVC',?,'three','dest','four')", "\uD840\uDC00", "\uFF21");
+        jdbc.update("insert into tss_field_comp values (?,'20260727',1,1,1,'SVC','amount','supplementary','dest','one'), (?,'20260727',1,1,1,'SVC','amount','bmp','dest','two')", "\uD840\uDC00", "\uFF21");
+        assertMatchesOriginal();
+    }
+
+    @Test
+    void reusesTransactionConnectionWithSingleConnectionPool() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(postgresPool != null, "真实连接池行为在 PostgreSQL 测试中验证");
+        postgresPool.setMaximumPoolSize(1);
+        postgresPool.setMinimumIdle(0);
+        postgresPool.setConnectionTimeout(500);
+        postgresPool.getHikariPoolMXBean().softEvictConnections();
+        runner.run("BATCH-SINGLE-CONNECTION", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+        assertThat(postgresPool.getHikariPoolMXBean().getActiveConnections()).isZero();
+    }
+
+    private Map<String, List<Map<String, Object>>> reportSnapshot() {
+        Map<String, List<Map<String, Object>>> snapshot = new java.util.LinkedHashMap<>();
+        for (String table : List.of("ana_report_export_summary", "ana_report_export_interface_summary",
+                "ana_tran_diff_tracking_export", "ana_field_diff_tracking_export", "ana_diff_issue", "ana_diff_issue_backup")) {
+            List<Map<String, Object>> rows = jdbc.queryForList("select * from " + table);
+            for (Map<String, Object> row : rows) {
+                for (String volatileColumn : List.of("created_at", "updated_at", "backup_time", "issue_created_at", "issue_updated_at")) {
+                    row.remove(volatileColumn);
+                }
+            }
+            rows.sort(java.util.Comparator.comparing(Object::toString));
+            snapshot.put(table, rows);
+        }
+        return snapshot;
+    }
+
+    private void resetReportOutputs() {
+        for (String table : List.of("ana_report_export_summary", "ana_report_export_interface_summary",
+                "ana_tran_diff_tracking_export", "ana_field_diff_tracking_export", "ana_diff_issue", "ana_diff_issue_backup")) {
+            jdbc.execute("truncate table " + table + " restart identity");
+        }
+    }
+
+    @Test
+    void readsComparisonSourcesWithBoundedJdbcCursorsInsteadOfFullTableCollections() {
+        List<String> unsafeQueries = new ArrayList<>();
+        var tracked = new org.springframework.jdbc.datasource.DelegatingDataSource(jdbc.getDataSource()) {
+            @Override
+            public Connection getConnection() throws java.sql.SQLException {
+                Connection connection = super.getConnection();
+                return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
+                        new Class<?>[]{Connection.class}, (proxy, method, args) -> {
+                            try {
+                                Object result = method.invoke(connection, args);
+                                if (!method.getName().equals("prepareStatement")) return result;
+                                String sql = ((String) args[0]).toLowerCase(java.util.Locale.ROOT);
+                                PreparedStatement statement = (PreparedStatement) result;
+                                return Proxy.newProxyInstance(PreparedStatement.class.getClassLoader(),
+                                        new Class<?>[]{PreparedStatement.class}, (p, m, a) -> {
+                                            if (m.getName().equals("executeQuery")
+                                                    && (sql.contains("tss_tran_comp") || sql.contains("tss_field_comp")
+                                                    || sql.contains("tss_retcode_comp"))) {
+                                                if (connection.getAutoCommit() || statement.getFetchSize() <= 0) {
+                                                    unsafeQueries.add(sql);
+                                                }
+                                            }
+                                            try {
+                                                return m.invoke(statement, a);
+                                            } catch (java.lang.reflect.InvocationTargetException e) {
+                                                throw e.getCause();
+                                            }
+                                        });
+                            } catch (java.lang.reflect.InvocationTargetException e) {
+                                throw e.getCause();
+                            }
+                        });
+            }
+        };
+        runner = new ReportExportBatchRunner(new NamedParameterJdbcTemplate(tracked),
+                new JdbcTransactionManager(tracked));
+        jdbc.update("insert into tss_tran_comp values ('CURSOR', '20260727', 1, 1, 'SVC&soap', '1')");
+        jdbc.update("insert into tss_field_comp values ('CURSOR', '20260727', 1, 1, 1, 'SVC&soap', 'a.b', 'orig', 'a.b', 'dest')");
+
+        runner.run("BATCH-CURSOR", "20260727", LocalDateTime.of(2026, 7, 27, 10, 0));
+
+        assertThat(unsafeQueries).as("源表查询必须启用 JDBC 游标，不能由驱动缓存全量结果").isEmpty();
+        assertThat(java.util.Arrays.stream(ReportExportBatchRunner.class.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName))
+                .doesNotContain("transactions", "fields", "retcodes", "ignoredTransactionIds");
+    }
 
     @BeforeEach
     void setUp() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource(
-                "jdbc:h2:mem:report_export_runner_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-                "sa", "");
+        String postgresUrl = System.getProperty("rose.test.postgres.url");
+        javax.sql.DataSource dataSource;
+        if (postgresUrl == null) {
+            dataSource = new DriverManagerDataSource(
+                    "jdbc:h2:mem:report_export_runner_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                    "sa", "");
+        } else {
+            postgresSchema = "report_test_" + UUID.randomUUID().toString().replace("-", "");
+            new JdbcTemplate(new DriverManagerDataSource(postgresUrl, "postgres", ""))
+                    .execute("create schema " + postgresSchema);
+            postgresPool = new com.zaxxer.hikari.HikariDataSource();
+            postgresPool.setJdbcUrl(postgresUrl + (postgresUrl.contains("?") ? "&" : "?") + "currentSchema=" + postgresSchema);
+            postgresPool.setUsername("postgres");
+            postgresPool.setMaximumPoolSize(8);
+            dataSource = postgresPool;
+        }
         jdbc = new JdbcTemplate(dataSource);
         runner = new ReportExportBatchRunner(new NamedParameterJdbcTemplate(dataSource), new JdbcTransactionManager(dataSource));
         createSchema();
+    }
+
+    @AfterEach
+    void removeIsolatedSchema() {
+        if (postgresSchema != null) {
+            if (postgresPool != null) postgresPool.close();
+            new JdbcTemplate(new DriverManagerDataSource(System.getProperty("rose.test.postgres.url"), "postgres", ""))
+                    .execute("drop schema " + postgresSchema + " cascade");
+        }
     }
 
     @Test
@@ -989,6 +1240,7 @@ class ReportExportBatchRunnerTest {
         jdbc.execute("create table ana_field_diff_tracking_export (export_timestamp timestamp, source_batch_id varchar(64), business_date varchar(8), row_no bigint, service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), sop_field_name varchar(200), soap_field_name varchar(200), bizjson_field_name varchar(200), field_cn_name varchar(200), mapping_status varchar(32), orig_field_value varchar(2000), dest_field_value varchar(2000), transaction_owner varchar(100), tran_seq_no varchar(64), problem_level varchar(100), registration_date varchar(8), field_name varchar(500), problem_description varchar(2000), issue_id bigint, issue_key varchar(600), affected_tran_count bigint default 0, historical_occurrence_count bigint default 0, first_seen_date date, previous_seen_date date, problem_type varchar(100), preliminary_analysis varchar(2000), final_solution varchar(2000), coordination_required varchar(100), resolver varchar(100), resolution_date varchar(8), defect_fix_date varchar(8))");
         jdbc.execute("create table ana_report_export_interface_summary (interface_summary_id bigint generated by default as identity primary key, batch_id varchar(64), report_date varchar(8), service_code varchar(200), tran_code varchar(32), tran_name varchar(200), module_name varchar(100), owner varchar(100), internal_owner varchar(100), sent_transaction_count bigint default 0, comp_result_1_count bigint default 0, comp_result_2_count bigint default 0, comp_result_3_count bigint default 0, comp_result_4_count bigint default 0, comp_result_8_count bigint default 0, comp_result_5_count bigint default 0, field_pass_transaction_count bigint default 0, success_rate decimal(12,8) default 0, comparison_pass_rate decimal(12,8) default 0, average_528_take_time numeric(18,0), average_ccbs_take_time numeric(18,0), constraint uk_ana_report_export_interface_summary unique (batch_id, service_code))");
         jdbc.execute("create table tss_dest_pkg(dest_sys varchar(20), mesg_seq varchar(64), orig_trcd varchar(200), tran_take_time integer)");
+        jdbc.execute("create table msg_flow_log_request(trans_id varchar(64), global_seq_no varchar(64), txn_time bigint, source_ip varchar(64))");
     }
 
 }

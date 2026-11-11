@@ -10,9 +10,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -22,8 +21,6 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -38,7 +35,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import javax.sql.DataSource;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.IntStream;
@@ -49,11 +45,10 @@ public class ReportExportBatchRunner {
     private static final Logger log = LoggerFactory.getLogger(ReportExportBatchRunner.class);
     private static final String UNCONFIGURED_MODULE = "未配置领域";
 
-    private static final int TRANSACTION_FETCH_SIZE = 500;
     private static final int TRANSACTION_DETAIL_WORKER_COUNT = 64;
 
     private final NamedParameterJdbcTemplate jdbc;
-    private final DataSource dataSource;
+    private final ReportExportSourceReader sourceReader;
     private final TransactionTemplate transactionTemplate;
     private final Executor transactionDetailExecutor;
     private final DiffIssueLedgerService issueLedgerService;
@@ -67,7 +62,7 @@ public class ReportExportBatchRunner {
     public ReportExportBatchRunner(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager,
                                    @Qualifier("reportExportTransactionDetailExecutor") Executor transactionDetailExecutor) {
         this.jdbc = jdbc;
-        this.dataSource = jdbc.getJdbcTemplate().getDataSource();
+        this.sourceReader = new ReportExportSourceReader(jdbc.getJdbcTemplate().getDataSource());
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionDetailExecutor = transactionDetailExecutor;
         this.issueLedgerService = new DiffIssueLedgerService(jdbc);
@@ -88,24 +83,22 @@ public class ReportExportBatchRunner {
             log.info("报表明细旧数据清理开始，batchId={}", batchId);
             cleanupBatchArtifacts(batchId);
             log.info("报表明细旧数据清理完成，batchId={}", batchId);
-            SourceData source = transactionTemplate.execute(status -> sourceData());
-            log.info("报表明细源数据加载完成，batchId={}, catalogCount={}, fieldMappingCount={}, transactionCount={}, fieldCount={}, retcodeCount={}",
-                    batchId, source.catalogs().size(), source.fieldMappings().size(), source.transactions().size(),
-                    source.fields().size(), source.retcodes().size());
+            SourceData source = transactionTemplate.execute(status -> new SourceData(catalogs(), fieldMappings()));
+            log.info("报表明细源数据加载完成，batchId={}, catalogCount={}, fieldMappingCount={}, transactionCount={}, fieldCount={}, retcodeCount={}, sourceMode=cursor",
+                    batchId, source.catalogs().size(), source.fieldMappings().size(),
+                    sourceCount("tss_tran_comp"), sourceCount("tss_field_comp"), sourceCount("tss_retcode_comp"));
             stageConsumer.accept(ReportExportStage.TRANSACTION_DETAILS);
             log.info("报表明细交易明细生成开始，batchId={}", batchId);
-            streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs(), source.transactions());
+            streamTransactionDetails(batchId, reportDate, exportTime, source.catalogs());
             log.info("报表明细交易明细生成完成，batchId={}", batchId);
             transactionTemplate.executeWithoutResult(status -> {
                 stageConsumer.accept(ReportExportStage.FIELD_DETAILS);
                 log.info("报表明细字段明细生成开始，batchId={}", batchId);
-                insertFieldDetails(batchId, reportDate, exportTime, source.fields(), source.catalogs(), source.fieldMappings(),
-                        ignoredTransactionIds(source.transactions()));
+                insertFieldDetails(batchId, reportDate, exportTime, source.catalogs(), source.fieldMappings());
                 log.info("报表明细字段明细生成完成，batchId={}", batchId);
                 stageConsumer.accept(ReportExportStage.SUMMARY);
                 log.info("报表明细汇总生成开始，batchId={}", batchId);
-                insertSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
-                insertInterfaceSummaries(batchId, reportDate, source.transactions(), source.fields(), source.catalogs(), source.retcodes());
+                insertSummaries(batchId, reportDate, source.catalogs());
                 replayCoverageService.materialize(batchId, reportDate);
                 log.info("报表明细汇总生成完成，batchId={}", batchId);
             });
@@ -145,8 +138,8 @@ public class ReportExportBatchRunner {
         });
     }
 
-    private SourceData sourceData() {
-        return new SourceData(catalogs(), fieldMappings(), transactions(), fields(), retcodes());
+    private long sourceCount(String table) {
+        return jdbc.getJdbcTemplate().queryForObject("select count(*) from " + table, Long.class);
     }
 
     private Map<String, Catalog> catalogs() {
@@ -163,60 +156,47 @@ public class ReportExportBatchRunner {
         return result;
     }
 
-    private List<Tran> transactions() {
-        List<Tran> result = new ArrayList<>();
-        jdbc.getJdbcTemplate().query("select mesg_seq, orig_cdate, conv_index, conv_cindex, dest_trcd, comp_result from tss_tran_comp", (RowCallbackHandler)
-                rs -> result.add(new Tran(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getString("dest_trcd"), rs.getString("comp_result"))));
-        return result;
-    }
-
-    private List<Field> fields() {
-        List<Field> result = new ArrayList<>();
-        jdbc.getJdbcTemplate().query("select mesg_seq, orig_cdate, conv_index, conv_cindex, field_index, dest_trcd, orig_field_name, orig_field_value, dest_field_name, dest_field_value from tss_field_comp", (RowCallbackHandler)
-                rs -> result.add(new Field(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getInt("field_index"), rs.getString("dest_trcd"), rs.getString("orig_field_name"), rs.getString("orig_field_value"), rs.getString("dest_field_name"), rs.getString("dest_field_value"))));
-        return result;
-    }
-
-    private Set<String> ignoredTransactionIds(List<Tran> transactions) {
-        Set<String> result = new HashSet<>();
-        for (Tran tran : transactions) {
-            if ("5".equals(tran.compResult())) {
-                result.add(transactionIdentity(tran.mesgSeq(), tran.origCdate(), tran.convIndex(), tran.convCindex()));
-            }
-        }
-        return result;
-    }
-
-    private Map<String, Retcode> retcodes() {
-        Map<String, Retcode> result = new LinkedHashMap<>();
-        jdbc.getJdbcTemplate().query("select mesg_seq, orig_cdate, service_code, orig_error_code, orig_error_desc, dest_error_code, dest_error_desc from tss_retcode_comp", (RowCallbackHandler)
-                rs -> result.putIfAbsent(tranKey(rs.getString("mesg_seq"), rs.getString("orig_cdate")),
-                        new Retcode(rs.getString("service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"))));
-        return result;
-    }
-
-    private void insertSummaries(String batchId, String reportDate, List<Tran> transactions, List<Field> fields, Map<String, Catalog> catalogs, Map<String, Retcode> retcodes) {
-        Map<String, List<Tran>> byModule = new TreeMap<>();
-        for (Tran tran : transactions) byModule.computeIfAbsent(module(service(tran.destTrcd()), catalogs), ignored -> new ArrayList<>()).add(tran);
-        Map<String, Set<String>> fieldNames = new LinkedHashMap<>();
-        for (Field field : fields) fieldNames.computeIfAbsent(module(service(field.destTrcd()), catalogs), ignored -> new TreeSet<>()).add(normalizedField(field.origFieldName()));
-        Set<String> fieldTransactions = new TreeSet<>();
-        for (Field field : fields) fieldTransactions.add(transactionIdentity(field.mesgSeq(), field.origCdate(), field.convIndex(), field.convCindex()));
-        for (String module : union(byModule.keySet(), fieldNames.keySet())) {
-            List<Tran> rows = byModule.getOrDefault(module, List.of());
-            long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"), four = count(rows, retcodes, "4"), eight = count(rows, retcodes, "8"), five = count(rows, retcodes, "5");
-            long total = rows.size();
+    private void insertSummaries(String batchId, String reportDate, Map<String, Catalog> catalogs) {
+        Map<String, SummaryMetrics> byModule = new TreeMap<>();
+        Map<String, TakeTimes> takeTimes = takeTimes();
+        sourceReader.stream(ReportExportSourceReader.metricsSql(), (rs, connection) -> {
+            String service = rs.getString("service_code");
+            SummaryMetrics metrics = SummaryMetrics.read(rs);
+            SummaryMetrics moduleMetrics = byModule.computeIfAbsent(module(service, catalogs), ignored -> new SummaryMetrics());
+            moduleMetrics.add(metrics);
+            if (!service.isBlank()) moduleMetrics.covered++;
+            insertInterfaceSummary(batchId, reportDate, service, metrics, catalogs, takeTimes);
+        });
+        String fieldMetricsSql = "with " + ReportExportSourceReader.fieldCtes() + """
+                , catalog_ranked as (
+                    select c.*, row_number() over (partition by %s order by catalog_id) as catalog_no
+                      from ana_tran_catalog c
+                )
+                select %s as module_name,
+                       count(distinct f.normalized_field) as field_count
+                  from field_source f
+                  left join catalog_ranked c on %s = %s and c.catalog_no = 1
+                 group by %s
+                """.formatted(ReportExportSourceReader.rootLower("c.service_code"),
+                ReportExportSourceReader.moduleName("c.module_name"), ReportExportSourceReader.rootLower("f.service_code"),
+                ReportExportSourceReader.rootLower("c.service_code"), ReportExportSourceReader.moduleName("c.module_name"));
+        sourceReader.stream(fieldMetricsSql, (rs, connection) -> {
+            SummaryMetrics metrics = byModule.computeIfAbsent(rs.getString("module_name"), ignored -> new SummaryMetrics());
+            metrics.fieldCount = rs.getLong("field_count");
+        });
+        for (Map.Entry<String, SummaryMetrics> entry : byModule.entrySet()) {
+            String module = entry.getKey();
+            SummaryMetrics m = entry.getValue();
+            long one = m.one, two = m.two, three = m.three, four = m.four, eight = m.eight, five = m.five;
+            long total = m.total;
             long effectiveTotal = Math.max(0, total - five);
-            long fieldPass = rows.stream()
-                    .filter(row -> "4".equals(row.compResult()))
-                    .filter(row -> !fieldTransactions.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex())))
-                    .count();
+            long fieldPass = m.fieldPass;
             MapSqlParameterSource p = params(batchId, reportDate).addValue("module", module)
-                    .addValue("covered", rows.stream().map(row -> service(row.destTrcd())).filter(value -> !value.isBlank()).distinct().count())
+                    .addValue("covered", m.covered)
                     .addValue("total", total).addValue("one", one).addValue("two", two).addValue("three", three).addValue("four", four).addValue("eight", eight).addValue("five", five)
                     .addValue("effectiveTotal", effectiveTotal)
                     .addValue("rate", rate(three + four, effectiveTotal))
-                    .addValue("fieldCount", fieldNames.getOrDefault(module, Set.of()).size())
+                    .addValue("fieldCount", m.fieldCount)
                     .addValue("fieldPass", fieldPass)
                     .addValue("comparisonPassRate", rate(fieldPass + three, effectiveTotal));
             jdbc.update("""
@@ -230,56 +210,37 @@ public class ReportExportBatchRunner {
         }
     }
 
-    private void insertInterfaceSummaries(String batchId, String reportDate, List<Tran> transactions, List<Field> fields,
-                                          Map<String, Catalog> catalogs, Map<String, Retcode> retcodes) {
-        Map<String, TakeTimes> takeTimes = takeTimes();
-        Map<String, List<Tran>> byService = new TreeMap<>();
-        for (Tran tran : transactions) byService.computeIfAbsent(service(tran.destTrcd()), ignored -> new ArrayList<>()).add(tran);
-        Map<String, Set<String>> fieldTransactionsByService = new HashMap<>();
-        for (Field field : fields) {
-            fieldTransactionsByService.computeIfAbsent(service(field.destTrcd()), ignored -> new HashSet<>()).add(field.mesgSeq());
-        }
-        for (Map.Entry<String, List<Tran>> entry : byService.entrySet()) {
-            String service = entry.getKey();
-            List<Tran> rows = entry.getValue();
-            long one = count(rows, retcodes, "1"), two = count(rows, retcodes, "2"), three = count(rows, retcodes, "3"),
-                    eight = count(rows, retcodes, "8"), five = count(rows, retcodes, "5");
-            Set<String> successfulTransactions = new HashSet<>();
-            for (Tran row : rows) {
-                if ("4".equals(row.compResult())) successfulTransactions.add(row.mesgSeq());
-            }
-            long four = successfulTransactions.size();
-            long total = rows.size();
-            long effectiveTotal = Math.max(0, total - five);
-            Set<String> fieldTransactions = fieldTransactionsByService.getOrDefault(service, Collections.emptySet());
-            long fieldPass = successfulTransactions.stream()
-                    .filter(mesgSeq -> !fieldTransactions.contains(mesgSeq))
-                    .count();
-            Catalog catalog = catalogs.get(key(service));
-            TakeTimes takeTime = takeTimes.getOrDefault(service, TakeTimes.EMPTY);
-            MapSqlParameterSource p = params(batchId, reportDate).addValue("service", service)
-                    .addValue("average528TakeTime", takeTime.average528())
-                    .addValue("averageCcbsTakeTime", takeTime.averageCcbs())
-                    .addValue("tranCode", catalog == null ? null : catalog.tranCode())
-                    .addValue("tranName", catalog == null ? null : catalog.tranName())
-                    .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog))
-                    .addValue("owner", catalog == null ? null : catalog.owner())
-                    .addValue("internalOwner", catalog == null ? null : catalog.internalOwner())
-                    .addValue("total", total).addValue("one", one).addValue("two", two).addValue("three", three)
-                    .addValue("four", four).addValue("eight", eight).addValue("five", five)
-                    .addValue("effectiveTotal", effectiveTotal)
-                    .addValue("rate", rate(three + four, effectiveTotal))
-                    .addValue("fieldPass", fieldPass)
-                    .addValue("comparisonPassRate", rate(fieldPass + three, effectiveTotal));
-            jdbc.update("""
-                    insert into ana_report_export_interface_summary(batch_id, report_date, service_code, tran_code,
-                      tran_name, module_name, owner, internal_owner, sent_transaction_count, comp_result_1_count, comp_result_2_count,
-                      comp_result_3_count, comp_result_4_count, comp_result_8_count, comp_result_5_count,
-                      field_pass_transaction_count, success_rate, comparison_pass_rate, average_528_take_time, average_ccbs_take_time)
-                    values (:batchId, :reportDate, :service, :tranCode, :tranName, :module, :owner, :internalOwner, :total, :one, :two,
-                      :three, :four, :eight, :five, :fieldPass, :rate, :comparisonPassRate, :average528TakeTime, :averageCcbsTakeTime)
-                    """, p);
-        }
+    private void insertInterfaceSummary(String batchId, String reportDate, String service, SummaryMetrics m,
+                                        Map<String, Catalog> catalogs, Map<String, TakeTimes> takeTimes) {
+        long one = m.one, two = m.two, three = m.three, eight = m.eight, five = m.five;
+        long four = m.interfaceFour;
+        long total = m.total;
+        long effectiveTotal = Math.max(0, total - five);
+        long fieldPass = m.interfacePass;
+        Catalog catalog = catalogs.get(key(service));
+        TakeTimes takeTime = takeTimes.getOrDefault(service, TakeTimes.EMPTY);
+        MapSqlParameterSource p = params(batchId, reportDate).addValue("service", service)
+                .addValue("average528TakeTime", takeTime.average528())
+                .addValue("averageCcbsTakeTime", takeTime.averageCcbs())
+                .addValue("tranCode", catalog == null ? null : catalog.tranCode())
+                .addValue("tranName", catalog == null ? null : catalog.tranName())
+                .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog))
+                .addValue("owner", catalog == null ? null : catalog.owner())
+                .addValue("internalOwner", catalog == null ? null : catalog.internalOwner())
+                .addValue("total", total).addValue("one", one).addValue("two", two).addValue("three", three)
+                .addValue("four", four).addValue("eight", eight).addValue("five", five)
+                .addValue("effectiveTotal", effectiveTotal)
+                .addValue("rate", rate(three + four, effectiveTotal))
+                .addValue("fieldPass", fieldPass)
+                .addValue("comparisonPassRate", rate(fieldPass + three, effectiveTotal));
+        jdbc.update("""
+                insert into ana_report_export_interface_summary(batch_id, report_date, service_code, tran_code,
+                  tran_name, module_name, owner, internal_owner, sent_transaction_count, comp_result_1_count, comp_result_2_count,
+                  comp_result_3_count, comp_result_4_count, comp_result_8_count, comp_result_5_count,
+                  field_pass_transaction_count, success_rate, comparison_pass_rate, average_528_take_time, average_ccbs_take_time)
+                values (:batchId, :reportDate, :service, :tranCode, :tranName, :module, :owner, :internalOwner, :total, :one, :two,
+                  :three, :four, :eight, :five, :fieldPass, :rate, :comparisonPassRate, :average528TakeTime, :averageCcbsTakeTime)
+                """, p);
     }
 
     private Map<String, TakeTimes> takeTimes() {
@@ -484,20 +445,17 @@ public class ReportExportBatchRunner {
         return previous.isEmpty() ? null : previous.get(0);
     }
 
-    private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs,
-                                          List<Tran> transactions) {
+    private void streamTransactionDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs) {
         try {
             AtomicLong rowNo = new AtomicLong();
             Set<String> services = transactionServiceCodes();
             if (services.isEmpty()) return;
-            Set<String> ignoredTransactionIds = ignoredTransactionIds(transactions);
             ConcurrentLinkedQueue<String> serviceQueue = new ConcurrentLinkedQueue<>(services);
             AtomicReference<RuntimeException> failure = new AtomicReference<>();
             int workerCount = Math.min(TRANSACTION_DETAIL_WORKER_COUNT, services.size());
             List<CompletableFuture<Void>> workers = IntStream.range(0, workerCount)
                     .mapToObj(ignored -> CompletableFuture.runAsync(
-                            () -> consumeTransactionServices(batchId, reportDate, exportTime, catalogs, rowNo, serviceQueue, failure,
-                                    ignoredTransactionIds),
+                            () -> consumeTransactionServices(batchId, reportDate, exportTime, catalogs, rowNo, serviceQueue, failure),
                             transactionDetailExecutor))
                     .toList();
             try {
@@ -517,13 +475,12 @@ public class ReportExportBatchRunner {
     private void consumeTransactionServices(String batchId, String reportDate, LocalDateTime exportTime,
                                             Map<String, Catalog> catalogs, AtomicLong rowNo,
                                             ConcurrentLinkedQueue<String> serviceQueue,
-                                            AtomicReference<RuntimeException> failure,
-                                            Set<String> ignoredTransactionIds) {
+                                            AtomicReference<RuntimeException> failure) {
         while (failure.get() == null) {
             String service = serviceQueue.poll();
             if (service == null) return;
             try {
-                streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo, ignoredTransactionIds);
+                streamTransactionService(batchId, reportDate, exportTime, service, catalogs, rowNo);
             } catch (RuntimeException exception) {
                 failure.compareAndSet(null, exception);
                 throw exception;
@@ -549,60 +506,69 @@ public class ReportExportBatchRunner {
 
     private Set<String> transactionServiceCodes() {
         Set<String> services = new TreeSet<>();
-        jdbc.getJdbcTemplate().query("""
+        sourceReader.stream("""
                 select distinct case when position('&' in coalesce(dest_trcd, '')) > 0
                     then substring(dest_trcd, 1, position('&' in dest_trcd) - 1)
                     else coalesce(dest_trcd, '') end as service_code
                 from tss_tran_comp
-                """, (RowCallbackHandler) rs -> services.add(rs.getString("service_code")));
+                """, (rs, connection) -> services.add(rs.getString("service_code")));
         return services;
     }
 
     private void streamTransactionService(String batchId, String reportDate, LocalDateTime exportTime, String normalizedService,
-                                          Map<String, Catalog> catalogs, AtomicLong rowNo, Set<String> ignoredTransactionIds) {
-        Map<IssueDetailKey, TransactionDetail> detailsByKey = new LinkedHashMap<>();
-        Map<IssueDetailKey, Set<String>> affectedMesgSeqsByKey = new LinkedHashMap<>();
+                                          Map<String, Catalog> catalogs, AtomicLong rowNo) {
         String insert = transactionDetailInsertSql();
-        String sql = """
+        String status = "case tc.comp_result when '0' then '未比对' when '5' then '忽略比对' when '6' then '比对中' when '7' then '对比异常' else null end";
+        String detailService = "case when rc.mesg_seq is null then " + ReportExportSourceReader.service("tc.dest_trcd")
+                + " else " + ReportExportSourceReader.service("rc.service_code") + " end";
+        String sql = "with candidates as (" + """
                 select tc.mesg_seq, tc.orig_cdate, tc.conv_index, tc.conv_cindex, tc.dest_trcd, tc.comp_result,
                        rc.mesg_seq as ret_mesg_seq, rc.service_code as ret_service_code, rc.orig_error_code, rc.orig_error_desc,
-                       rc.dest_error_code, rc.dest_error_desc
+                       rc.dest_error_code, rc.dest_error_desc,
+                """ + ReportExportSourceReader.service("tc.dest_trcd") + " as source_service, "
+                + detailService + " as detail_service, "
+                + ReportExportSourceReader.issuePart("coalesce(" + status + ", rc.orig_error_code)") + " as issue_orig, "
+                + ReportExportSourceReader.issuePart("coalesce(" + status + ", rc.dest_error_code)") + " as issue_dest " + """
                 from tss_tran_comp tc
                 left join tss_retcode_comp rc on rc.mesg_seq = tc.mesg_seq and rc.orig_cdate = tc.orig_cdate
-                where case when position('&' in coalesce(tc.dest_trcd, '')) > 0
-                    then substring(tc.dest_trcd, 1, position('&' in tc.dest_trcd) - 1)
-                    else coalesce(tc.dest_trcd, '') end = ?
-                order by tc.mesg_seq, tc.conv_index, tc.conv_cindex
+                """ + " where "
+                + ReportExportSourceReader.notIgnored("tc")
+                + """
+                ), keyed as (
+                    select candidates.*, issue_orig || '|' || issue_dest as issue_codes from candidates
+                ), eligible as (
+                    select * from keyed
+                     where comp_result <> '4'
+                       and (comp_result in ('0', '6', '7')
+                            or not (coalesce(orig_error_code in ('AAAAAAA', '000000000000'), false)
+                                    and coalesce(dest_error_code in ('AAAAAAA', '000000000000'), false))
+                               and not (coalesce(orig_error_code <> '', false) and coalesce(dest_error_code <> '', false)
+                                        and orig_error_code = dest_error_code
+                                        and orig_error_code not in ('AAAAAAA', '000000000000')
+                                        and dest_error_code not in ('AAAAAAA', '000000000000')))
+                ), numbered as (
+                    select eligible.*, row_number() over (partition by source_service order by mesg_seq, conv_index, conv_cindex) as source_no
+                      from eligible
+                ), ranked as (
+                    select numbered.*, row_number() over (
+                        partition by source_service, detail_service, issue_codes order by source_no) as issue_no,
+                        dense_rank() over (partition by source_service, detail_service, issue_codes order by mesg_seq asc nulls first)
+                          + dense_rank() over (partition by source_service, detail_service, issue_codes order by mesg_seq desc nulls last)
+                          - 1 as affected_count
+                      from numbered
+                )
+                select r.* from ranked r
+                 where r.issue_no = 1 and r.source_service = ? order by r.source_no
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            connection.setAutoCommit(false);
-            statement.setFetchSize(TRANSACTION_FETCH_SIZE);
-            statement.setString(1, normalizedService);
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) collectTransactionRow(batchId, rs, catalogs, detailsByKey, affectedMesgSeqsByKey, ignoredTransactionIds);
-            }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to stream transaction details for service " + normalizedService, exception);
-        }
-        for (Map.Entry<IssueDetailKey, TransactionDetail> entry : detailsByKey.entrySet()) {
-            long affectedCount = affectedMesgSeqsByKey.getOrDefault(entry.getKey(), Set.of()).size();
-            insertTransactionDetail(insert, batchId, reportDate, exportTime, rowNo.incrementAndGet(), entry.getValue(), affectedCount);
-        }
-    }
-
-    private void collectTransactionRow(String batchId, ResultSet rs, Map<String, Catalog> catalogs, Map<IssueDetailKey, TransactionDetail> detailsByKey,
-                                       Map<IssueDetailKey, Set<String>> affectedMesgSeqsByKey, Set<String> ignoredTransactionIds) throws SQLException {
-        Tran row = new Tran(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getString("dest_trcd"), rs.getString("comp_result"));
-        if (ignoredTransactionIds.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex()))) return;
-        Retcode retcode = rs.getString("ret_mesg_seq") == null ? null
-                : new Retcode(rs.getString("ret_service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"));
-        if (!shouldExportTransaction(row, retcode)) return;
-        TransactionDetail detail = transactionDetail(row, retcode, catalogs);
-        if (detail.issueKey() == null || detail.issueKey().isBlank()) return;
-        IssueDetailKey key = new IssueDetailKey(batchId, detail.service(), detail.issueKey());
-        detailsByKey.putIfAbsent(key, detail);
-        affectedMesgSeqsByKey.computeIfAbsent(key, ignored -> new HashSet<>()).add(row.mesgSeq());
+        sourceReader.stream(sql, (rs, connection) -> {
+            NamedParameterJdbcTemplate writer = new NamedParameterJdbcTemplate(new SingleConnectionDataSource(connection, true));
+            Tran row = new Tran(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"), rs.getString("dest_trcd"), rs.getString("comp_result"));
+            Retcode retcode = rs.getString("ret_mesg_seq") == null ? null
+                    : new Retcode(rs.getString("ret_service_code"), rs.getString("orig_error_code"), rs.getString("orig_error_desc"), rs.getString("dest_error_code"), rs.getString("dest_error_desc"));
+            TransactionDetail detail = transactionDetail(row, retcode, catalogs);
+            insertTransactionDetail(writer, insert, batchId, reportDate, exportTime,
+                    rowNo.incrementAndGet(), detail, rs.getLong("affected_count"));
+        }, normalizedService);
     }
 
     private TransactionDetail transactionDetail(Tran tran, Retcode retcode, Map<String, Catalog> catalogs) {
@@ -624,9 +590,9 @@ public class ReportExportBatchRunner {
                 transactionDescription(retcode));
     }
 
-    private void insertTransactionDetail(String insert, String batchId, String reportDate, LocalDateTime exportTime, long rowNo,
+    private void insertTransactionDetail(NamedParameterJdbcTemplate writer, String insert, String batchId, String reportDate, LocalDateTime exportTime, long rowNo,
                                          TransactionDetail detail, long affectedCount) {
-        jdbc.update(insert,
+        writer.update(insert,
                 params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", rowNo)
                         .addValue("service", detail.service()).addValue("origCode", detail.origCode()).addValue("destCode", detail.destCode())
                         .addValue("issueKey", detail.issueKey()).addValue("affectedCount", affectedCount)
@@ -654,47 +620,58 @@ public class ReportExportBatchRunner {
                 """;
     }
 
-    private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, List<Field> fields, Map<String, Catalog> catalogs,
-                                    List<FieldMapping> fieldMappings, Set<String> ignoredTransactionIds) {
-        Map<IssueDetailKey, Field> grouped = new TreeMap<>(ISSUE_DETAIL_ORDER);
-        Map<IssueDetailKey, Set<String>> affectedMesgSeqs = new TreeMap<>(ISSUE_DETAIL_ORDER);
-        fields.stream().sorted(FIELD_ORDER).forEach(row -> {
-            if (ignoredTransactionIds.contains(transactionIdentity(row.mesgSeq(), row.origCdate(), row.convIndex(), row.convCindex()))) {
-                return;
-            }
-            String service = service(row.destTrcd());
-            IssueDetailKey key = new IssueDetailKey(batchId, service, fieldIssueKey(service, normalizedField(row.origFieldName())));
-            grouped.putIfAbsent(key, row);
-            affectedMesgSeqs.computeIfAbsent(key, ignored -> new HashSet<>()).add(row.mesgSeq());
-        });
+    private void insertFieldDetails(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs,
+                                    List<FieldMapping> fieldMappings) {
         Map<String, List<FieldMapping>> mappingsByService = fieldMappingsByService(fieldMappings);
         Map<String, FieldMappingLookup> lookupsByService = fieldMappingLookups(mappingsByService);
         String insert = fieldDetailInsertSql();
-        long rowNo = 0;
-        for (Map.Entry<IssueDetailKey, Field> entry : grouped.entrySet()) {
-            IssueDetailKey detailKey = entry.getKey();
-            Field field = entry.getValue();
-            String service = detailKey.serviceCode();
-            String serviceKey = key(service);
-            Catalog catalog = catalogs.get(serviceKey);
-            String normalized = normalizedField(field.origFieldName());
-            String issueKey = detailKey.issueKey();
-            FieldMappingLookup lookup = lookupsByService.getOrDefault(serviceKey, FieldMappingLookup.EMPTY);
-            FieldMapping mapping = lookup.mapping(normalized);
-            String sop = mapping == null ? null : mapping.sopFieldName();
-            String soap = mapping == null ? normalized : mapping.soapFieldName();
-            String bizjson = mapping == null ? null : mapping.bizjsonFieldName();
-            String fieldCn = supplementedFieldCnName(lookup, field.origFieldName(), normalized, soap, mapping == null ? null : mapping.fieldCnName());
-            jdbc.update(insert,
-                    params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", ++rowNo)
-                            .addValue("service", service).addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
-                            .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("sop", sop).addValue("soap", soap).addValue("bizjson", bizjson).addValue("fieldCn", fieldCn)
-                            .addValue("mappingStatus", mapping == null ? "UNMAPPED" : "MAPPED").addValue("orig", field.origValue()).addValue("dest", field.destValue())
-                            .addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", field.mesgSeq()).addValue("field", joinedFieldNames(sop, soap, bizjson, fieldCn))
-                            .addValue("description", "528：" + valueStatus(field.origValue()) + "；CCBS：" + valueStatus(field.destValue()))
-                            .addValue("issueKey", issueKey)
-                            .addValue("affectedCount", affectedMesgSeqs.getOrDefault(detailKey, Set.of()).size()));
+        long[] rowNo = {0};
+        DetailGroup<Field> group = new DetailGroup<>();
+        String sql = "with " + ReportExportSourceReader.fieldCtes()
+                + " select * from field_source f where " + ReportExportSourceReader.notIgnored("f")
+                + " order by " + sourceReader.javaOrder("service_code") + ", "
+                + sourceReader.javaOrder(ReportExportSourceReader.issuePart("normalized_field")) + ", "
+                + sourceReader.javaOrder("mesg_seq") + " nulls first, "
+                + "coalesce(conv_index, 0), coalesce(conv_cindex, 0), coalesce(field_index, 0), source_order";
+        sourceReader.stream(sql, (rs, connection) -> {
+            Field field = new Field(rs.getString("mesg_seq"), rs.getString("orig_cdate"), rs.getInt("conv_index"), rs.getInt("conv_cindex"),
+                    rs.getInt("field_index"), rs.getString("dest_trcd"), rs.getString("orig_field_name"), rs.getString("orig_field_value"),
+                    rs.getString("dest_field_name"), rs.getString("dest_field_value"));
+            String service = service(field.destTrcd());
+            IssueDetailKey next = new IssueDetailKey(batchId, service, fieldIssueKey(service, normalizedField(field.origFieldName())));
+            if (group.changed(next)) {
+                insertFieldDetail(batchId, reportDate, exportTime, catalogs, lookupsByService, insert, ++rowNo[0], group.key, group.value, group.count);
+            }
+            group.accept(next, field, field.mesgSeq());
+        });
+        if (group.value != null) {
+            insertFieldDetail(batchId, reportDate, exportTime, catalogs, lookupsByService, insert, ++rowNo[0], group.key, group.value, group.count);
         }
+    }
+
+    private void insertFieldDetail(String batchId, String reportDate, LocalDateTime exportTime, Map<String, Catalog> catalogs,
+                                   Map<String, FieldMappingLookup> lookupsByService, String insert, long rowNo,
+                                   IssueDetailKey detailKey, Field field, long affectedCount) {
+        String service = detailKey.serviceCode();
+        String serviceKey = key(service);
+        Catalog catalog = catalogs.get(serviceKey);
+        String normalized = normalizedField(field.origFieldName());
+        String issueKey = detailKey.issueKey();
+        FieldMappingLookup lookup = lookupsByService.getOrDefault(serviceKey, FieldMappingLookup.EMPTY);
+        FieldMapping mapping = lookup.mapping(normalized);
+        String sop = mapping == null ? null : mapping.sopFieldName();
+        String soap = mapping == null ? normalized : mapping.soapFieldName();
+        String bizjson = mapping == null ? null : mapping.bizjsonFieldName();
+        String fieldCn = supplementedFieldCnName(lookup, field.origFieldName(), normalized, soap, mapping == null ? null : mapping.fieldCnName());
+        jdbc.update(insert,
+                params(batchId, reportDate).addValue("time", Timestamp.valueOf(exportTime)).addValue("date", reportDate).addValue("rowNo", rowNo)
+                        .addValue("service", service).addValue("tranCode", catalog == null ? service : catalog.tranCode()).addValue("tranName", catalog == null ? null : catalog.tranName())
+                        .addValue("module", catalog == null ? UNCONFIGURED_MODULE : moduleName(catalog)).addValue("sop", sop).addValue("soap", soap).addValue("bizjson", bizjson).addValue("fieldCn", fieldCn)
+                        .addValue("mappingStatus", mapping == null ? "UNMAPPED" : "MAPPED").addValue("orig", field.origValue()).addValue("dest", field.destValue())
+                        .addValue("owner", catalog == null ? null : catalog.owner()).addValue("seq", field.mesgSeq()).addValue("field", joinedFieldNames(sop, soap, bizjson, fieldCn))
+                        .addValue("description", "528：" + valueStatus(field.origValue()) + "；CCBS：" + valueStatus(field.destValue()))
+                        .addValue("issueKey", issueKey)
+                        .addValue("affectedCount", affectedCount));
     }
 
     private String fieldDetailInsertSql() {
@@ -716,23 +693,7 @@ public class ReportExportBatchRunner {
                 """;
     }
 
-    private static final Comparator<Field> FIELD_ORDER = Comparator.comparing(Field::mesgSeq, Comparator.nullsFirst(String::compareTo)).thenComparingInt(Field::convIndex).thenComparingInt(Field::convCindex).thenComparingInt(Field::fieldIndex);
-    private static final Comparator<IssueDetailKey> ISSUE_DETAIL_ORDER = Comparator.comparing(IssueDetailKey::batchId)
-            .thenComparing(IssueDetailKey::serviceCode).thenComparing(IssueDetailKey::issueKey);
     private static BigDecimal rate(long numerator, long denominator) { return denominator == 0 ? BigDecimal.ZERO : BigDecimal.valueOf(numerator).divide(BigDecimal.valueOf(denominator), 8, RoundingMode.HALF_UP); }
-    private static long count(List<Tran> rows, Map<String, Retcode> retcodes, String result) { return rows.stream().filter(row -> result.equals(summaryResult(row, retcodes.get(tranKey(row.mesgSeq(), row.origCdate()))))).count(); }
-    private static String summaryResult(Tran row, Retcode retcode) {
-        if ("3".equals(row.compResult()) || "8".equals(row.compResult())) {
-            return bothFailedResponseCodesMatch(retcode) ? "3" : "8";
-        }
-        return row.compResult();
-    }
-    private static boolean bothFailedResponseCodesMatch(Retcode retcode) {
-        return retcode != null
-                && !missingResponseCode(retcode.origCode())
-                && !missingResponseCode(retcode.destCode())
-                && text(retcode.origCode()).equals(text(retcode.destCode()));
-    }
     private static String service(String value) { int index = text(value).indexOf('&'); return index < 0 ? text(value) : value.substring(0, index); }
     private static String normalizedField(String value) {
         String text = text(value);
@@ -771,13 +732,7 @@ public class ReportExportBatchRunner {
         return separator < 0 ? text : text.substring(separator + 1);
     }
     private static String transactionDescription(Retcode retcode) { return "528错误码：" + text(retcode == null ? null : retcode.origCode()) + "；描述：" + text(retcode == null ? null : retcode.origDesc()) + "；CCBS错误码：" + text(retcode == null ? null : retcode.destCode()) + "；CCBS错误描述：" + text(retcode == null ? null : retcode.destDesc()); }
-    private static boolean shouldExportTransaction(Tran tran, Retcode retcode) {
-        if ("4".equals(tran.compResult())) return false;
-        if (transactionStatus(tran.compResult()) != null) return true;
-        return !bothSucceeded(retcode) && !bothFailedSameResponse(retcode);
-    }
     private static String transactionStatus(String result) { return switch (result) { case "0" -> "未比对"; case "5" -> "忽略比对"; case "6" -> "比对中"; case "7" -> "对比异常"; default -> null; }; }
-    private static boolean bothSucceeded(Retcode retcode) { return retcode != null && successCode(retcode.origCode()) && successCode(retcode.destCode()); }
     private static boolean successCode(String code) { return "AAAAAAA".equals(code) || "000000000000".equals(code); }
     private static boolean bothFailedSameResponse(Retcode retcode) { return retcode != null && !missingResponseCode(retcode.origCode()) && !missingResponseCode(retcode.destCode()) && !successCode(retcode.origCode()) && !successCode(retcode.destCode()) && text(retcode.origCode()).equals(text(retcode.destCode())); }
     private static String transactionFieldName(Retcode retcode) {
@@ -797,9 +752,6 @@ public class ReportExportBatchRunner {
     private static String fieldIssueKey(String service, String sourceField) { return "FIELD|" + issuePart(service) + "|" + issuePart(sourceField); }
     private static String issuePart(String value) { return text(value).trim().toLowerCase(Locale.ROOT); }
     private static String text(String value) { return value == null ? "" : value; }
-    private static String tranKey(String mesgSeq, String origCdate) { return text(mesgSeq) + "|" + text(origCdate); }
-    private static String transactionIdentity(String mesgSeq, String origCdate, int convIndex, int convCindex) { return text(mesgSeq) + "|" + text(origCdate) + "|" + convIndex + "|" + convCindex; }
-    private static <T> Set<T> union(Set<T> first, Set<T> second) { Set<T> result = new TreeSet<>(); result.addAll(first); result.addAll(second); return result; }
     private static MapSqlParameterSource params(String batchId, String reportDate) { return new MapSqlParameterSource("batchId", batchId).addValue("reportDate", reportDate); }
     private static long elapsedMs(long started) { return (System.nanoTime() - started) / 1_000_000L; }
 
@@ -848,6 +800,56 @@ public class ReportExportBatchRunner {
     private record TransactionDetail(String service, String origCode, String destCode, String issueKey, String tranCode,
                                      String tranName, String module, String origDesc, String destDesc, String owner,
                                      String seq, String field, String description) {}
-    private record SourceData(Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings, List<Tran> transactions, List<Field> fields, Map<String, Retcode> retcodes) {}
+    private record SourceData(Map<String, Catalog> catalogs, List<FieldMapping> fieldMappings) {}
+    private static final class DetailGroup<T> {
+        private IssueDetailKey key;
+        private T value;
+        private String lastSeq;
+        private long count;
+
+        private boolean changed(IssueDetailKey next) {
+            return key != null && !key.equals(next);
+        }
+
+        private void accept(IssueDetailKey next, T row, String seq) {
+            if (!next.equals(key)) {
+                key = next;
+                value = row;
+                count = 0;
+            }
+            if (count == 0 || !java.util.Objects.equals(lastSeq, seq)) count++;
+            lastSeq = seq;
+        }
+    }
+
+    private static final class SummaryMetrics {
+        private long total, one, two, three, four, eight, five, fieldPass, interfaceFour, interfacePass, covered, fieldCount;
+
+        private static SummaryMetrics read(ResultSet rs) throws SQLException {
+            SummaryMetrics m = new SummaryMetrics();
+            m.total = rs.getLong("total");
+            m.one = rs.getLong("one");
+            m.two = rs.getLong("two");
+            m.three = rs.getLong("three");
+            m.four = rs.getLong("four");
+            m.eight = rs.getLong("eight");
+            m.five = rs.getLong("five");
+            m.fieldPass = rs.getLong("field_pass");
+            m.interfaceFour = rs.getLong("interface_four");
+            m.interfacePass = rs.getLong("interface_pass");
+            return m;
+        }
+
+        private void add(SummaryMetrics m) {
+            total += m.total;
+            one += m.one;
+            two += m.two;
+            three += m.three;
+            four += m.four;
+            eight += m.eight;
+            five += m.five;
+            fieldPass += m.fieldPass;
+        }
+    }
     private record CommandPosition(long commandId, java.time.Instant createdTime) {}
 }
